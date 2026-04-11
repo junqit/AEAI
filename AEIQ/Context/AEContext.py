@@ -127,7 +127,7 @@ class AEContext:
         """
         try:
             # 构造请求到 9999 端口的 LLM 服务
-            url = f"{self.llm_service_url}/llm/call"
+            url = f"{self.llm_service_url}/aellms/question"
             payload = {
                 "question": user_input,
                 "llm_type": llm_type,

@@ -171,8 +171,6 @@ class AELlmManager:
 
 # 全局单例实例
 _manager_instance = None
-
-
 def get_ae_llm_manager() -> AELlmManager:
     """获取 AELlmManager 单例实例"""
     global _manager_instance

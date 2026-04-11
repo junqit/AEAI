@@ -65,6 +65,8 @@ if __name__ == "__main__":
     print(f"Health Check: http://localhost:{config.PORT}/health")
     print()
 
+    get_ae_llm_manager()
+    
     # 不使用 reload 模式，或使用 app 对象而不是字符串
     if config.RELOAD:
         print("⚠️  Warning: reload=True may cause import issues in multiprocessing mode")

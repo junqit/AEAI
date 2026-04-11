@@ -21,8 +21,8 @@ async def ae_chat(request: AEChatRequest):
             session_id=request.session_id
         )
 
-        # 转换 LLM 类型为字符串列表
-        llm_type_values = [llm_type.value for llm_type in request.llm_types]
+        # llm_types 已经是字符串列表（因为 Pydantic Config 的 use_enum_values = True）
+        llm_type_values = request.llm_types
 
         # 异步并行处理多个 LLM 请求
         responses = await context.process_message(
