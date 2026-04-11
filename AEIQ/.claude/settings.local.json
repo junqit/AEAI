@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv get_root.py post_root.py)",
+      "Bash(mv get_context_create.py post_context_create.py)",
+      "Bash(mv delete_context_session_id.py post_context_delete.py)",
+      "Bash(mv get_contexts_stats.py post_contexts_stats.py)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
