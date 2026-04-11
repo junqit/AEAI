@@ -48,13 +48,28 @@ class AELlmManager:
         print(f"AELlmManager initialized with LLM type: {self.llm_type.value}")
 
     def _init_providers(self):
-        """初始化所有 Provider"""
+        """初始化所有 Provider 并加载模型"""
+        print("Initializing all LLM providers...")
+
+        # 实例化所有 Provider
         self.providers = {
             LLMType.CLAUDE: AEClaudeProvider(),
             LLMType.CHATGPT: AEChatGPTProvider(),
             LLMType.DEEPSEEK: AEDeepSeekProvider(),
             LLMType.GEMINI: AEGeminiProvider()
         }
+
+        # 加载每个 Provider（如果需要预加载）
+        for llm_type, provider in self.providers.items():
+            try:
+                if hasattr(provider, 'load') and not provider.is_loaded:
+                    print(f"Loading {llm_type.value} provider...")
+                    provider.load()
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to load {llm_type.value} provider: {str(e)}")
+                # 继续加载其他 Provider，不中断整个初始化过程
+
+        print("All providers initialized.")
 
     def _set_llm_type(self, llm_type_str: str):
         """设置 LLM 类型"""

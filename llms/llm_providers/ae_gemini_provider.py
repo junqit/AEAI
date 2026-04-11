@@ -12,7 +12,6 @@ from .ae_base_provider import AEBaseProvider
 from AEQuestion import AEQuestion
 from AEAiLevel import AEAiLevel
 
-
 class AEGeminiProvider(AEBaseProvider):
     """Gemini 本地模型提供商"""
 
@@ -21,6 +20,8 @@ class AEGeminiProvider(AEBaseProvider):
         self.gemini_model = None
         self.model_path = "/Users/tianjunqi/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b446025c61ecea876162774ee247706056963aba"
 
+        self.load()
+
     def load(self):
         """加载 Gemini 本地模型"""
         if self.is_loaded:
@@ -28,7 +29,7 @@ class AEGeminiProvider(AEBaseProvider):
 
         try:
             # 导入 Gemini 模型类
-            from llm.gemini import get_gemini_model
+            from llm.gemini.gemini_model import get_gemini_model
 
             print(f"正在初始化 {self.name}...")
             self.gemini_model = get_gemini_model(self.model_path)
@@ -77,6 +78,15 @@ class AEGeminiProvider(AEBaseProvider):
                 prompt=prompt,
                 **generation_params
             )
+
+            # 4. 验证响应是否有效
+            if not response or response.strip() == "":
+                return "Gemini 模型未返回有效响应"
+
+            # 5. 清理响应（移除可能残留的输入部分）
+            if "Assistant:" in response:
+                # 只取 Assistant: 后面的内容
+                response = response.split("Assistant:")[-1].strip()
 
             return response
 

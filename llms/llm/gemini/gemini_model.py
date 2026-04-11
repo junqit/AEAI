@@ -3,7 +3,7 @@ Gemini 本地模型类
 封装 Gemini 模型的加载、生成和资源管理
 """
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Optional
 
 
@@ -36,13 +36,13 @@ class AEGeminiModel:
 
         try:
             print(f"正在加载 Gemini Processor...")
-            self.processor = AutoProcessor.from_pretrained(self.model_path)
 
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             print(f"正在加载 Gemini Model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 device_map="auto",
-                torch_dtype=torch.bfloat16
+                torch_dtype=torch.float16
             )
 
             self.device = self.model.device
@@ -86,43 +86,25 @@ class AEGeminiModel:
 
         try:
             # 1. 处理输入
-            inputs = self.processor(prompt, return_tensors="pt")
-
-            # 将 inputs 移到正确的设备
+            inputs = self.tokenizer(prompt, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-            # 2. 生成参数
-            generation_params = {
-                "max_new_tokens": max_new_tokens,
-                "do_sample": do_sample,
-            }
-
-            # 设置 pad_token 和 eos_token
-            if hasattr(self.processor, 'tokenizer'):
-                if self.processor.tokenizer.pad_token_id is not None:
-                    generation_params["pad_token_id"] = self.processor.tokenizer.pad_token_id
-                if self.processor.tokenizer.eos_token_id is not None:
-                    generation_params["eos_token_id"] = self.processor.tokenizer.eos_token_id
-
-            if do_sample:
-                generation_params.update({
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "top_k": top_k
-                })
-
-            # 3. 生成输出
             with torch.no_grad():
-                outputs = self.model.generate(**inputs, **generation_params)
+                outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=do_sample,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k
+                )
 
-            # 4. 解码输出
-            response = self.processor.decode(outputs[0], skip_special_tokens=True)
+            input_len = inputs["input_ids"].shape[1]
+            generated_tokens = outputs[0][input_len:]
 
-            # 5. 移除输入部分，只返回生成的内容
-            if response.startswith(prompt):
-                response = response[len(prompt):].strip()
+            response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
-            return response
+            return response.strip()
 
         except Exception as e:
             raise Exception(f"Gemini 生成失败: {str(e)}")
