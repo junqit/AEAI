@@ -35,7 +35,7 @@ class AEGeminiProvider(AEBaseProvider):
             self.gemini_model = get_gemini_model(self.model_path)
 
             # 加载模型
-            self.gemini_model.load()
+            # self.gemini_model.load()
 
             self.is_loaded = True
             print(f"✅ {self.name} loaded successfully!")
