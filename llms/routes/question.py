@@ -5,30 +5,36 @@ Question Route - 接收 question 请求，调用单个 LLM
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from question.AEQuestion import LLMType, AEQuestion
-from AEAiLevel import AEAiLevel
+from question.AEQuestion import LLMType, AEQuestion, AEAiLevel
 from AELlmManager import get_ae_llm_manager
 
 class AEQuestionRequest(BaseModel):
-    """Question 请求模型 - 单个 LLM"""
-    question: str
-    llm_type: Optional[str] = "claude"  # 单个 LLM 类型
-    level: Optional[str] = "default"
-    system: Optional[str] = None
+    """Question 请求模型 - 接收已组装好的数据"""
+    messages: List[Dict[str, Any]]  # 已组装好的消息列表（包含 user、assistant 等）
+    llm_type: Optional[str] = "claude"  # LLM 类型
+    level: Optional[str] = "default"  # AI 级别
+    system: Optional[str] = None  # 系统提示词
+    tools: Optional[List[Dict[str, Any]]] = None  # 工具列表
+    context: Optional[Dict[str, Any]] = None  # 上下文信息
 
     class Config:
         json_schema_extra = {
             "example": {
-                "question": "请解释什么是 Python 装饰器",
+                "messages": [
+                    {"role": "user", "content": "请解释什么是 Python 装饰器"}
+                ],
                 "llm_type": "claude",
                 "level": "high",
-                "system": "你是一个 Python 专家"
+                "max_tokens": 4096,
+                "system": "你是一个 Python 专家",
+                "tools": [],
+                "context": {}
             }
         }
 
@@ -36,7 +42,7 @@ class AEQuestionRequest(BaseModel):
 class AEQuestionResponse(BaseModel):
     """Question 响应模型 - 单个 LLM 响应"""
     status: str
-    question: str
+    messages: List[Dict[str, Any]]  # 请求的消息列表
     response: Optional[str] = None
     error: Optional[str] = None
     llm_type: str
@@ -47,7 +53,9 @@ class AEQuestionResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "status": "success",
-                "question": "请解释什么是 Python 装饰器",
+                "messages": [
+                    {"role": "user", "content": "请解释什么是 Python 装饰器"}
+                ],
                 "response": "装饰器是 Python 中的一种设计模式...",
                 "error": None,
                 "llm_type": "claude",
@@ -64,13 +72,13 @@ async def process_question(request: AEQuestionRequest):
     使用 AELlmManager 统一管理
 
     Args:
-        request: 包含 question 和可选参数的请求
+        request: 包含已组装好的 messages 和可选参数的请求
 
     Returns:
         AEQuestionResponse: 处理结果
     """
     try:
-        print(f"[{datetime.now().isoformat()}] Received question: {request.question}")
+        print(f"[{datetime.now().isoformat()}] Received messages: {request.messages}")
 
         # 解析 LLM 类型
         llm_type_map = {
@@ -96,22 +104,26 @@ async def process_question(request: AEQuestionRequest):
 
         print(f"Processing with LLM: {llm_type.value}, level: {level.name}")
 
-        # 获取 AELlmManager 实例
-        manager = get_ae_llm_manager()
-
-        # 调用 LLM - AELlmManager 会根据 llm_type 使用对应的 Provider
-        result = manager.generate(
-            message=request.question,
+        # 创建 AEQuestion 对象（所有参数都在对象内部）
+        question = AEQuestion(
+            messages=request.messages,
             llm_type=llm_type,
             level=level,
             system=request.system,
-            max_tokens=4096
+            tools=request.tools,
+            context=request.context or {}
         )
+
+        # 获取 AELlmManager 实例
+        manager = get_ae_llm_manager()
+
+        # 调用 LLM - 所有参数都在 question 对象内部，不需要传递零散参数
+        result = manager.generate(question)
 
         # 返回响应
         return AEQuestionResponse(
             status=result["status"],
-            question=request.question,
+            messages=request.messages,
             response=result.get("response"),
             error=result.get("error"),
             llm_type=request.llm_type,

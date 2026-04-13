@@ -81,25 +81,12 @@ class AELlmManager:
         }
         self.llm_type = llm_type_map.get(llm_type_str.lower(), LLMType.CLAUDE)
 
-    def generate(
-        self,
-        message: str,
-        llm_type: Optional[LLMType] = None,
-        level: AEAiLevel = AEAiLevel.default,
-        system: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        max_tokens: int = 256
-    ) -> Dict[str, Any]:
+    def generate(self, question: AEQuestion) -> Dict[str, Any]:
         """
         生成回复
 
         Args:
-            message: 用户消息
-            llm_type: LLM 类型（如果不指定则使用默认类型）
-            level: AI 级别
-            system: 系统提示词
-            context: 上下文信息
-            max_tokens: 最大生成token数
+            question: AEQuestion 对象，包含所有必要信息（messages、llm_type、level、max_tokens、system、context、tools）
 
         Returns:
             Dict[str, Any]: 包含响应详情的字典
@@ -112,25 +99,21 @@ class AELlmManager:
         """
         import time
 
-        # 使用指定的 LLM 类型，如果没有指定则使用默认类型
-        current_llm_type = llm_type or self.llm_type
+        # 从 question 对象中获取所有参数
+        llm_type = question.llm_type
+        level = question.level
+        max_tokens = question.max_tokens
+
         start_time = time.time()
 
-        # 创建 AEQuestion 对象
-        question = AEQuestion(
-            question=message,
-            system=system,
-            context=context or {}
-        )
-
         # 获取对应的 Provider 并生成
-        provider = self.providers.get(current_llm_type)
+        provider = self.providers.get(llm_type)
         if provider is None:
             elapsed = time.time() - start_time
             return {
                 "response": None,
                 "status": "error",
-                "error": f"不支持的 LLM 类型: {current_llm_type}",
+                "error": f"不支持的 LLM 类型: {llm_type}",
                 "elapsed_seconds": elapsed
             }
 
@@ -148,7 +131,7 @@ class AELlmManager:
             return {
                 "response": None,
                 "status": "error",
-                "error": f"{current_llm_type.value} 调用失败: {str(e)}",
+                "error": f"{llm_type.value} 调用失败: {str(e)}",
                 "elapsed_seconds": elapsed
             }
 

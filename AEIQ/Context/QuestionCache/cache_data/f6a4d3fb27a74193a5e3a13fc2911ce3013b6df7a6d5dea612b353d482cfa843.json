@@ -1,0 +1,39 @@
+{
+  "session_id": "f6a4d3fb27a74193a5e3a13fc2911ce3013b6df7a6d5dea612b353d482cfa843",
+  "entries": [
+    {
+      "session_id": "f6a4d3fb27a74193a5e3a13fc2911ce3013b6df7a6d5dea612b353d482cfa843",
+      "role": "user",
+      "content": "你呢",
+      "llm_type": null,
+      "metadata": {
+        "llm_types": [
+          "gemini",
+          "claude"
+        ]
+      },
+      "timestamp": "2026-04-13T11:03:34.904759"
+    },
+    {
+      "session_id": "f6a4d3fb27a74193a5e3a13fc2911ce3013b6df7a6d5dea612b353d482cfa843",
+      "role": "assistant",
+      "content": "",
+      "llm_type": "gemini",
+      "metadata": {
+        "timestamp": "2026-04-13T11:03:36.315477"
+      },
+      "timestamp": "2026-04-13T11:03:36.315798"
+    },
+    {
+      "session_id": "f6a4d3fb27a74193a5e3a13fc2911ce3013b6df7a6d5dea612b353d482cfa843",
+      "role": "assistant",
+      "content": "",
+      "llm_type": "claude",
+      "metadata": {
+        "timestamp": "2026-04-13T11:03:36.314553"
+      },
+      "timestamp": "2026-04-13T11:03:36.316985"
+    }
+  ],
+  "updated_at": "2026-04-13T11:03:36.317034"
+}

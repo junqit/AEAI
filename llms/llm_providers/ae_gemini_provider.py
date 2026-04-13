@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from .ae_base_provider import AEBaseProvider
 from AEQuestion import AEQuestion
 from AEAiLevel import AEAiLevel
+from mlx_lm import load, generate
 
 class AEGeminiProvider(AEBaseProvider):
     """Gemini 本地模型提供商"""
@@ -18,7 +19,7 @@ class AEGeminiProvider(AEBaseProvider):
     def __init__(self):
         super().__init__()
         self.gemini_model = None
-        self.model_path = "/Users/tianjunqi/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b446025c61ecea876162774ee247706056963aba"
+        self.model_path = "/Users/tianjunqi/gemma-mlx"
 
         self.load()
 
@@ -32,10 +33,7 @@ class AEGeminiProvider(AEBaseProvider):
             from llm.gemini.gemini_model import get_gemini_model
 
             print(f"正在初始化 {self.name}...")
-            self.gemini_model = get_gemini_model(self.model_path)
-
-            # 加载模型
-            # self.gemini_model.load()
+            self.gemini_model, self.tokenizer = load(self.model_path)
 
             self.is_loaded = True
             print(f"✅ {self.name} loaded successfully!")
@@ -62,11 +60,10 @@ class AEGeminiProvider(AEBaseProvider):
             if not self.is_loaded:
                 self.load()
 
-            # 1. 组装提示词
-            prompt = self._build_prompt(question)
-
-            # 2. 根据 level 获取生成参数
-            generation_params = self._get_generation_params(level, max_tokens)
+            prompt = self.tokenizer.apply_chat_template(
+                        question.to_messages(),
+                        tokenize=False,
+                        add_generation_prompt=True)
 
             # 3. 调用模型生成
             print(f"Calling Gemini Model:")
@@ -74,10 +71,11 @@ class AEGeminiProvider(AEBaseProvider):
             print(f"  Max Tokens: {max_tokens}")
             print(f"  Prompt Length: {len(prompt)}")
 
-            response = self.gemini_model.generate(
-                prompt=prompt,
-                **generation_params
-            )
+            response = generate(
+                        self.model,
+                        self.tokenizer,
+                        prompt=prompt,
+                        max_tokens=max_tokens)
 
             # 4. 验证响应是否有效
             if not response or response.strip() == "":
@@ -163,7 +161,6 @@ class AEGeminiProvider(AEBaseProvider):
     def cleanup(self):
         """清理 Gemini 模型资源"""
         if self.gemini_model is not None:
-            self.gemini_model.cleanup()
             self.gemini_model = None
 
         self.is_loaded = False

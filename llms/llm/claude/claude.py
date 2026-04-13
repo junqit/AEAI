@@ -53,8 +53,6 @@ class AEClaudeModel:
         self,
         messages: List[Dict[str, str]],
         model: str,
-        system: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
         max_tokens: int = 4096,
         temperature: float = 0.0
     ) -> Dict[str, Any]:
@@ -97,18 +95,10 @@ class AEClaudeModel:
                 "messages": messages
             }
 
-            if system:
-                payload["system"] = system
-
-            if tools:
-                payload["tools"] = tools
-
             # 4. 打印请求信息
             print(f"Claude API Request:")
             print(f"  Model: {model}")
             print(f"  Messages: {messages}")
-            if system:
-                print(f"  System: {system}")
 
             # 5. 发送请求
             response = requests.post(url, headers=headers, json=payload)

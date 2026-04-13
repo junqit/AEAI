@@ -22,7 +22,6 @@ ae_context_manager = AEContextManager()
 
 # 注册所有路由
 app.include_router(post_root_module.router)
-app.include_router(websocket_chat_module.router)
 app.include_router(ae_context_chat_module.router)
 app.include_router(ae_context_history_module.router)
 app.include_router(ae_context_delete_module.router)

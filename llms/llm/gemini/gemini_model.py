@@ -5,6 +5,9 @@ Gemini 本地模型类
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Optional
+from transformers import BitsAndBytesConfig
+
+
 
 
 class AEGeminiModel:
@@ -39,11 +42,11 @@ class AEGeminiModel:
 
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             print(f"正在加载 Gemini Model...")
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
-                device_map="auto",
-                torch_dtype=torch.float16
-            )
+                dtype=torch.float16
+            ).to("mps")
 
             self.device = self.model.device
             self.is_loaded = True

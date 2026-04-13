@@ -63,25 +63,18 @@ class AEClaudeProvider(AEBaseProvider):
             model = self._get_model_by_level(level)
 
             # 2. 组装消息列表
-            messages = question.to_messages()
-
-            # 3. 获取系统提示词
-            system = question.system
-
-            # 4. 获取工具列表
-            tools = question.tools
+            messages = question.to_dict()
 
             # 5. 调用 Claude API
             print(f"Calling Claude API:")
             print(f"  Model: {model}")
             print(f"  Level: {level.name}")
             print(f"  Max Tokens: {max_tokens}")
+            print(f"  messages: {messages}")
 
             result = self.claude_model.generate(
                 messages=messages,
                 model=model,
-                system=system,
-                tools=tools,
                 max_tokens=max_tokens,
                 temperature=0.0
             )

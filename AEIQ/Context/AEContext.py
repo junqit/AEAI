@@ -13,6 +13,9 @@ if parent_dir not in sys.path:
 
 from AEIQConfig import config
 
+# 导入QuestionCache模块
+from .QuestionCache import QuestionCacheStore, ContextBuilder
+
 
 class AELLMResponse:
     """单个 LLM 的响应结果"""
@@ -34,7 +37,7 @@ class AELLMResponse:
 class AEContext:
     """支持多 LLM 类型并行处理的会话上下文实例"""
 
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, enable_cache: bool = True):
         self.session_id = session_id
         self.llm_service_url = config.get_llm_service_url()
         self.messages: List[Dict[str, Any]] = []
@@ -47,6 +50,12 @@ class AEContext:
         self._executor = ThreadPoolExecutor(
             max_workers=config.get_executor_max_workers()
         )
+
+        # QuestionCache集成
+        self.enable_cache = enable_cache
+        if self.enable_cache:
+            self.cache_store = QuestionCacheStore(enable_persistence=True)
+            self.context_builder = ContextBuilder(self.cache_store)
 
     async def process_message(
         self,
@@ -70,6 +79,14 @@ class AEContext:
                 "content": user_input,
                 "timestamp": datetime.now().isoformat()
             })
+
+            # 使用QuestionCache记录用户问题
+            if self.enable_cache:
+                self.cache_store.add_question(
+                    session_id=self.session_id,
+                    question=user_input,
+                    metadata={"llm_types": llm_types}
+                )
 
             # 并行处理所有 LLM 请求
             loop = asyncio.get_event_loop()
@@ -100,12 +117,21 @@ class AEContext:
                     response = result
                 responses.append(response)
 
-            # 记录所有响应
-            self.messages.append({
-                "role": "assistant",
-                "responses": [r.to_dict() for r in responses],
-                "timestamp": datetime.now().isoformat()
-            })
+                # 使用QuestionCache记录LLM回复
+                if self.enable_cache and not response.error:
+                    self.cache_store.add_response(
+                        session_id=self.session_id,
+                        response=str(response.response) if response.response else "",
+                        llm_type=response.llm_type,
+                        metadata={"timestamp": response.timestamp}
+                    )
+
+            # # 记录所有响应
+            # self.messages.append({
+            #     "role": "assistant",
+            #     "responses": [r.to_dict() for r in responses],
+            #     "timestamp": datetime.now().isoformat()
+            # })
 
             self.updated_at = datetime.now()
             return responses
@@ -117,6 +143,7 @@ class AEContext:
     ) -> AELLMResponse:
         """
         同步处理单个 LLM 的调用 - 通过 HTTP 请求到 9999 端口
+        请求参数完全匹配 question.py 中的 AEQuestionRequest 格式
 
         Args:
             user_input: 用户输入
@@ -126,10 +153,10 @@ class AEContext:
             LLM 响应结果
         """
         try:
-            # 构造请求到 9999 端口的 LLM 服务
+            # 参数格式严格匹配 question.py 中的 AEQuestionRequest
             url = f"{self.llm_service_url}/aellms/question"
             payload = {
-                "question": user_input,
+                "messages": self.messages,
                 "llm_type": llm_type,
                 "level": "high"
             }
@@ -185,3 +212,36 @@ class AEContext:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
+
+    def get_context_for_next_call(
+        self,
+        max_turns: int = 5,
+        max_tokens: Optional[int] = None,
+        preferred_llm: Optional[str] = None
+    ) -> List[Dict[str, str]]:
+        """
+        获取下次LLM调用的上下文
+
+        Args:
+            max_turns: 最大对话轮数
+            max_tokens: 最大token数量限制
+            preferred_llm: 优先使用的LLM类型（用于选择特定LLM的回复）
+
+        Returns:
+            标准格式的上下文消息列表
+        """
+        if not self.enable_cache:
+            return []
+
+        if preferred_llm:
+            return self.context_builder.build_context_with_llm_selection(
+                session_id=self.session_id,
+                preferred_llm=preferred_llm,
+                max_turns=max_turns
+            )
+        else:
+            return self.context_builder.build_context(
+                session_id=self.session_id,
+                max_turns=max_turns,
+                max_tokens=max_tokens
+            )
