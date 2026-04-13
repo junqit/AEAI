@@ -97,8 +97,7 @@ class AEContext:
                 # 记录用户消息
                 self.messages.append({
                     "role": "user",
-                    "content": user_input,
-                    "timestamp": datetime.now().isoformat()
+                    "content": user_input
                 })
                 logger.info(f"✅ 用户消息已记录 - session_id={self.session_id}, total_messages={len(self.messages)}")
 
@@ -210,8 +209,11 @@ class AEContext:
 
             logger.debug(f"📦 准备请求参数 - session_id={self.session_id}, llm_type={llm_type}, messages_count={len(self.messages)}")
 
+            system = "你是一个只使用中文回答的助手，禁止输出任何英文（包括单词、术语、标点解释等）。"
+
             payload = {
-                "messages": self.messages,
+                "messages": self.messages,  # 使用清理后的 messages
+                "system": system,
                 "llm_type": llm_type,
                 "level": "high"
             }

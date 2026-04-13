@@ -1,12 +1,15 @@
 """
-Question Route - 接收 question 请求，调用单个 LLM
+Question Route - 接收 question 请求，并发处理多个请求
 使用 AELlmManager 统一管理 LLM Provider
+支持多个请求并行处理
 """
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 import sys
 from pathlib import Path
@@ -22,6 +25,10 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# 创建线程池用于并发处理 LLM 调用（避免阻塞事件循环）
+# 支持最多 20 个并发请求
+executor = ThreadPoolExecutor(max_workers=20)
 
 class AEQuestionRequest(BaseModel):
     """Question 请求模型 - 接收已组装好的数据"""
@@ -40,10 +47,7 @@ class AEQuestionRequest(BaseModel):
                 ],
                 "llm_type": "claude",
                 "level": "high",
-                "max_tokens": 4096,
-                "system": "你是一个 Python 专家",
-                "tools": [],
-                "context": {}
+                "system": "你是一个 Python 专家"
             }
         }
 
@@ -73,12 +77,71 @@ class AEQuestionResponse(BaseModel):
             }
         }
 
+
 router = APIRouter(prefix="/aellms/question", tags=["question"])
+
+
+def _process_llm_sync(
+    request_id: str,
+    messages: List[Dict[str, Any]],
+    llm_type: LLMType,
+    level: AEAiLevel,
+    system: Optional[str],
+    tools: Optional[List[Dict[str, Any]]],
+    context: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    同步调用 LLM（在线程池中执行，避免阻塞事件循环）
+
+    Args:
+        request_id: 请求 ID
+        messages: 消息列表
+        llm_type: LLM 类型
+        level: AI 级别
+        system: 系统提示词
+        tools: 工具列表
+        context: 上下文信息
+
+    Returns:
+        Dict: LLM 调用结果
+    """
+    try:
+        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}] 开始处理")
+
+        # 创建 AEQuestion 对象
+        question = AEQuestion(
+            messages=messages,
+            llm_type=llm_type,
+            level=level,
+            system=system,
+            tools=tools,
+            context=context or {}
+        )
+
+        # 获取 AELlmManager 实例并调用
+        manager = get_ae_llm_manager()
+        logger.info(f"🚀 [Request-{request_id}] [LLM-{llm_type.value}] 调用 LLM")
+        result = manager.generate(question)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ [Request-{request_id}] [LLM-{llm_type.value}] 处理异常: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "response": None,
+            "error": str(e),
+            "elapsed_seconds": 0
+        }
+
+
 @router.post("", response_model=AEQuestionResponse)
 async def process_question(request: AEQuestionRequest):
     """
     处理 question 请求，调用单个 LLM
-    使用 AELlmManager 统一管理
+    支持多个请求并发处理（FastAPI + asyncio + ThreadPoolExecutor）
+
+    当多个客户端同时发送请求时，它们会被并发处理，而不是串行等待
 
     Args:
         request: 包含已组装好的 messages 和可选参数的请求
@@ -87,7 +150,7 @@ async def process_question(request: AEQuestionRequest):
         AEQuestionResponse: 处理结果
     """
     request_id = f"{datetime.now().timestamp()}"
-    logger.info(f"📥 [Request-{request_id}] 收到 question 请求 - llm_type={request.llm_type}, level={request.level}, messages_count={len(request.messages)}")
+    logger.info(f"📥 [Request-{request_id}] 收到请求 - llm_type={request.llm_type}, level={request.level}, messages_count={len(request.messages)}")
     logger.debug(f"📋 [Request-{request_id}] 请求详情 - messages={request.messages}")
 
     start_time = datetime.now()
@@ -119,33 +182,29 @@ async def process_question(request: AEQuestionRequest):
 
         logger.info(f"🔄 [Request-{request_id}] 开始处理 - LLM={llm_type.value}, level={level.name}")
 
-        # 创建 AEQuestion 对象（所有参数都在对象内部）
-        question = AEQuestion(
-            messages=request.messages,
-            llm_type=llm_type,
-            level=level,
-            system=request.system,
-            tools=request.tools,
-            context=request.context or {}
+        # 在线程池中执行 LLM 调用（避免阻塞事件循环）
+        # 这样多个请求可以并发处理
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            executor,
+            _process_llm_sync,
+            request_id,
+            request.messages,
+            llm_type,
+            level,
+            request.system,
+            request.tools,
+            request.context
         )
-        logger.debug(f"✅ [Request-{request_id}] AEQuestion 对象已创建")
-
-        # 获取 AELlmManager 实例
-        manager = get_ae_llm_manager()
-        logger.debug(f"✅ [Request-{request_id}] AELlmManager 实例已获取")
-
-        # 调用 LLM - 所有参数都在 question 对象内部，不需要传递零散参数
-        logger.info(f"🚀 [Request-{request_id}] 调用 LLM - llm_type={llm_type.value}")
-        result = manager.generate(question)
 
         elapsed = (datetime.now() - start_time).total_seconds()
 
         if result["status"] == "success":
             response_length = len(result.get("response", "")) if result.get("response") else 0
-            logger.info(f"✅ [Request-{request_id}] LLM 调用成功 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, response_length={response_length}")
+            logger.info(f"✅ [Request-{request_id}] 请求完成 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, response_length={response_length}")
             logger.debug(f"📝 [Request-{request_id}] 响应内容预览: {result.get('response', '')[:200]}...")
         else:
-            logger.error(f"❌ [Request-{request_id}] LLM 调用失败 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, error={result.get('error')}")
+            logger.error(f"❌ [Request-{request_id}] 请求失败 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, error={result.get('error')}")
 
         # 返回响应
         return AEQuestionResponse(

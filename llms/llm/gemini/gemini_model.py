@@ -26,7 +26,7 @@ class AEGeminiModel:
         Args:
             model_path: 模型路径，如果不指定则使用默认路径
         """
-        self.model_path = model_path or "/Users/tianjunqi/gemma-mlx"
+        self.model_path = model_path or "/Users/tianjunqi/llms/gemini/mlx/26B-A4B"
         self.model = None
         self.tokenizer = None
         self.is_loaded = False
@@ -93,10 +93,10 @@ class AEGeminiModel:
                     "role": "system",
                     "content": system
                 })
-                logger.debug(f"📝 添加 system: {system[:100]}...")
+                logger.info(f"📝 添加 system: {system[:100]}...")
 
             formatted_messages.extend(messages)
-            logger.debug(f"💬 Messages: {formatted_messages}")
+            logger.info(f"💬 Messages: {formatted_messages}")
 
             # 2. 使用 tokenizer 的 chat template 将 messages 转换为 prompt
             prompt = self.tokenizer.apply_chat_template(
@@ -106,7 +106,7 @@ class AEGeminiModel:
             )
 
             logger.info(f"📦 Prompt 已生成 - length={len(prompt)}")
-            logger.debug(f"📝 Prompt 内容: {prompt[:200]}...")
+            logger.info(f"📝 Prompt 内容: {prompt[:200]}...")
 
             # 3. 调用 mlx_lm 的 generate 函数
             response = generate(
@@ -117,7 +117,7 @@ class AEGeminiModel:
             )
 
             logger.info(f"✅ 文本生成成功 - response_length={len(response)}")
-            logger.debug(f"📄 响应内容: {response[:200]}...")
+            logger.info(f"📄 响应内容: {response[:200]}...")
 
             return response.strip()
 
@@ -137,7 +137,7 @@ class AEGeminiModel:
             "is_loaded": self.is_loaded,
             "model_type": "gemma-mlx"
         }
-        logger.debug(f"📊 模型状态: {status}")
+        logger.info(f"📊 模型状态: {status}")
         return status
 
     def cleanup(self):
@@ -147,12 +147,12 @@ class AEGeminiModel:
         if self.model is not None:
             del self.model
             self.model = None
-            logger.debug("✅ 模型已释放")
+            logger.info("✅ 模型已释放")
 
         if self.tokenizer is not None:
             del self.tokenizer
             self.tokenizer = None
-            logger.debug("✅ Tokenizer 已释放")
+            logger.info("✅ Tokenizer 已释放")
 
         self.is_loaded = False
         logger.info("✅ Gemini 模型资源已清理")

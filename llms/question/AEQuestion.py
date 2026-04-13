@@ -27,19 +27,6 @@ class AEQuestion:
     def to_dict(self) -> Dict[str, Any]:
         """将 AEQuestion 转换为字典格式"""
         result = {"messages": self.messages}
-
-        # 添加 system 信息
-        if self.system:
-            result["system"] = self.system
-
-        # 添加 tools 信息
-        if self.tools:
-            result["tools"] = self.tools
-
-        # 添加 context 信息
-        if self.context:
-            result["context"] = self.context
-
         return result
 
     def add_tool(self, tool: Dict[str, Any]):
