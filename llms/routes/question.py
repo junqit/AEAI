@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import logging
 
 import sys
 from pathlib import Path
@@ -13,6 +14,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from question.AEQuestion import LLMType, AEQuestion, AEAiLevel
 from AELlmManager import get_ae_llm_manager
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 class AEQuestionRequest(BaseModel):
     """Question 请求模型 - 接收已组装好的数据"""
@@ -77,9 +86,13 @@ async def process_question(request: AEQuestionRequest):
     Returns:
         AEQuestionResponse: 处理结果
     """
-    try:
-        print(f"[{datetime.now().isoformat()}] Received messages: {request.messages}")
+    request_id = f"{datetime.now().timestamp()}"
+    logger.info(f"📥 [Request-{request_id}] 收到 question 请求 - llm_type={request.llm_type}, level={request.level}, messages_count={len(request.messages)}")
+    logger.debug(f"📋 [Request-{request_id}] 请求详情 - messages={request.messages}")
 
+    start_time = datetime.now()
+
+    try:
         # 解析 LLM 类型
         llm_type_map = {
             "claude": LLMType.CLAUDE,
@@ -89,9 +102,11 @@ async def process_question(request: AEQuestionRequest):
         }
         llm_type = llm_type_map.get(request.llm_type.lower())
         if not llm_type:
+            error_msg = f"不支持的 LLM 类型: {request.llm_type}"
+            logger.error(f"❌ [Request-{request_id}] {error_msg}")
             raise HTTPException(
                 status_code=400,
-                detail=f"不支持的 LLM 类型: {request.llm_type}"
+                detail=error_msg
             )
 
         # 解析 AI 级别
@@ -102,7 +117,7 @@ async def process_question(request: AEQuestionRequest):
         }
         level = level_map.get(request.level.lower(), AEAiLevel.default)
 
-        print(f"Processing with LLM: {llm_type.value}, level: {level.name}")
+        logger.info(f"🔄 [Request-{request_id}] 开始处理 - LLM={llm_type.value}, level={level.name}")
 
         # 创建 AEQuestion 对象（所有参数都在对象内部）
         question = AEQuestion(
@@ -113,12 +128,24 @@ async def process_question(request: AEQuestionRequest):
             tools=request.tools,
             context=request.context or {}
         )
+        logger.debug(f"✅ [Request-{request_id}] AEQuestion 对象已创建")
 
         # 获取 AELlmManager 实例
         manager = get_ae_llm_manager()
+        logger.debug(f"✅ [Request-{request_id}] AELlmManager 实例已获取")
 
         # 调用 LLM - 所有参数都在 question 对象内部，不需要传递零散参数
+        logger.info(f"🚀 [Request-{request_id}] 调用 LLM - llm_type={llm_type.value}")
         result = manager.generate(question)
+
+        elapsed = (datetime.now() - start_time).total_seconds()
+
+        if result["status"] == "success":
+            response_length = len(result.get("response", "")) if result.get("response") else 0
+            logger.info(f"✅ [Request-{request_id}] LLM 调用成功 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, response_length={response_length}")
+            logger.debug(f"📝 [Request-{request_id}] 响应内容预览: {result.get('response', '')[:200]}...")
+        else:
+            logger.error(f"❌ [Request-{request_id}] LLM 调用失败 - llm_type={request.llm_type}, elapsed={elapsed:.2f}s, error={result.get('error')}")
 
         # 返回响应
         return AEQuestionResponse(
@@ -132,10 +159,14 @@ async def process_question(request: AEQuestionRequest):
         )
 
     except HTTPException:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.error(f"❌ [Request-{request_id}] HTTP 异常 - elapsed={elapsed:.2f}s")
         raise
     except Exception as e:
-        print(f"❌ Error processing question: {str(e)}")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        error_msg = f"Failed to process question: {str(e)}"
+        logger.error(f"❌ [Request-{request_id}] 未知错误 - elapsed={elapsed:.2f}s, error={error_msg}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process question: {str(e)}"
+            detail=error_msg
         )

@@ -1,17 +1,23 @@
 """
 Gemini 本地模型类
 封装 Gemini 模型的加载、生成和资源管理
+使用 mlx_lm 库进行模型加载和推理
 """
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from typing import Optional
-from transformers import BitsAndBytesConfig
+from typing import Optional, List, Dict, Any
+import logging
+from mlx_lm import load, generate
 
-
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class AEGeminiModel:
-    """Gemini 本地模型封装类"""
+    """Gemini 本地模型封装类（基于 mlx_lm）"""
 
     def __init__(self, model_path: str = None):
         """
@@ -20,63 +26,52 @@ class AEGeminiModel:
         Args:
             model_path: 模型路径，如果不指定则使用默认路径
         """
-        self.model_path = model_path or "/Users/tianjunqi/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b446025c61ecea876162774ee247706056963aba"
+        self.model_path = model_path or "/Users/tianjunqi/gemma-mlx"
         self.model = None
-        self.processor = None
+        self.tokenizer = None
         self.is_loaded = False
-        self.device = None
+        logger.info(f"🚀 初始化 Gemini 模型 - model_path={self.model_path}")
 
     def load(self):
         """
-        加载 Gemini 模型和处理器
+        加载 Gemini 模型和 tokenizer（使用 mlx_lm）
 
         Raises:
             Exception: 加载失败时抛出异常
         """
         if self.is_loaded:
-            print("Gemini 模型已加载，跳过重复加载")
+            logger.info("Gemini 模型已加载，跳过重复加载")
             return
 
         try:
-            print(f"正在加载 Gemini Processor...")
+            logger.info(f"🔄 开始加载 Gemini 模型 - path={self.model_path}")
 
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            print(f"正在加载 Gemini Model...")
+            # 使用 mlx_lm 加载模型和 tokenizer
+            self.model, self.tokenizer = load(self.model_path)
 
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                dtype=torch.float16
-            ).to("mps")
-
-            self.device = self.model.device
             self.is_loaded = True
-            print(f"✅ Gemini 模型加载成功！")
-            print(f"   Device: {self.device}")
+            logger.info(f"✅ Gemini 模型加载成功 - model_path={self.model_path}")
 
         except Exception as e:
-            print(f"❌ Gemini 模型加载失败: {str(e)}")
+            logger.error(f"❌ Gemini 模型加载失败: {str(e)}", exc_info=True)
             self.cleanup()
             raise
 
     def generate(
         self,
-        prompt: str,
-        max_new_tokens: int = 256,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 4096,
         temperature: float = 0.7,
-        top_p: float = 0.9,
-        top_k: int = 50,
-        do_sample: bool = True
+        system: Optional[str] = None
     ) -> str:
         """
-        使用 Gemini 模型生成文本
+        使用 Gemini 模型生成文本（支持 messages 格式）
 
         Args:
-            prompt: 输入提示词
-            max_new_tokens: 最大生成 token 数
+            messages: 消息列表 [{"role": "user", "content": "..."}]
+            max_tokens: 最大生成 token 数
             temperature: 温度参数
-            top_p: nucleus sampling 参数
-            top_k: top-k sampling 参数
-            do_sample: 是否使用采样
+            system: 系统提示词（可选，会添加到 messages 开头）
 
         Returns:
             str: 生成的文本
@@ -85,31 +80,49 @@ class AEGeminiModel:
             Exception: 生成失败时抛出异常
         """
         if not self.is_loaded:
-            raise Exception("Gemini 模型未加载，请先调用 load() 方法")
+            logger.warning("⚠️ Gemini 模型未加载，正在加载...")
+            self.load()
+
+        logger.info(f"🔄 开始生成文本 - messages_count={len(messages)}, max_tokens={max_tokens}, system={'是' if system else '否'}")
 
         try:
-            # 1. 处理输入
-            inputs = self.tokenizer(prompt, return_tensors="pt")
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            # 1. 构建完整的 messages（如果有 system，添加到开头）
+            formatted_messages = []
+            if system:
+                formatted_messages.append({
+                    "role": "system",
+                    "content": system
+                })
+                logger.debug(f"📝 添加 system: {system[:100]}...")
 
-            with torch.no_grad():
-                outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=do_sample,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k
-                )
+            formatted_messages.extend(messages)
+            logger.debug(f"💬 Messages: {formatted_messages}")
 
-            input_len = inputs["input_ids"].shape[1]
-            generated_tokens = outputs[0][input_len:]
+            # 2. 使用 tokenizer 的 chat template 将 messages 转换为 prompt
+            prompt = self.tokenizer.apply_chat_template(
+                formatted_messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
 
-            response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            logger.info(f"📦 Prompt 已生成 - length={len(prompt)}")
+            logger.debug(f"📝 Prompt 内容: {prompt[:200]}...")
+
+            # 3. 调用 mlx_lm 的 generate 函数
+            response = generate(
+                self.model,
+                self.tokenizer,
+                prompt=prompt,
+                max_tokens=max_tokens
+            )
+
+            logger.info(f"✅ 文本生成成功 - response_length={len(response)}")
+            logger.debug(f"📄 响应内容: {response[:200]}...")
 
             return response.strip()
 
         except Exception as e:
+            logger.error(f"❌ Gemini 生成失败: {str(e)}", exc_info=True)
             raise Exception(f"Gemini 生成失败: {str(e)}")
 
     def get_status(self) -> dict:
@@ -119,26 +132,30 @@ class AEGeminiModel:
         Returns:
             dict: 包含模型状态信息的字典
         """
-        return {
+        status = {
             "model_path": self.model_path,
             "is_loaded": self.is_loaded,
-            "device": str(self.device) if self.device else None,
-            "model_type": "gemma-4-E2B-it"
+            "model_type": "gemma-mlx"
         }
+        logger.debug(f"📊 模型状态: {status}")
+        return status
 
     def cleanup(self):
         """清理模型资源"""
+        logger.info("🧹 开始清理 Gemini 模型资源...")
+
         if self.model is not None:
             del self.model
             self.model = None
+            logger.debug("✅ 模型已释放")
 
-        if self.processor is not None:
-            del self.processor
-            self.processor = None
+        if self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+            logger.debug("✅ Tokenizer 已释放")
 
-        self.device = None
         self.is_loaded = False
-        print("🧹 Gemini 模型资源已清理")
+        logger.info("✅ Gemini 模型资源已清理")
 
 
 # 全局单例实例
@@ -158,6 +175,7 @@ def get_gemini_model(model_path: str = None) -> AEGeminiModel:
     global _gemini_model_instance
     if _gemini_model_instance is None:
         _gemini_model_instance = AEGeminiModel(model_path)
+        logger.info("✅ 创建 Gemini 模型单例实例")
     return _gemini_model_instance
 
 
@@ -167,3 +185,4 @@ def cleanup_gemini_model():
     if _gemini_model_instance is not None:
         _gemini_model_instance.cleanup()
         _gemini_model_instance = None
+        logger.info("✅ 全局 Gemini 模型实例已清理")

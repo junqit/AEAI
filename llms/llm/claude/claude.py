@@ -4,7 +4,16 @@ Claude API 模型类
 """
 import requests
 import json
+import logging
 from typing import Optional, List, Dict, Any
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class AEClaudeModel:
@@ -21,6 +30,7 @@ class AEClaudeModel:
         self.base_url = base_url or "http://model.mify.ai.srv/anthropic"
         self.auth_token = auth_token or "sk-psTx7IFlW79l67Or8JqLsBL0CqCtkhVlHoOMfRMts1Ugkdiu"
         self.is_loaded = False
+        logger.info(f"🚀 初始化 Claude 模型 - base_url={self.base_url}")
 
     def load(self):
         """
@@ -30,10 +40,11 @@ class AEClaudeModel:
             Exception: 配置验证失败时抛出异常
         """
         if self.is_loaded:
-            print("Claude API 已配置，跳过重复加载")
+            logger.info("Claude API 已配置，跳过重复加载")
             return
 
         try:
+            logger.info("🔄 开始加载 Claude API 配置...")
             # 验证配置
             if not self.base_url:
                 raise ValueError("base_url 不能为空")
@@ -41,11 +52,10 @@ class AEClaudeModel:
                 raise ValueError("auth_token 不能为空")
 
             self.is_loaded = True
-            print(f"✅ Claude API 配置成功！")
-            print(f"   Base URL: {self.base_url}")
+            logger.info(f"✅ Claude API 配置成功 - base_url={self.base_url}")
 
         except Exception as e:
-            print(f"❌ Claude API 配置失败: {str(e)}")
+            logger.error(f"❌ Claude API 配置失败: {str(e)}", exc_info=True)
             self.cleanup()
             raise
 
@@ -54,7 +64,9 @@ class AEClaudeModel:
         messages: List[Dict[str, str]],
         model: str,
         max_tokens: int = 4096,
-        temperature: float = 0.0
+        temperature: float = 0.0,
+        system: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         使用 Claude API 生成文本
@@ -62,10 +74,10 @@ class AEClaudeModel:
         Args:
             messages: 消息列表 [{"role": "user", "content": "..."}]
             model: 模型名称
-            system: 系统提示词
-            tools: 工具列表
             max_tokens: 最大 token 数
             temperature: 温度参数
+            system: 系统提示词（可选）
+            tools: 工具列表（可选）
 
         Returns:
             dict: API 响应结果
@@ -75,6 +87,10 @@ class AEClaudeModel:
         """
         if not self.is_loaded:
             self.load()
+
+        logger.info(f"🔄 开始调用 Claude API - model={model}, max_tokens={max_tokens}, messages_count={len(messages)}")
+        from datetime import datetime
+        start_time = datetime.now()
 
         try:
             # 1. 构建 URL
@@ -87,7 +103,7 @@ class AEClaudeModel:
                 "content-type": "application/json"
             }
 
-            # 3. 构建 payload
+            # 3. 构建 payload（按照 Claude API 官方文档格式）
             payload = {
                 "model": model,
                 "max_tokens": max_tokens,
@@ -95,22 +111,46 @@ class AEClaudeModel:
                 "messages": messages
             }
 
-            # 4. 打印请求信息
-            print(f"Claude API Request:")
-            print(f"  Model: {model}")
-            print(f"  Messages: {messages}")
+            # 4. 添加可选参数
+            if system:
+                payload["system"] = system
+                logger.debug(f"📝 添加 system: {system[:100]}...")
 
-            # 5. 发送请求
-            response = requests.post(url, headers=headers, json=payload)
+            if tools:
+                payload["tools"] = tools
+                logger.debug(f"🔧 添加 {len(tools)} 个 tools")
 
-            # 6. 处理响应
+            # 5. 打印请求信息
+            logger.info(f"📤 发送请求到 Claude API - url={url}")
+            logger.debug(f"📋 请求参数: model={model}, max_tokens={max_tokens}, temperature={temperature}, system={'是' if system else '否'}, tools={len(tools) if tools else 0}")
+
+            # 6. 发送请求
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+
+            # 7. 处理响应
             if response.status_code == 200:
                 result = response.json()
+                logger.info(f"✅ Claude API 调用成功 - elapsed={elapsed:.2f}s, status=200")
+                logger.debug(f"📄 响应内容: {str(result)[:500]}...")
                 return result
             else:
-                return f"请求失败: {response.status_code}"
+                error_msg = f"请求失败: {response.status_code}"
+                logger.error(f"❌ Claude API 调用失败 - elapsed={elapsed:.2f}s, status={response.status_code}, error={response.text[:200]}")
+                return error_msg
 
+        except requests.exceptions.Timeout as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ Claude API 请求超时 - elapsed={elapsed:.2f}s", exc_info=True)
+            return f"请求超时: {str(e)}"
+        except requests.exceptions.ConnectionError as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ Claude API 连接错误 - elapsed={elapsed:.2f}s, url={url}", exc_info=True)
+            return f"连接错误: {str(e)}"
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ Claude API 请求异常 - elapsed={elapsed:.2f}s, error={str(e)}", exc_info=True)
             return f"请求异常: {e}"
 
     def get_status(self) -> dict:
