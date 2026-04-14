@@ -86,7 +86,8 @@ class AEGeminiProvider(AEBaseProvider):
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=0.7,
-                system=system
+                system=system,
+                tools=question.tools
             )
 
             # 4. 验证响应是否有效

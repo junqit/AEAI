@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # 创建线程池用于并发处理 LLM 调用（避免阻塞事件循环）
 # 支持最多 20 个并发请求
-executor = ThreadPoolExecutor(max_workers=20)
+executor = ThreadPoolExecutor(max_workers=10)
 
 class AEQuestionRequest(BaseModel):
     """Question 请求模型 - 接收已组装好的数据"""
@@ -106,7 +106,7 @@ def _process_llm_sync(
         Dict: LLM 调用结果
     """
     try:
-        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}] 开始处理")
+        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}]  {tools}开始处理")
 
         # 创建 AEQuestion 对象
         question = AEQuestion(

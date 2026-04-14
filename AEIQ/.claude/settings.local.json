@@ -6,7 +6,8 @@
       "Bash(mv delete_context_session_id.py post_context_delete.py)",
       "Bash(mv get_contexts_stats.py post_contexts_stats.py)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(python test_parse_output.py)"
     ]
   }
 }

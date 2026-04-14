@@ -5,7 +5,9 @@ Gemini 本地模型类
 """
 from typing import Optional, List, Dict, Any
 import logging
+import re
 from mlx_lm import load, generate
+from mlx_lm.sample_utils import make_sampler
 
 # 配置日志
 logging.basicConfig(
@@ -26,7 +28,7 @@ class AEGeminiModel:
         Args:
             model_path: 模型路径，如果不指定则使用默认路径
         """
-        self.model_path = model_path or "/Users/tianjunqi/llms/gemini/mlx/26B-A4B"
+        self.model_path = model_path or "/Users/tianjunqi/llms/gemini/mlx/E2B"
         self.model = None
         self.tokenizer = None
         self.is_loaded = False
@@ -62,7 +64,8 @@ class AEGeminiModel:
         messages: List[Dict[str, str]],
         max_tokens: int = 4096,
         temperature: float = 0.7,
-        system: Optional[str] = None
+        system: Optional[str] = None,
+        tools: List[Dict[str, str]] = None
     ) -> str:
         """
         使用 Gemini 模型生成文本（支持 messages 格式）
@@ -93,12 +96,16 @@ class AEGeminiModel:
                     "role": "system",
                     "content": system
                 })
-                logger.info(f"📝 添加 system: {system[:100]}...")
+
+            if tools:
+                formatted_messages.append({
+                    "role": "tools",
+                    "content": tools
+                })
 
             formatted_messages.extend(messages)
             logger.info(f"💬 Messages: {formatted_messages}")
 
-            # 2. 使用 tokenizer 的 chat template 将 messages 转换为 prompt
             prompt = self.tokenizer.apply_chat_template(
                 formatted_messages,
                 tokenize=False,
@@ -106,9 +113,8 @@ class AEGeminiModel:
             )
 
             logger.info(f"📦 Prompt 已生成 - length={len(prompt)}")
-            logger.info(f"📝 Prompt 内容: {prompt[:200]}...")
+            logger.info(f"📝 Prompt 内容: {prompt}")
 
-            # 3. 调用 mlx_lm 的 generate 函数
             response = generate(
                 self.model,
                 self.tokenizer,
@@ -116,14 +122,53 @@ class AEGeminiModel:
                 max_tokens=max_tokens
             )
 
-            logger.info(f"✅ 文本生成成功 - response_length={len(response)}")
-            logger.info(f"📄 响应内容: {response[:200]}...")
+            logger.info(f"📄 响应内容: {response}")
+            parsed = self.parse_output(text=response.strip())
+            logger.info(f"🧠 思考过程: {parsed['think'][:200]}..." if len(parsed['think']) > 200 else f"🧠 思考过程: {parsed['think']}")
+            logger.info(f"📄 响应解析内容: {parsed['answer']}")
 
-            return response.strip()
+            return parsed["answer"]
 
         except Exception as e:
             logger.error(f"❌ Gemini 生成失败: {str(e)}", exc_info=True)
             raise Exception(f"Gemini 生成失败: {str(e)}")
+
+
+    def parse_output(self, text: str) -> Dict[str, str]:
+        """
+        解析模型输出，提取思考过程和答案
+
+        Args:
+            text: 原始模型输出
+
+        Returns:
+            Dict[str, str]: 包含 'think' 和 'answer' 的字典
+        """
+        text = text.strip()
+
+        start_tag = "<|channel>thought"
+        end_tag = "<channel|>"
+
+        think = ""
+        answer = text
+
+        # 检查是否包含思考过程标签
+        if start_tag in text:
+            # 提取 start_tag 之后的内容
+            parts = text.split(start_tag, 1)[-1]
+
+            if end_tag in parts:
+                # 分离思考过程和答案
+                think, answer = parts.split(end_tag, 1)
+            else:
+                # 只有思考过程，没有答案
+                think = parts
+                answer = ""
+        
+        return {
+            "think": think.strip(),
+            "answer": answer.strip()
+        }
 
     def get_status(self) -> dict:
         """

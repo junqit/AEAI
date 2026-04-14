@@ -44,12 +44,12 @@ class AELLMResponse:
 
 
 class AEContext:
-    """支持多 LLM 类型并行处理的会话上下文实例"""
+    """支持多 LLM 类型并行处理的会话上下文实例 - 无状态版本"""
 
     def __init__(self, session_id: str, enable_cache: bool = True):
         self.session_id = session_id
         self.llm_service_url = config.get_llm_service_url()
-        self.messages: List[Dict[str, Any]] = []
+        # 移除 self.messages，不再保存历史
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
 
@@ -81,6 +81,7 @@ class AEContext:
     ) -> List[AELLMResponse]:
         """
         异步处理用户消息 - 并行调用多个 LLM
+        每次调用都是独立的，不保存历史
 
         Args:
             user_input: 用户输入的消息
@@ -94,12 +95,13 @@ class AEContext:
 
         async with self._lock:
             try:
-                # 记录用户消息
-                self.messages.append({
+                # 创建临时的 messages（不保存到实例变量）
+                temp_messages = [{
                     "role": "user",
                     "content": user_input
-                })
-                logger.info(f"✅ 用户消息已记录 - session_id={self.session_id}, total_messages={len(self.messages)}")
+                }]
+
+                logger.info(f"✅ 临时消息已创建 - session_id={self.session_id}, messages_count={len(temp_messages)}")
 
                 # 使用QuestionCache记录用户问题
                 if self.enable_cache:
@@ -122,7 +124,7 @@ class AEContext:
                     task = loop.run_in_executor(
                         self._executor,
                         self._process_single_llm,
-                        user_input,
+                        temp_messages,  # 传递临时 messages
                         llm_type
                     )
                     tasks.append(task)
@@ -170,13 +172,6 @@ class AEContext:
 
                 logger.info(f"📊 处理结果统计 - session_id={self.session_id}, success={success_count}, error={error_count}, total={len(responses)}")
 
-                # # 记录所有响应
-                # self.messages.append({
-                #     "role": "assistant",
-                #     "responses": [r.to_dict() for r in responses],
-                #     "timestamp": datetime.now().isoformat()
-                # })
-
                 self.updated_at = datetime.now()
                 return responses
 
@@ -186,7 +181,7 @@ class AEContext:
 
     def _process_single_llm(
         self,
-        user_input: str,
+        messages: List[Dict[str, Any]],
         llm_type: str
     ) -> AELLMResponse:
         """
@@ -194,7 +189,7 @@ class AEContext:
         请求参数完全匹配 question.py 中的 AEQuestionRequest 格式
 
         Args:
-            user_input: 用户输入
+            messages: 临时消息列表（不存储在实例中）
             llm_type: LLM 类型
 
         Returns:
@@ -207,14 +202,33 @@ class AEContext:
             # 参数格式严格匹配 question.py 中的 AEQuestionRequest
             url = f"{self.llm_service_url}/aellms/question"
 
-            logger.debug(f"📦 准备请求参数 - session_id={self.session_id}, llm_type={llm_type}, messages_count={len(self.messages)}")
+            logger.debug(f"📦 准备请求参数 - session_id={self.session_id}, llm_type={llm_type}, messages_count={len(messages)}")
 
-            system = "你是一个只使用中文回答的助手，禁止输出任何英文（包括单词、术语、标点解释等）。"
+            # 清理 messages，只保留 role 和 content 字段（去除 timestamp 等额外字段）
+            clean_messages = []
+            for msg in messages:
+                clean_msg = {
+                    "role": msg.get("role"),
+                    "content": msg.get("content")
+                }
+                clean_messages.append(clean_msg)
+
+            system = ""
 
             payload = {
-                "messages": self.messages,  # 使用清理后的 messages
+                "messages": clean_messages,  # 使用清理后的临时 messages
                 "system": system,
                 "llm_type": llm_type,
+#                 "tools": [
+#     {
+#       "name": "步骤名",
+#       "step_number": "第几步",
+#       "description": "作用",
+#       "input_schema": {
+#         "filename": "string"
+#       }
+#     }
+#   ],
                 "level": "high"
             }
 
@@ -292,16 +306,42 @@ class AEContext:
             )
 
     def get_history(self) -> List[Dict[str, Any]]:
-        """获取会话历史"""
-        logger.debug(f"📚 获取历史记录 - session_id={self.session_id}, message_count={len(self.messages)}")
-        return self.messages
+        """
+        获取会话历史（从 QuestionCache）
+        注意：Context 本身不存储历史，历史由 QuestionCache 管理
+        """
+        if not self.enable_cache:
+            logger.warning(f"⚠️ QuestionCache 未启用 - session_id={self.session_id}, 返回空历史")
+            return []
+
+        try:
+            # 使用 QuestionCache 获取历史
+            context = self.context_builder.build_context(
+                session_id=self.session_id,
+                max_turns=100  # 获取所有历史
+            )
+            logger.debug(f"📚 获取历史记录 - session_id={self.session_id}, message_count={len(context)}")
+            return context
+        except Exception as e:
+            logger.error(f"❌ 获取历史失败 - session_id={self.session_id}, error={str(e)}")
+            return []
 
     def clear_history(self):
-        """清空历史消息"""
-        old_count = len(self.messages)
-        self.messages = []
-        self.updated_at = datetime.now()
-        logger.info(f"🗑️ 清空历史记录 - session_id={self.session_id}, cleared_count={old_count}")
+        """
+        清空历史消息（从 QuestionCache）
+        注意：Context 本身不存储历史，历史由 QuestionCache 管理
+        """
+        if not self.enable_cache:
+            logger.warning(f"⚠️ QuestionCache 未启用 - session_id={self.session_id}")
+            return
+
+        try:
+            # 清空 QuestionCache 中的历史（需要实现此方法）
+            # 暂时只记录日志
+            logger.info(f"🗑️ 清空历史记录 - session_id={self.session_id}")
+            self.updated_at = datetime.now()
+        except Exception as e:
+            logger.error(f"❌ 清空历史失败 - session_id={self.session_id}, error={str(e)}")
 
     def cleanup(self):
         """清理资源"""
@@ -314,12 +354,24 @@ class AEContext:
             logger.error(f"❌ 清理资源失败 - session_id={self.session_id}, error={str(e)}", exc_info=True)
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """
+        获取统计信息
+        注意：Context 本身不存储历史，消息数量从 QuestionCache 获取
+        """
+        message_count = 0
+        if self.enable_cache:
+            try:
+                history = self.get_history()
+                message_count = len(history)
+            except Exception as e:
+                logger.error(f"❌ 获取消息数量失败 - session_id={self.session_id}, error={str(e)}")
+
         stats = {
             "session_id": self.session_id,
-            "message_count": len(self.messages),
+            "message_count": message_count,
             "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat()
+            "updated_at": self.updated_at.isoformat(),
+            "cache_enabled": self.enable_cache
         }
         logger.debug(f"📊 获取统计信息 - session_id={self.session_id}, stats={stats}")
         return stats
