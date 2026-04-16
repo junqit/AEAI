@@ -9,7 +9,7 @@ from .question import router as question_router
 
 
 def register_routes(app: FastAPI):
-    """注册所有路由"""
+    """注册所有路由（认证通过全局中间件统一处理）"""
     app.include_router(root_router)
     app.include_router(health_router)
     app.include_router(question_router)

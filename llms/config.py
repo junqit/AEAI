@@ -42,6 +42,10 @@ class Config:
     # MCP 配置（待集成）
     MCP_ENABLED: bool = os.getenv("MCP_ENABLED", "false").lower() == "true"
 
+    # API 认证配置
+    API_KEY: str = os.getenv("API_KEY", "ae-agent-2024-fixed-key-9527")  # 固定的 API Key
+    API_KEY_HEADER: str = "AE-API-Key"  # HTTP Header 名称
+
     @classmethod
     def get_config(cls) -> dict:
         """获取配置字典"""

@@ -10,14 +10,16 @@ from pathlib import Path
 # 添加当前目录到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
 from contextlib import asynccontextmanager
 
 from config import config
 from AELlmManager import get_ae_llm_manager, cleanup_ae_llm_manager
 from routes import register_routes
+from auth import verify_api_key
 
 # 生命周期管理
 @asynccontextmanager
@@ -28,6 +30,7 @@ async def lifespan(app: FastAPI):
     print("Starting Agent API Service...")
     manager = get_ae_llm_manager()
     print(f"LLM Type: {manager.llm_type.value}")
+    print(f"API Key: {config.API_KEY}")
     print(f"Service ready!")
     print("=" * 50)
     yield
@@ -52,6 +55,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加全局 API Key 验证中间件
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """
+    全局 API Key 验证中间件
+    排除健康检查和文档接口
+    """
+    # 排除不需要认证的路径
+    excluded_paths = [
+        "/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/"  # 根路径
+    ]
+
+    # 检查是否是排除路径
+    if request.url.path in excluded_paths:
+        return await call_next(request)
+
+    # 验证 API Key
+    api_key = request.headers.get(config.API_KEY_HEADER)
+
+    if not api_key:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "detail": f"Missing {config.API_KEY_HEADER} header",
+                "error": "unauthorized"
+            }
+        )
+
+    if api_key != config.API_KEY:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "detail": "Invalid API Key",
+                "error": "unauthorized"
+            }
+        )
+
+    # 验证通过，继续处理请求
+    response = await call_next(request)
+    return response
 
 # 注册所有路由
 register_routes(app)

@@ -53,15 +53,12 @@ class AEContext:
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
 
-        logger.info(f"🚀 初始化 AEContext - session_id={session_id}, enable_cache={enable_cache}, llm_service_url={self.llm_service_url}")
-
         # 并发控制：确保单个 Context 内串行处理
         self._lock = asyncio.Lock()
         # 为多个 LLM 并行调用创建线程池
         self._executor = ThreadPoolExecutor(
             max_workers=config.get_executor_max_workers()
         )
-        logger.info(f"✅ 线程池已创建 - max_workers={config.get_executor_max_workers()}")
 
         # QuestionCache集成
         self.enable_cache = enable_cache
@@ -69,7 +66,6 @@ class AEContext:
             try:
                 self.cache_store = QuestionCacheStore(enable_persistence=True)
                 self.context_builder = ContextBuilder(self.cache_store)
-                logger.info(f"✅ QuestionCache 已启用 - session_id={session_id}")
             except Exception as e:
                 logger.error(f"❌ QuestionCache 初始化失败 - session_id={session_id}, error={str(e)}", exc_info=True)
                 self.enable_cache = False
@@ -91,7 +87,6 @@ class AEContext:
             包含所有 LLM 响应的列表
         """
         logger.info(f"📥 收到用户消息 - session_id={self.session_id}, user_input_length={len(user_input)}, llm_types={llm_types}")
-        logger.debug(f"📝 用户输入内容: {user_input[:200]}...")
 
         async with self._lock:
             try:
@@ -101,8 +96,6 @@ class AEContext:
                     "content": user_input
                 }]
 
-                logger.info(f"✅ 临时消息已创建 - session_id={self.session_id}, messages_count={len(temp_messages)}")
-
                 # 使用QuestionCache记录用户问题
                 if self.enable_cache:
                     try:
@@ -111,7 +104,6 @@ class AEContext:
                             question=user_input,
                             metadata={"llm_types": llm_types}
                         )
-                        logger.debug(f"✅ QuestionCache 已记录问题 - session_id={self.session_id}")
                     except Exception as e:
                         logger.error(f"❌ QuestionCache 记录问题失败 - session_id={self.session_id}, error={str(e)}")
 
@@ -131,7 +123,7 @@ class AEContext:
 
                 # 等待所有 LLM 响应
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                logger.info(f"✅ 所有 LLM 调用完成 - session_id={self.session_id}, results_count={len(results)}")
+                logger.info(f"✅ 所有 LLM 调用完成 - session_id={self.session_id}, success={len([r for r in results if not isinstance(r, Exception)])}, total={len(results)}")
 
                 # 处理结果
                 responses = []
@@ -153,7 +145,6 @@ class AEContext:
                             logger.warning(f"⚠️ LLM 返回错误 - session_id={self.session_id}, llm_type={llm_type}, error={response.error}")
                             error_count += 1
                         else:
-                            logger.info(f"✅ LLM 调用成功 - session_id={self.session_id}, llm_type={llm_type}, response_length={len(str(response.response)) if response.response else 0}")
                             success_count += 1
                     responses.append(response)
 
@@ -166,11 +157,8 @@ class AEContext:
                                 llm_type=response.llm_type,
                                 metadata={"timestamp": response.timestamp}
                             )
-                            logger.debug(f"✅ QuestionCache 已记录响应 - session_id={self.session_id}, llm_type={response.llm_type}")
                         except Exception as e:
                             logger.error(f"❌ QuestionCache 记录响应失败 - session_id={self.session_id}, llm_type={response.llm_type}, error={str(e)}")
-
-                logger.info(f"📊 处理结果统计 - session_id={self.session_id}, success={success_count}, error={error_count}, total={len(responses)}")
 
                 self.updated_at = datetime.now()
                 return responses
@@ -195,14 +183,11 @@ class AEContext:
         Returns:
             LLM 响应结果
         """
-        logger.info(f"🔄 开始调用 LLM - session_id={self.session_id}, llm_type={llm_type}")
         start_time = datetime.now()
 
         try:
             # 参数格式严格匹配 question.py 中的 AEQuestionRequest
             url = f"{self.llm_service_url}/aellms/question"
-
-            logger.debug(f"📦 准备请求参数 - session_id={self.session_id}, llm_type={llm_type}, messages_count={len(messages)}")
 
             # 清理 messages，只保留 role 和 content 字段（去除 timestamp 等额外字段）
             clean_messages = []
@@ -232,31 +217,30 @@ class AEContext:
                 "level": "high"
             }
 
-            logger.info(f"📤 发送 HTTP 请求 - session_id={self.session_id}, llm_type={llm_type}, url={url}")
-            logger.debug(f"📋 请求 payload: {payload}")
+            header = {
+                "AE-API-Key": "ae-agent-2024-fixed-key-9527"
+            }
 
             # 发送 HTTP POST 请求
             response = requests.post(
                 url,
                 json=payload,
+                headers=header,
                 timeout=config.get_llm_service_timeout()
             )
 
             elapsed = (datetime.now() - start_time).total_seconds()
-            logger.info(f"📥 收到 HTTP 响应 - session_id={self.session_id}, llm_type={llm_type}, status_code={response.status_code}, elapsed={elapsed:.2f}s")
+            logger.info(f"✅ LLM 调用成功 - session_id={self.session_id}, llm_type={llm_type}, elapsed={elapsed:.2f}s, status_code={response.status_code}")
 
             response.raise_for_status()
 
             result = response.json()
-            logger.debug(f"📄 响应内容: {str(result)[:500]}...")
 
             llm_response = AELLMResponse(
                 llm_type=llm_type,
                 response=result.get("response"),
                 error=None
             )
-
-            logger.info(f"✅ LLM 调用成功 - session_id={self.session_id}, llm_type={llm_type}, elapsed={elapsed:.2f}s, response_length={len(str(llm_response.response)) if llm_response.response else 0}")
 
             return llm_response
 
@@ -311,7 +295,6 @@ class AEContext:
         注意：Context 本身不存储历史，历史由 QuestionCache 管理
         """
         if not self.enable_cache:
-            logger.warning(f"⚠️ QuestionCache 未启用 - session_id={self.session_id}, 返回空历史")
             return []
 
         try:
@@ -320,7 +303,6 @@ class AEContext:
                 session_id=self.session_id,
                 max_turns=100  # 获取所有历史
             )
-            logger.debug(f"📚 获取历史记录 - session_id={self.session_id}, message_count={len(context)}")
             return context
         except Exception as e:
             logger.error(f"❌ 获取历史失败 - session_id={self.session_id}, error={str(e)}")
@@ -332,24 +314,20 @@ class AEContext:
         注意：Context 本身不存储历史，历史由 QuestionCache 管理
         """
         if not self.enable_cache:
-            logger.warning(f"⚠️ QuestionCache 未启用 - session_id={self.session_id}")
             return
 
         try:
             # 清空 QuestionCache 中的历史（需要实现此方法）
             # 暂时只记录日志
-            logger.info(f"🗑️ 清空历史记录 - session_id={self.session_id}")
             self.updated_at = datetime.now()
         except Exception as e:
             logger.error(f"❌ 清空历史失败 - session_id={self.session_id}, error={str(e)}")
 
     def cleanup(self):
         """清理资源"""
-        logger.info(f"🧹 开始清理资源 - session_id={self.session_id}")
         try:
             if hasattr(self, '_executor'):
                 self._executor.shutdown(wait=False)
-                logger.info(f"✅ 线程池已关闭 - session_id={self.session_id}")
         except Exception as e:
             logger.error(f"❌ 清理资源失败 - session_id={self.session_id}, error={str(e)}", exc_info=True)
 
@@ -373,7 +351,6 @@ class AEContext:
             "updated_at": self.updated_at.isoformat(),
             "cache_enabled": self.enable_cache
         }
-        logger.debug(f"📊 获取统计信息 - session_id={self.session_id}, stats={stats}")
         return stats
 
     def get_context_for_next_call(
@@ -393,10 +370,7 @@ class AEContext:
         Returns:
             标准格式的上下文消息列表
         """
-        logger.info(f"🔍 获取下次调用上下文 - session_id={self.session_id}, max_turns={max_turns}, max_tokens={max_tokens}, preferred_llm={preferred_llm}")
-
         if not self.enable_cache:
-            logger.warning(f"⚠️ QuestionCache 未启用 - session_id={self.session_id}, 返回空上下文")
             return []
 
         try:
@@ -406,14 +380,12 @@ class AEContext:
                     preferred_llm=preferred_llm,
                     max_turns=max_turns
                 )
-                logger.info(f"✅ 上下文构建成功（指定LLM） - session_id={self.session_id}, preferred_llm={preferred_llm}, context_length={len(context)}")
             else:
                 context = self.context_builder.build_context(
                     session_id=self.session_id,
                     max_turns=max_turns,
                     max_tokens=max_tokens
                 )
-                logger.info(f"✅ 上下文构建成功 - session_id={self.session_id}, context_length={len(context)}")
 
             return context
 

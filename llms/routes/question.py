@@ -143,6 +143,8 @@ async def process_question(request: AEQuestionRequest):
 
     当多个客户端同时发送请求时，它们会被并发处理，而不是串行等待
 
+    认证：通过全局中间件统一验证 API Key
+
     Args:
         request: 包含已组装好的 messages 和可选参数的请求
 
