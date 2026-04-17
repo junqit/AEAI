@@ -6,6 +6,7 @@ from Context.AEContextManager import AEContextManager
 import routes.post_root as post_root_module
 import routes.websocket_chat as websocket_chat_module
 import routes.ae_context_chat as ae_context_chat_module
+import routes.ae_context_create as ae_context_create_module
 import routes.ae_context_history as ae_context_history_module
 import routes.ae_context_delete as ae_context_delete_module
 import routes.ae_contexts_stats as ae_contexts_stats_module
@@ -22,6 +23,7 @@ ae_context_manager = AEContextManager()
 
 # 注册所有路由
 app.include_router(post_root_module.router)
+app.include_router(ae_context_create_module.router)
 app.include_router(ae_context_chat_module.router)
 app.include_router(ae_context_history_module.router)
 app.include_router(ae_context_delete_module.router)

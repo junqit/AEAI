@@ -25,22 +25,49 @@ class AEContextManager:
         self.session_timeout = config.get_session_timeout()
         self._lock = asyncio.Lock()
 
-    async def get_or_create_context(self, session_id: str) -> AEContext:
+    async def create_context(self, aedir: Optional[str] = None) -> AEContext:
         """
-        获取或创建 Context 实例
+        创建新的 Context 实例（自动生成 session_id）
+
+        Args:
+            aedir: Context 对应的目录路径（可选）
+
+        Returns:
+            新创建的 AEContext 实例
+        """
+        async with self._lock:
+            # 创建 Context（内部自动生成 session_id）
+            context = AEContext(aedir=aedir)
+
+            # 将 Context 添加到管理器
+            self.contexts[context.session_id] = context
+
+            return context
+
+    async def get_or_create_context(self, session_id: str, aedir: Optional[str] = None) -> AEContext:
+        """
+        获取或创建 Context 实例（兼容旧接口，使用指定的 session_id）
 
         Args:
             session_id: 会话 ID
+            aedir: Context 对应的目录路径（可选）
 
         Returns:
             AEContext 实例
         """
         async with self._lock:
             if session_id not in self.contexts:
-                self.contexts[session_id] = AEContext(session_id=session_id)
+                # 创建新 Context
+                context = AEContext(aedir=aedir)
+                # 覆盖自动生成的 session_id，使用指定的 session_id（兼容旧代码）
+                context.session_id = session_id
+                self.contexts[session_id] = context
             else:
                 # 更新访问时间
                 self.contexts[session_id].updated_at = datetime.now()
+                # 如果提供了新的 aedir，更新它
+                if aedir is not None:
+                    self.contexts[session_id].aedir = aedir
 
             return self.contexts[session_id]
 

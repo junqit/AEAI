@@ -6,6 +6,7 @@ import requests
 import sys
 import os
 import logging
+import uuid  # 添加 uuid 导入
 
 # 添加父目录到路径以导入配置
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,8 +47,17 @@ class AELLMResponse:
 class AEContext:
     """支持多 LLM 类型并行处理的会话上下文实例 - 无状态版本"""
 
-    def __init__(self, session_id: str, enable_cache: bool = True):
-        self.session_id = session_id
+    def __init__(self, aedir: Optional[str] = None, enable_cache: bool = True):
+        """
+        初始化 Context
+
+        Args:
+            aedir: Context 对应的目录路径（可选）
+            enable_cache: 是否启用缓存
+        """
+        # 自动生成 session_id
+        self.session_id = self._generate_session_id()
+        self.aedir = aedir  # 存储目录路径
         self.llm_service_url = config.get_llm_service_url()
         # 移除 self.messages，不再保存历史
         self.created_at = datetime.now()
@@ -67,8 +77,20 @@ class AEContext:
                 self.cache_store = QuestionCacheStore(enable_persistence=True)
                 self.context_builder = ContextBuilder(self.cache_store)
             except Exception as e:
-                logger.error(f"❌ QuestionCache 初始化失败 - session_id={session_id}, error={str(e)}", exc_info=True)
+                logger.error(f"❌ QuestionCache 初始化失败 - session_id={self.session_id}, error={str(e)}", exc_info=True)
                 self.enable_cache = False
+
+        logger.info(f"✅ Context 初始化成功 - session_id={self.session_id}, aedir={aedir}")
+
+    @staticmethod
+    def _generate_session_id() -> str:
+        """
+        生成唯一的 session_id
+
+        Returns:
+            格式为 ctx_xxxxxxxxxxxxxxxx 的 session_id（16位十六进制）
+        """
+        return f"ctx_{uuid.uuid4().hex[:16]}"
 
     async def process_message(
         self,
@@ -346,6 +368,7 @@ class AEContext:
 
         stats = {
             "session_id": self.session_id,
+            "aedir": self.aedir,  # 添加目录路径信息
             "message_count": message_count,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
