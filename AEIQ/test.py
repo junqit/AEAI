@@ -82,8 +82,8 @@ def download_model():
     """
     try:
 
-        model_name = "google/gemma-4-26B-A4B-it"
-        local_dir = "/Users/tianjunqi/llms/"
+        model_name = "google/gemma-4-31B-it"
+        local_dir = "/Users/tianjunqi/llms/gemini"
 
         # 构建完整的本地路径
         model_local_path = os.path.join(local_dir, model_name.split("/")[-1])
