@@ -167,7 +167,7 @@ class AEPacketParser:
         try:
             while self._running:
                 # 等待数据可用信号（最多等待1秒）
-                if not self._data_available.wait(timeout=1.0):
+                if not self._data_available.wait():
                     continue
 
                 # 清除信号
@@ -221,18 +221,8 @@ class AEPacketParser:
             # 根据数据类型解析数据
             if data_type == AEDataType.REQUEST.value:
                 # 解析为请求
-                try:
-                    request = AENetReq.from_bytes(packet.data)
-                    logger.debug(f"Parsed as REQUEST: action={request.action}")
-                except Exception as e:
-                    # 尝试解析为通用 JSON 格式（HTTP 包装格式）
-                    import json
-                    raw_data = json.loads(packet.data.decode('utf-8'))
-                    logger.debug(f"Native AENetReq format not found, converting from HTTP format: path={raw_data.get('path')}")
-                    # 转换为 AENetReq 格式
-                    request = self._convert_to_aenetreq(raw_data)
-                    logger.debug(f"Converted to REQUEST: action={request.action}")
-
+                request = AENetReq.from_bytes(packet.data)
+                logger.debug(f"Parsed REQUEST: path={request.path}")
                 self._notify_request(request)
 
             elif data_type == AEDataType.RESPONSE.value:
@@ -260,65 +250,6 @@ class AEPacketParser:
         except Exception as e:
             logger.error(f"Error parsing packet data: {e}")
             self._notify_error(e)
-
-    def _convert_to_aenetreq(self, raw_data: dict) -> AENetReq:
-        """
-        将通用格式转换为 AENetReq 格式
-
-        支持的输入格式：
-        1. {"method": "POST", "path": "/path", "body": {...}}
-        2. {"action": "chat", "content": "..."}
-
-        Args:
-            raw_data: 原始数据字典
-
-        Returns:
-            AENetReq 对象
-        """
-        from ..Core import AENetReq
-
-        # 如果已经是 AENetReq 格式，直接构造
-        if 'action' in raw_data:
-            return AENetReq(**raw_data)
-
-        # 如果是 HTTP 请求格式，转换为 AENetReq
-        if 'method' in raw_data and 'path' in raw_data:
-            # 根据 path 推断 action
-            path = raw_data.get('path', '')
-            if 'question' in path:
-                action = 'query'
-            elif 'chat' in path:
-                action = 'chat'
-            else:
-                action = 'custom'
-
-            # 提取 body 中的业务数据
-            body = raw_data.get('body', {})
-
-            # 提取问题内容
-            question = body.get('question', {})
-            content = question.get('content', '')
-
-            # 构建 AENetReq（直接使用所有字段，不再嵌套）
-            return AENetReq(
-                action=action,
-                content=content,
-                context=body.get('context'),
-                question=question,
-                llm_types=body.get('llm_types'),
-                request_id=body.get('requestId'),
-                path=path,
-                method=raw_data.get('method'),
-                timeout=raw_data.get('timeout'),
-                parameters=body  # 保留完整的 body 数据
-            )
-
-        # 默认：包装为 custom 类型
-        return AENetReq(
-            action='custom',
-            content=str(raw_data),
-            parameters=raw_data
-        )
 
     def _notify_request(self, request: AENetReq) -> None:
         """通知请求回调"""

@@ -10,7 +10,7 @@ import logging
 from typing import Dict, Optional
 from .AESocketWrapper import AESocketWrapper
 from .AESocketListener import AESocketListener
-from ..Core import AENetReq, AENetRsp, AENetRspData
+from ..Core import AENetReq, AENetRsp
 
 logger = logging.getLogger(__name__)
 
@@ -289,40 +289,29 @@ class SocketConnectionListener(AESocketListener):
         self.manager = manager
 
     def on_request_received(self, request: AENetReq) -> None:
-        """
-        处理接收到的请求
-
-        Args:
-            request: 请求对象
-        """
-        logger.info(f"[{self.connection_id}] Request: action={request.action}, content={request.content[:50] if request.content else None}...")
+        """处理接收到的请求"""
+        logger.info(f"[{self.connection_id}] Request received: {request.model_dump_json(exclude_none=True, indent=2)}")
 
         try:
-            # 这里可以根据 action 类型分发到不同的处理器
-            # 示例：简单的回显功能
+            # 根据 path 路由到不同的处理器
             response = AENetRsp.create_success(
-                data=AENetRspData(
-                    content=f"Received your {request.action} request: {request.content}",
-                    result={
-                        "action": request.action,
-                        "context": request.context,
-                        "question": request.question,
-                        "llm_types": request.llm_types
-                    }
-                ),
-                request_id=request.request_id
+                requestId=request.requestId,
+                content=request.path,
+                result={
+                    "context": request.context,
+                    "question": request.question,
+                    "llm_types": request.llm_types,
+                    "path": request.path
+                }
             )
-
-            # 发送响应
             self.manager.send_to_connection(self.connection_id, response)
 
         except Exception as e:
             logger.error(f"[{self.connection_id}] Error handling request: {e}")
-            # 发送错误响应
             error_response = AENetRsp.create_error(
+                requestId=request.requestId,
                 error_code="ERR_PROCESSING",
-                error_message=str(e),
-                request_id=request.request_id
+                error_message=str(e)
             )
             self.manager.send_to_connection(self.connection_id, error_response)
 
