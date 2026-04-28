@@ -405,24 +405,25 @@ class AESocketWrapper:
             except Exception as e:
                 logger.error(f"Error in listener {listener.__class__.__name__}: {e}")
 
+    def stop_receiving(self) -> None:
+        """停止接收和解析，但不关闭底层 socket"""
+        self._running = False
+        self._parser.stop()
+
+        if self._receive_thread and self._receive_thread.is_alive():
+            self._receive_thread.join(timeout=2.0)
+
     def close(self) -> None:
         """
         关闭 socket 连接
         """
         logger.info(f"Closing socket connection: {self._addr}")
-        self._running = False
-
-        # 停止解析器
-        self._parser.stop()
+        self.stop_receiving()
 
         try:
             self._socket.close()
         except Exception as e:
             logger.error(f"Error closing socket: {e}")
-
-        # 等待接收线程结束
-        if self._receive_thread and self._receive_thread.is_alive():
-            self._receive_thread.join(timeout=2.0)
 
     @property
     def is_connected(self) -> bool:

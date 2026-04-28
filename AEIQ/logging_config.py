@@ -86,7 +86,7 @@ LOG_LEVELS = {
 
 
 # 默认日志配置
-DEFAULT_LOG_LEVEL = logging.INFO
+DEFAULT_LOG_LEVEL = logging.DEBUG
 DEFAULT_LOG_TO_FILE = True
 DEFAULT_LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
 

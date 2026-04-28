@@ -223,16 +223,16 @@ class AEPacketParser:
                 # 解析为请求
                 try:
                     request = AENetReq.from_bytes(packet.data)
+                    logger.debug(f"Parsed as REQUEST: action={request.action}")
                 except Exception as e:
-                    # 尝试解析为通用 JSON 格式
-                    
+                    # 尝试解析为通用 JSON 格式（HTTP 包装格式）
                     import json
                     raw_data = json.loads(packet.data.decode('utf-8'))
-                    logger.warning(f"Failed to parse as AENetReq, trying generic JSON: {e} json:{raw_data}")
+                    logger.debug(f"Native AENetReq format not found, converting from HTTP format: path={raw_data.get('path')}")
                     # 转换为 AENetReq 格式
                     request = self._convert_to_aenetreq(raw_data)
+                    logger.debug(f"Converted to REQUEST: action={request.action}")
 
-                logger.debug(f"Parsed as REQUEST: action={request.action}")
                 self._notify_request(request)
 
             elif data_type == AEDataType.RESPONSE.value:

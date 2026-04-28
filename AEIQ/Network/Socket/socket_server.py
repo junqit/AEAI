@@ -10,6 +10,8 @@ import logging
 from Network.Socket import socket_manager
 
 logger = logging.getLogger(__name__)
+# 针对 Socket 模块启用 DEBUG 级别
+logger.setLevel(logging.DEBUG)
 
 
 class SocketServer:
