@@ -7,7 +7,7 @@ Socket 服务器
 import socket
 import threading
 import logging
-from Network.Socket import socket_manager
+from .socket_manager import socket_manager
 
 logger = logging.getLogger(__name__)
 # 针对 Socket 模块启用 DEBUG 级别
@@ -38,6 +38,9 @@ class SocketServer:
         self.server_socket: socket.socket = None
         self.receive_thread: threading.Thread = None
         self.running = False
+
+        # 连接管理器（暴露给外部以注册处理器）
+        self.connection_manager = socket_manager
 
         logger.info(f"UDP Socket server initialized on {host}:{port}")
 

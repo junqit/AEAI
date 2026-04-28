@@ -1,6 +1,7 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 from datetime import datetime, timedelta
 import asyncio
+import logging
 import sys
 import os
 
@@ -11,19 +12,141 @@ if parent_dir not in sys.path:
 
 from AEIQConfig import config
 from .AEContext import AEContext
+from Network.Core import AENetReq, AENetRsp
+
+if TYPE_CHECKING:
+    from Network.Socket.IResponseSender import IResponseSender
+
+logger = logging.getLogger(__name__)
 
 
 class AEContextManager:
-    """管理多个 AEContext 实例的管理器"""
+    """
+    Context 管理器（业务层）
 
-    def __init__(self):
+    职责：
+    1. 管理多个 AEContext 实例
+    2. 实现 IRequestHandler 接口，处理来自网络层的请求
+    3. 通过 IResponseSender 接口发送响应到网络层
+    """
+
+    def __init__(self, response_sender: Optional['IResponseSender'] = None):
         """
         初始化 Context 管理器
-        配置从 AEIQConfig 读取
+
+        Args:
+            response_sender: 响应发送器（网络层实现的接口）
         """
         self.contexts: Dict[str, AEContext] = {}
         self.session_timeout = config.get_session_timeout()
         self._lock = asyncio.Lock()
+
+        # 响应发送器（网络层）
+        self._response_sender = response_sender
+
+        logger.info("AEContextManager initialized")
+
+    def set_response_sender(self, sender: 'IResponseSender') -> None:
+        """
+        设置响应发送器（依赖注入）
+
+        Args:
+            sender: 实现 IResponseSender 接口的发送器
+        """
+        self._response_sender = sender
+        logger.info(f"Response sender set: {sender.__class__.__name__}")
+
+    def handle_request(self, request: AENetReq, connection_id: str) -> None:
+        """
+        处理网络请求（实现 IRequestHandler 接口）
+
+        Args:
+            request: 请求对象
+            connection_id: 连接ID
+        """
+        logger.info(f"Handling request from connection {connection_id}: path={request.path}")
+
+        try:
+            # 根据 path 路由到不同的处理方法
+            if request.path == "/ae/context/chat":
+                self._handle_chat(request, connection_id)
+            elif request.path == "/ae/context/cancel":
+                self._handle_cancel(request, connection_id)
+            elif request.path == "/ae/context/create":
+                self._handle_create(request, connection_id)
+            else:
+                self._send_error(
+                    connection_id,
+                    request.requestId,
+                    "ERR_UNKNOWN_PATH",
+                    f"Unknown path: {request.path}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling request: {e}", exc_info=True)
+            self._send_error(
+                connection_id,
+                request.requestId,
+                "ERR_INTERNAL",
+                str(e)
+            )
+
+    def _handle_chat(self, request: AENetReq, connection_id: str) -> None:
+        """处理聊天请求"""
+        # TODO: 实现实际的 AI 聊天逻辑
+        # 1. 从 request.context 获取 context_id
+        # 2. 获取或创建 AEContext
+        # 3. 调用 AI 进行处理
+        # 4. 发送响应
+
+        response = AENetRsp.create_success(
+            requestId=request.requestId,
+            content="Chat response placeholder",
+            result={
+                "message": "This is a placeholder for AI chat response",
+                "context_id": request.context.get("id") if request.context else None
+            }
+        )
+        self._send_response(connection_id, response)
+
+    def _handle_cancel(self, request: AENetReq, connection_id: str) -> None:
+        """处理取消请求"""
+        # TODO: 实现取消逻辑
+        response = AENetRsp.create_success(
+            requestId=request.requestId,
+            content="Cancel request received",
+            result={"status": "cancelled"}
+        )
+        self._send_response(connection_id, response)
+
+    def _handle_create(self, request: AENetReq, connection_id: str) -> None:
+        """处理创建 Context 请求"""
+        # TODO: 实现创建 Context 逻辑
+        response = AENetRsp.create_success(
+            requestId=request.requestId,
+            content="Context created",
+            result={"context_id": "ctx_new_placeholder"}
+        )
+        self._send_response(connection_id, response)
+
+    def _send_response(self, connection_id: str, response: AENetRsp) -> None:
+        """发送响应到网络层"""
+        if self._response_sender:
+            success = self._response_sender.send_response(connection_id, response)
+            if not success:
+                logger.error(f"Failed to send response to connection {connection_id}")
+        else:
+            logger.error("No response sender available")
+
+    def _send_error(self, connection_id: str, request_id: Optional[str],
+                   error_code: str, error_message: str) -> None:
+        """发送错误响应"""
+        response = AENetRsp.create_error(
+            requestId=request_id,
+            error_code=error_code,
+            error_message=error_message
+        )
+        self._send_response(connection_id, response)
 
     async def create_context(self, aedir: Optional[str] = None) -> AEContext:
         """

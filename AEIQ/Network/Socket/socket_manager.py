@@ -7,23 +7,26 @@ Socket 连接管理器
 import socket
 import threading
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 from .AESocketWrapper import AESocketWrapper
 from .AESocketListener import AESocketListener
 from ..Core import AENetReq, AENetRsp
+
+if TYPE_CHECKING:
+    from .IRequestHandler import IRequestHandler
 
 logger = logging.getLogger(__name__)
 
 
 class SocketConnectionManager:
     """
-    Socket 连接管理器
+    Socket 连接管理器（网络层）
 
-    功能：
-    1. 管理多个 AESocketWrapper 实例
+    职责：
+    1. 管理多个 Socket 连接
     2. 为每个连接分配唯一 ID
-    3. 处理连接的生命周期
-    4. 广播消息到所有连接
+    3. 接收网络请求并分发给业务层
+    4. 发送响应到指定连接
     """
 
     def __init__(self):
@@ -36,7 +39,33 @@ class SocketConnectionManager:
         self._lock = threading.Lock()
         self._next_connection_id = 1
 
+        # 请求处理器（业务层）
+        self._request_handler: Optional['IRequestHandler'] = None
+
         logger.info("Socket connection manager initialized")
+
+    def set_request_handler(self, handler: 'IRequestHandler') -> None:
+        """
+        注册请求处理器（业务层）
+
+        Args:
+            handler: 实现 IRequestHandler 接口的处理器
+        """
+        self._request_handler = handler
+        logger.info(f"Request handler registered: {handler.__class__.__name__}")
+
+    def send_response(self, connection_id: str, response: AENetRsp) -> bool:
+        """
+        发送响应到指定连接（实现 IResponseSender 接口）
+
+        Args:
+            connection_id: 连接ID
+            response: 响应对象
+
+        Returns:
+            是否发送成功
+        """
+        return self.send_to_connection(connection_id, response)
 
     def add_connection(self, sock: socket.socket, addr: tuple) -> str:
         """
@@ -272,9 +301,9 @@ class SocketConnectionManager:
 
 class SocketConnectionListener(AESocketListener):
     """
-    Socket 连接监听器
+    Socket 连接监听器（网络层内部）
 
-    为每个连接创建一个监听器实例，处理该连接的所有消息
+    为每个连接创建一个监听器实例，接收数据后转发给业务层处理器
     """
 
     def __init__(self, connection_id: str, manager: SocketConnectionManager):
@@ -289,29 +318,34 @@ class SocketConnectionListener(AESocketListener):
         self.manager = manager
 
     def on_request_received(self, request: AENetReq) -> None:
-        """处理接收到的请求"""
+        """
+        处理接收到的请求
+
+        Args:
+            request: 请求对象
+        """
         logger.info(f"[{self.connection_id}] Request received: {request.model_dump_json(exclude_none=True, indent=2)}")
 
-        try:
-            # 根据 path 路由到不同的处理器
-            response = AENetRsp.create_success(
-                requestId=request.requestId,
-                content=request.path,
-                result={
-                    "context": request.context,
-                    "question": request.question,
-                    "llm_types": request.llm_types,
-                    "path": request.path
-                }
-            )
-            self.manager.send_to_connection(self.connection_id, response)
-
-        except Exception as e:
-            logger.error(f"[{self.connection_id}] Error handling request: {e}")
+        # 转发给业务层处理器
+        if self.manager._request_handler:
+            try:
+                self.manager._request_handler.handle_request(request, self.connection_id)
+            except Exception as e:
+                logger.error(f"[{self.connection_id}] Error in request handler: {e}", exc_info=True)
+                # 发送错误响应
+                error_response = AENetRsp.create_error(
+                    requestId=request.requestId,
+                    error_code="ERR_HANDLER",
+                    error_message=f"Request handler error: {str(e)}"
+                )
+                self.manager.send_to_connection(self.connection_id, error_response)
+        else:
+            logger.warning(f"[{self.connection_id}] No request handler registered, request ignored")
+            # 发送错误响应
             error_response = AENetRsp.create_error(
                 requestId=request.requestId,
-                error_code="ERR_PROCESSING",
-                error_message=str(e)
+                error_code="ERR_NO_HANDLER",
+                error_message="No request handler registered"
             )
             self.manager.send_to_connection(self.connection_id, error_response)
 
