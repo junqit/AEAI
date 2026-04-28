@@ -1,0 +1,39 @@
+{
+  "session_id": "ctx_39eabd8d603c4c32",
+  "entries": [
+    {
+      "session_id": "ctx_39eabd8d603c4c32",
+      "role": "user",
+      "content": "不好呀",
+      "llm_type": null,
+      "metadata": {
+        "llm_types": [
+          "claude",
+          "gemini"
+        ]
+      },
+      "timestamp": "2026-04-27T18:02:31.965749"
+    },
+    {
+      "session_id": "ctx_39eabd8d603c4c32",
+      "role": "assistant",
+      "content": "你好！👋\n\n看起来你可能遇到了什么不顺心的事。我很乐意帮助你！\n\n能告诉我发生了什么吗？比如：\n- 🤔 遇到了什么问题？\n- 😟 心情不太好？\n- ❓ 需要什么帮助？\n\n我会尽力为你解答或提供建议。😊",
+      "llm_type": "claude",
+      "metadata": {
+        "timestamp": "2026-04-27T18:02:34.096991"
+      },
+      "timestamp": "2026-04-27T18:02:35.187445"
+    },
+    {
+      "session_id": "ctx_39eabd8d603c4c32",
+      "role": "assistant",
+      "content": "怎么了？有什么不好的地方吗？\n\n请告诉我，我能帮你吗？ 😊",
+      "llm_type": "gemini",
+      "metadata": {
+        "timestamp": "2026-04-27T18:02:35.187300"
+      },
+      "timestamp": "2026-04-27T18:02:35.187835"
+    }
+  ],
+  "updated_at": "2026-04-27T18:02:35.187843"
+}

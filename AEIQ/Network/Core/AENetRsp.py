@@ -74,19 +74,19 @@ class AENetRsp(BaseModel):
 
     def to_bytes(self) -> bytes:
         """
-        将响应对象序列化为字节流
-        格式: [数据长度(4字节)][JSON数据]
+        将响应对象序列化为字节流（纯 JSON 数据，不含长度前缀）
+
+        注意：长度信息已经在 AEPacket 的包头中，这里只返回 JSON 数据
         """
         json_str = self.model_dump_json()
-        json_bytes = json_str.encode('utf-8')
-        # 使用4字节表示数据长度（大端序）
-        length_bytes = len(json_bytes).to_bytes(4, byteorder='big')
-        return length_bytes + json_bytes
+        return json_str.encode('utf-8')
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'AENetRsp':
         """
-        从字节流反序列化响应对象
+        从字节流反序列化响应对象（纯 JSON 数据）
+
+        注意：传入的 data 是从 AEPacket 中提取的纯数据部分，不含包头
         """
         json_str = data.decode('utf-8')
         return cls.model_validate_json(json_str)

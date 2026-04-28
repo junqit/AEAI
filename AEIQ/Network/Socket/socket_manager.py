@@ -240,17 +240,19 @@ class SocketConnectionListener(AESocketListener):
         Args:
             request: 请求对象
         """
-        logger.info(f"[{self.connection_id}] Request: action={request.action}")
+        logger.info(f"[{self.connection_id}] Request: action={request.action}, content={request.content[:50] if request.content else None}...")
 
         try:
             # 这里可以根据 action 类型分发到不同的处理器
             # 示例：简单的回显功能
             response = AENetRsp.create_success(
                 data=AENetRspData(
-                    content=f"Received your {request.action} request",
+                    content=f"Received your {request.action} request: {request.content}",
                     result={
                         "action": request.action,
-                        "original_data": request.data.model_dump() if request.data else None
+                        "context": request.context,
+                        "question": request.question,
+                        "llm_types": request.llm_types
                     }
                 ),
                 request_id=request.request_id
