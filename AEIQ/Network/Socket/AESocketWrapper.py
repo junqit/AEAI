@@ -436,6 +436,10 @@ class AESocketWrapper:
         return self._running and self._socket.fileno() != -1
 
     @property
+    def is_udp(self) -> bool:
+        return self._is_udp
+
+    @property
     def address(self) -> Optional[tuple]:
         """
         获取连接地址

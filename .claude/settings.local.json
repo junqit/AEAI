@@ -1,24 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python *)",
-      "Bash(uvicorn AEIQ.app:app --host 0.0.0.0 --port 8000 --reload)",
-      "Bash(curl -s http://localhost:8000/docs)",
-      "Bash(pkill *)",
-      "Bash(curl -s http://localhost:8000/)",
-      "Bash(chmod +x *)",
-      "Bash(grep -E \"SocketServer|socket_server|server\\\\.py$\")",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetRsp.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Socket/socket_manager.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetReq.py AEIQ/Network/Socket/AEPacketParser.py AEIQ/Network/Socket/socket_manager.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetReq.py AEIQ/Network/Core/AENetRsp.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetReq.py AEIQ/Network/Core/AENetRsp.py AEIQ/Network/Core/__init__.py AEIQ/Network/Socket/socket_manager.py AEIQ/Network/Socket/AEPacketParser.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetRsp.py AEIQ/Network/Socket/socket_manager.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Core/AENetReq.py AEIQ/Network/Socket/AEPacketParser.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Socket/IRequestHandler.py AEIQ/Network/Socket/IResponseSender.py AEIQ/Network/Socket/socket_manager.py AEIQ/Network/Socket/socket_server.py AEIQ/Context/AEContextManager.py AEIQ/app.py)",
-      "Bash(python3 -m py_compile AEIQ/Network/Socket/socket_server.py)",
-      "Bash(python3 -c ' *)",
-      "Bash(python3 *)"
+      "Bash(python -c \"from Context.AEContextManager import AEContextManager; print\\('OK'\\)\")",
+      "Bash(python *)"
     ]
   }
 }

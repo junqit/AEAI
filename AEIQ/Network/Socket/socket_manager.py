@@ -32,12 +32,7 @@ class SocketConnectionManager:
     def __init__(self):
         """初始化连接管理器"""
         self._connections: Dict[str, AESocketWrapper] = {}
-        self._udp_connection_ids: Dict[tuple, str] = {}
-        self._udp_server_wrapper: Optional[AESocketWrapper] = None
-        self._udp_server_socket: Optional[socket.socket] = None
-        self._udp_send_lock = threading.Lock()
         self._lock = threading.Lock()
-        self._next_connection_id = 1
 
         # 请求处理器（业务层）
         self._request_handler: Optional['IRequestHandler'] = None
@@ -110,8 +105,7 @@ class SocketConnectionManager:
             连接 ID
         """
         with self._lock:
-            connection_id = self._udp_connection_ids.get(addr)
-            wrapper = self._connections.get(connection_id) if connection_id else None
+            connection_id, wrapper = self._find_connection_by_addr_unlocked(addr)
 
             if wrapper is None:
                 connection_id = self._generate_connection_id_unlocked(addr)
@@ -120,17 +114,7 @@ class SocketConnectionManager:
                 wrapper.add_listener(listener)
                 wrapper.start_receiving()
                 self._connections[connection_id] = wrapper
-                self._udp_connection_ids[addr] = connection_id
                 logger.info(f"UDP connection added: {connection_id} from {addr}")
-
-            server_wrapper = self._udp_server_wrapper
-            if server_wrapper is None or self._udp_server_socket is not sock:
-                self._udp_server_wrapper = AESocketWrapper(sock, is_udp=True)
-                self._udp_server_wrapper.start_receiving()
-                self._udp_server_socket = sock
-                logger.info("UDP server wrapper initialized")
-
-            server_wrapper = self._udp_server_wrapper
 
         wrapper.feed_data(data)
         return connection_id
@@ -144,16 +128,9 @@ class SocketConnectionManager:
         """
         with self._lock:
             wrapper = self._connections.pop(connection_id, None)
-            udp_addr = None
-            for addr, udp_connection_id in list(self._udp_connection_ids.items()):
-                if udp_connection_id == connection_id:
-                    udp_addr = addr
-                    break
-            if udp_addr is not None:
-                self._udp_connection_ids.pop(udp_addr, None)
 
         if wrapper:
-            if udp_addr is not None:
+            if wrapper.is_udp:
                 wrapper.stop_receiving()
             else:
                 wrapper.close()
@@ -187,8 +164,6 @@ class SocketConnectionManager:
         """
         wrapper = self.get_connection(connection_id)
         if wrapper:
-            if self._is_udp_connection(wrapper):
-                return self._send_udp_response(wrapper.address, response)
             return wrapper.send_response(response)
         else:
             logger.warning(f"Cannot send to connection {connection_id}: not found")
@@ -212,10 +187,7 @@ class SocketConnectionManager:
 
         for conn_id, wrapper in connections:
             if conn_id != exclude:
-                if self._is_udp_connection(wrapper):
-                    if self._send_udp_response(wrapper.address, response):
-                        success_count += 1
-                elif wrapper.send_response(response):
+                if wrapper.send_response(response):
                     success_count += 1
 
         logger.info(f"Broadcast to {success_count} connections")
@@ -235,64 +207,28 @@ class SocketConnectionManager:
         """关闭所有连接"""
         with self._lock:
             connections = list(self._connections.values())
-            server_wrapper = self._udp_server_wrapper
             self._connections.clear()
-            self._udp_connection_ids.clear()
-            self._udp_server_wrapper = None
-            self._udp_server_socket = None
 
-        closed_wrappers = set()
         for wrapper in connections:
-            if id(wrapper) in closed_wrappers:
-                continue
             try:
                 wrapper.close()
-                closed_wrappers.add(id(wrapper))
             except Exception as e:
                 logger.error(f"Error closing connection: {e}")
-
-        if server_wrapper and id(server_wrapper) not in closed_wrappers:
-            try:
-                server_wrapper.close()
-            except Exception as e:
-                logger.error(f"Error closing UDP server wrapper: {e}")
 
         logger.info("All connections closed")
 
     def _generate_connection_id(self, addr: tuple) -> str:
-        """
-        生成连接 ID
-
-        Args:
-            addr: 连接地址
-
-        Returns:
-            连接 ID
-        """
         with self._lock:
             return self._generate_connection_id_unlocked(addr)
 
     def _generate_connection_id_unlocked(self, addr: tuple) -> str:
-        conn_id = f"conn_{self._next_connection_id}_{addr[0]}_{addr[1]}"
-        self._next_connection_id += 1
-        return conn_id
+        return f"conn_{addr[0]}_{addr[1]}"
 
-    def _is_udp_connection(self, wrapper: AESocketWrapper) -> bool:
-        return wrapper.address in self._udp_connection_ids
-
-    def _send_udp_response(self, addr: tuple, response: AENetRsp) -> bool:
-        server_wrapper = self._udp_server_wrapper
-        if server_wrapper is None:
-            logger.warning(f"Cannot send to UDP connection {addr}: server wrapper not initialized")
-            return False
-
-        with self._udp_send_lock:
-            original_addr = server_wrapper._addr
-            server_wrapper._addr = addr
-            try:
-                return server_wrapper.send_response(response)
-            finally:
-                server_wrapper._addr = original_addr
+    def _find_connection_by_addr_unlocked(self, addr: tuple) -> tuple:
+        for conn_id, wrapper in self._connections.items():
+            if wrapper.address == addr:
+                return conn_id, wrapper
+        return None, None
 
     def __len__(self) -> int:
         """返回连接数"""

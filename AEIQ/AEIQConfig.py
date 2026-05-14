@@ -27,6 +27,13 @@ class AEIQConfig:
     # 服务端口配置
     AEIQ_PORT = 8000  # AEIQ 服务端口
 
+    # 路径白名单配置（用于 Context Handler 的路径验证）
+    PATH_WHITELIST = [
+        os.getcwd(),  # 当前工作目录
+        os.path.expanduser("~/Project"),  # 用户项目目录
+        "/tmp"  # 临时目录
+    ]
+
     @classmethod
     def get_llm_service_url(cls) -> str:
         """获取 LLM 服务地址"""
@@ -46,6 +53,11 @@ class AEIQConfig:
     def get_llm_service_timeout(cls) -> int:
         """获取 LLM 服务请求超时时间"""
         return cls.LLM_SERVICE_TIMEOUT
+
+    @classmethod
+    def get_path_whitelist(cls) -> list:
+        """获取路径白名单"""
+        return cls.PATH_WHITELIST.copy()
 
 
 # 创建全局配置实例

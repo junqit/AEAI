@@ -415,3 +415,43 @@ class AEContext:
         except Exception as e:
             logger.error(f"❌ 上下文构建失败 - session_id={self.session_id}, error={str(e)}", exc_info=True)
             return []
+    async def handle_request(self, request) -> dict:
+        """
+        处理来自 ContextManager 的请求
+
+        Args:
+            request: AENetReq 对象
+
+        Returns:
+            格式化的结果字典：
+            {
+                "answer": {
+                    "claude": {"content": "...", "timestamp": "...", "error": ""},
+                    "gemini": {"content": "...", "timestamp": "...", "error": ""}
+                }
+            }
+        """
+        # 提取问题内容
+        question_content = None
+        if request.question:
+            question_content = request.question.get("content")
+
+        if not question_content:
+            raise ValueError("Missing question content in request")
+
+        # 获取 LLM 类型列表
+        llm_types = request.llm_types if request.llm_types else ["claude"]
+
+        # 调用 process_message 处理
+        responses = await self.process_message(question_content, llm_types)
+
+        # 转换为指定格式
+        answer = {}
+        for response in responses:
+            answer[response.llm_type] = {
+                "content": response.response if response.response else "",
+                "timestamp": response.timestamp,
+                "error": response.error if response.error else ""
+            }
+
+        return {"answer": answer}
