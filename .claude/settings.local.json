@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \"from Context.AEContextManager import AEContextManager; print\\('OK'\\)\")",
       "Bash(python *)"
     ]
   }

@@ -2,25 +2,34 @@ from pydantic import BaseModel, Field
 from typing import Any, Optional, Dict
 
 
+class AENetReqContext(BaseModel):
+    """请求上下文"""
+    type: Optional[str] = None
+    ident: Optional[str] = None
+
+class AENetReqInfo(BaseModel):
+    """请求信息"""
+    path: Optional[str] = None
+    timeout: Optional[float] = None
+    requestId: Optional[str] = None
+    method: Optional[str] = None
+
+class AENetReqUser(BaseModel):
+    """用户信息"""
+    uid: Optional[str] = None
+    ident: Optional[str] = None
+
 class AENetReq(BaseModel):
     """网络请求数据"""
-    path: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
-    timeout: Optional[float] = None
-    question: Optional[Dict[str, Any]] = None
-    llm_types: Optional[list] = None
-    method: Optional[str] = None
-    requestId: Optional[str] = Field(None, alias="request_id")
+    cont: Optional[AENetReqContext] = None
+    req: Optional[AENetReqInfo] = None
+    user: Optional[AENetReqUser] = None
 
     def to_bytes(self) -> bytes:
-        return self.model_dump_json(by_alias=True, exclude_none=True).encode('utf-8')
+        return self.model_dump_json(exclude_none=True).encode('utf-8')
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'AENetReq':
         return cls.model_validate_json(data.decode('utf-8'))
 
     model_config = {"populate_by_name": True}
-
-
-
-

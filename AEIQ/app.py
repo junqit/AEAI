@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from AEIQConfig import config
 from Context.AEContextManager import AEContextManager
-from Network.Socket.socket_server import get_socket_server
+from Network.Socket.Connection.AESocketServer import get_socket_server
 import logging
 
 # 导入路由模块
@@ -26,11 +26,11 @@ app = FastAPI(
 # 1. 获取 Socket 服务器（网络层）
 socket_server = get_socket_server(host="0.0.0.0", port=8888)
 
-# 2. 创建 Context 管理器（业务层），注入响应发送器
-ae_context_manager = AEContextManager(response_sender=socket_server.connection_manager)
+# 2. 创建 Context 管理器（业务层），注入 socket_server 作为发送器
+ae_context_manager = AEContextManager(response_sender=socket_server)
 
-# 3. 将业务层处理器注册到网络层
-socket_server.connection_manager.set_request_handler(ae_context_manager)
+# 3. AEContextManager 实现 AESocketListener，直接注册到 socket_server
+socket_server.add_listener(ae_context_manager)
 
 logger.info("Layered architecture assembled: Network -> Business")
 # ========================================
@@ -49,7 +49,6 @@ async def startup_event():
     """应用启动时的事件"""
     logger.info("Application starting up...")
 
-    # 启动 UDP Socket 服务器
     try:
         if not socket_server.is_running:
             socket_server.start()
@@ -63,10 +62,8 @@ async def shutdown_event():
     """应用关闭时的事件"""
     logger.info("Application shutting down...")
 
-    # 停止 UDP Socket 服务器
     try:
         socket_server.stop()
         logger.info("UDP Socket server stopped")
     except Exception as e:
         logger.error(f"Failed to stop UDP Socket server: {e}")
-

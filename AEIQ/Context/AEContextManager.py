@@ -1,100 +1,88 @@
 from typing import Dict, Optional, TYPE_CHECKING
-from datetime import datetime
 import asyncio
 import logging
 
-from Network.Core import AENetReq, AENetRsp
+from Network.Core import AENetReq
 from .AEBaseContext import AEBaseContext
+from .AEContextType import AEContextType
 from .AEDirectoryContext import AEDirectoryContext
 from .AEPermissionContext import AEPermissionContext
 from .AEWorkSpaceContext import AEWorkSpaceContext
 
 if TYPE_CHECKING:
-    from Network.Socket.IResponseSender import IResponseSender
+    from Network.Socket.Connection.AESocketServer import AESocketServer
 
 logger = logging.getLogger(__name__)
 
 
 class AEContextManager:
-    def __init__(self, response_sender: Optional['IResponseSender'] = None):
+    """
+    接收 NetReq 后通过 user 区分用户，获取对应的 Context 实例处理请求。
+    Context 通过 AEContextDelegate.send_request 把需要发送的 NetReq 传回本类。
+    """
+
+    def __init__(self, response_sender: Optional['AESocketServer'] = None):
         self._response_sender = response_sender
-        self.contexts: Dict[str, AEBaseContext] = {}
-        self._builtin_handlers = [AEDirectoryContext(), AEPermissionContext()]
-        for handler in self._builtin_handlers:
-            handler.set_delegate(self)
+        # user_key -> { context_ident -> AEBaseContext }
+        self._user_contexts: Dict[str, Dict[str, AEBaseContext]] = {}
         logger.info("AEContextManager initialized")
 
-    def handle_request(self, request: AENetReq, connection_id: str) -> None:
-        try:
-            path = request.path
-            if path == "/ae/context/create":
-                self._handle_create(request, connection_id)
-            elif path == "/ae/context/chat":
-                self._handle_chat(request, connection_id)
-            else:
-                context = self._find_context_for_path(path)
-                if not context:
-                    raise ValueError(f"No context matches path: {path}")
-                self._run_context(context, request, connection_id)
-        except Exception as e:
-            logger.error(f"Error handling request: {e}", exc_info=True)
-            response = AENetRsp.create_error(requestId=request.requestId, error_code="ERR_INTERNAL", error_message=str(e))
-            self.send_response(connection_id, response)
+    def on_request_received(self, request: AENetReq) -> None:
+        """AESocketListener 接口实现"""
+        logger.info(f"NetReq received: {request.model_dump_json(exclude_none=True)}")
 
-    def _handle_create(self, request: AENetReq, connection_id: str) -> None:
-        import uuid
-        ident = str(uuid.uuid4())
-        context_info = request.context.copy() if request.context else {}
-        context_info["ident"] = ident
-        context = AEWorkSpaceContext(context_info)
-        context.set_delegate(self)
-        self.contexts[ident] = context
+        if not request.user:
+            logger.warning("Request has no user info, ignored")
+            return
 
-        response = AENetRsp.create_success(requestId=request.requestId, result={"context_info": context.context_info})
-        self.send_response(connection_id, response)
+        if not request.cont or not request.cont.type:
+            logger.warning("Request has no context info, ignored")
+            return
 
-    def _handle_chat(self, request: AENetReq, connection_id: str) -> None:
-        ident = self._get_ident(request)
-        if not ident:
-            raise ValueError("Missing context.ident in request")
+        user_key = f"{request.user.uid}:{request.user.ident}"
+        context_ident = request.cont.ident if request.cont.ident else request.cont.type
 
-        context = self.contexts.get(ident)
-        if not context:
-            raise ValueError(f"Context not found: {ident}")
+        context = self._get_context(user_key, context_ident)
+        if context is None:
+            context = self._create_context(user_key, context_ident)
 
-        self._run_context(context, request, connection_id)
-
-    def _find_context_for_path(self, path: Optional[str]) -> Optional[AEBaseContext]:
-        if not path:
-            return None
-        for handler in self._builtin_handlers:
-            if handler.matches_path(path):
-                return handler
-        for context in self.contexts.values():
-            if context.matches_path(path):
-                return context
-        return None
-
-    def _get_ident(self, request: AENetReq) -> Optional[str]:
-        if not request.context or not isinstance(request.context, dict):
-            return None
-        return request.context.get("ident")
-
-    def _run_context(self, context: AEBaseContext, request: AENetReq, connection_id: str) -> None:
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(context.handle_request(request, connection_id))
+            loop.run_until_complete(context.handle_request(request))
         finally:
             loop.close()
 
-    def register_context(self, context: AEBaseContext) -> None:
-        context.set_delegate(self)
-        self.contexts[context.ident] = context
-
-    def unregister_context(self, ident: str) -> None:
-        self.contexts.pop(ident, None)
-
-    def send_response(self, connection_id: str, response: AENetRsp) -> None:
+    def send_request(self, request: AENetReq) -> None:
+        """AEContextDelegate 接口实现：Context 把需要发送的 NetReq 传回这里"""
         if self._response_sender:
-            self._response_sender.send_response(connection_id, response)
+            self._response_sender.send_to(request)
+
+    def _get_context(self, user_key: str, context_ident: str) -> Optional[AEBaseContext]:
+        user_map = self._user_contexts.get(user_key)
+        if user_map is None:
+            return None
+        return user_map.get(context_ident)
+
+    def _create_context(self, user_key: str, context_ident: str) -> AEBaseContext:
+        try:
+            context_type = AEContextType(context_ident)
+        except ValueError:
+            logger.warning(f"Unknown context ident: {context_ident}")
+            return None
+
+        context_map = {
+            AEContextType.permission: AEPermissionContext,
+            AEContextType.directory: AEDirectoryContext,
+            AEContextType.workspace: AEWorkSpaceContext,
+        }
+
+        context = context_map[context_type]()
+
+        context.set_delegate(self)
+
+        if user_key not in self._user_contexts:
+            self._user_contexts[user_key] = {}
+
+        self._user_contexts[user_key][context_ident] = context
+        logger.info(f"Context created: user={user_key}, ident={context_ident}")
+        return context

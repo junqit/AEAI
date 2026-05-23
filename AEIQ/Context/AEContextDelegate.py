@@ -1,17 +1,8 @@
-from typing import Optional, Protocol, TYPE_CHECKING
+from typing import Protocol
 
-from Network.Core import AENetReq, AENetRsp
-
-if TYPE_CHECKING:
-    from .AEBaseContext import AEBaseContext
+from Network.Core import AENetReq
 
 
 class AEContextDelegate(Protocol):
-    def send_response(self, connection_id: str, response: AENetRsp) -> None:
-        ...
-
-    def register_context(self, context: 'AEBaseContext') -> None:
-        ...
-
-    def unregister_context(self, ident: str) -> None:
+    def send_request(self, request: AENetReq) -> None:
         ...

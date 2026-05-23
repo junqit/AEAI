@@ -1,58 +1,24 @@
-import os
-import sys
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-from AEIQConfig import config
-from Network.Core import AENetReq, AENetRsp
-from .AEPathValidator import AEPathValidator
+from Network.Core import AENetReq
 
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
 
 
 class AEBaseContext:
-    paths: list = []
 
-    def __init__(self, ident: str, context_info: Optional[dict] = None):
-        self._context_info = context_info.copy() if context_info else {}
-        self._context_info["ident"] = ident
+    def __init__(self):
         self.delegate: Optional['AEContextDelegate'] = None
-        self.path_validator = AEPathValidator(config.get_path_whitelist())
-
-    @property
-    def ident(self) -> str:
-        return self._context_info["ident"]
-
-    @property
-    def context_info(self) -> dict:
-        return self._context_info
 
     def set_delegate(self, delegate: 'AEContextDelegate') -> None:
         self.delegate = delegate
 
-    def send_response(self, connection_id: str, response: AENetRsp) -> None:
+    def send_request(self, request: AENetReq) -> None:
+        """通过 delegate 把需要发送的 NetReq 传给 AEContextManager"""
         if not self.delegate:
             raise ValueError("Context delegate is not set")
-        self.delegate.send_response(connection_id, response)
+        self.delegate.send_request(request)
 
-    def matches_path(self, path: str) -> bool:
-        if not path:
-            return False
-        for prefix in self.paths:
-            if path == prefix or path.startswith(prefix + "/"):
-                return True
-        return False
-
-    def resolve_operation(self, request: AENetReq) -> Optional[str]:
-        if request.path:
-            parts = request.path.strip("/").split("/")
-            if len(parts) >= 3:
-                return parts[2]
-        return None
-
-    async def handle_request(self, request: AENetReq, connection_id: str) -> None:
+    async def handle_request(self, request: AENetReq) -> None:
         raise NotImplementedError
