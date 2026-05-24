@@ -65,6 +65,8 @@ class AEContextManager:
 
     def send_response(self, response: AENetRsp) -> None:
         """AEContextDelegate: Context 需要发送 NetRsp 时调用"""
+        logger.info(f"[ContextManager] send_response called: {response.model_dump_json(exclude_none=True)}")
+        logger.info(f"[ContextManager] socket_interface: {'set' if self._socket_interface else 'None'}")
         if self._socket_interface:
             self._socket_interface.send_response(response)
 

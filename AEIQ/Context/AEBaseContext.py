@@ -1,8 +1,12 @@
 import uuid
+import logging
 from typing import Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetReqContext
+from Network.Core.AENetRsp import AENetRspCode
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
@@ -23,6 +27,7 @@ class AEBaseContext:
         self.delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
+        logger.info(f"[BaseContext] send_response: delegate={'set' if self.delegate else 'None'}")
         if not self.delegate:
             raise ValueError("Context delegate is not set")
         self.delegate.send_response(response)
@@ -39,11 +44,12 @@ class AEBaseContext:
     def _handle_create(self, request: AENetReq) -> None:
         """返回当前 Context 基础信息"""
         response = AENetRsp(
+            code=AENetRspCode.success,
             cont=AENetReqContext(
                 type=request.cont.type if request.cont else None,
                 ident=self.ident
             ),
-            rsp=request.req,
+            req=request.req,
             user=request.user
         )
         self.send_response(response)

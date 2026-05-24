@@ -124,6 +124,7 @@ class AESocketServer:
 
     def _on_packet_received(self, result: ParsedPacketResult) -> None:
         """AEPacketReceiveBuffer 解析完成后的回调，转给 AESocketManager"""
+        logger.info(f"[SocketServer] _on_packet_received: type={result.data_type.name}, addr={result.client_addr}")
         self._socket_manager.on_packet_received(result)
 
     def send_request(self, request: AENetReq) -> bool:

@@ -77,6 +77,7 @@ class AEPacketReceiveBuffer:
 
     def receive(self, data: bytes, client_addr: tuple) -> None:
         """收到数据即入队并通知解析线程，立即返回。"""
+        logger.info(f"[ReceiveBuffer] receive() called: {len(data)} bytes from {client_addr}")
         self._receive_queue.put_nowait((data, client_addr))
         self._data_event.set()
 
@@ -98,6 +99,7 @@ class AEPacketReceiveBuffer:
 
     def _process_data(self, data: bytes, client_addr: tuple) -> None:
         """data → 解析包头 → 校验 CRC → AEPacket → 分发"""
+        logger.info(f"[ReceiveBuffer] _process_data: {len(data)} bytes from {client_addr}")
         if len(data) < AEPacketHeader.HEADER_SIZE:
             logger.warning(f"Datagram too small ({len(data)} bytes) from {client_addr}")
             return
@@ -154,6 +156,7 @@ class AEPacketReceiveBuffer:
                 raw_data=packet.data
             )
 
+            logger.info(f"[ReceiveBuffer] dispatch: type={ae_type.name}, callback={'set' if self._on_packet_received else 'None'}")
             if self._on_packet_received:
                 self._on_packet_received(result)
 

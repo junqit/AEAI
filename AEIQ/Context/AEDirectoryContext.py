@@ -7,5 +7,5 @@ logger = logging.getLogger(__name__)
 
 class AEDirectoryContext(AEBaseContext):
 
-    async def handle_request(self, request: AENetReq) -> None:
-        logger.info(f"AEDirectoryContext received: {request.model_dump_json(exclude_none=True)}")
+    async def on_request(self, request: AENetReq) -> None:
+        logger.info(f"AEDirectoryContext on_request: {request.model_dump_json(exclude_none=True)}")
