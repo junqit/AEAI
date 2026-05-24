@@ -2,7 +2,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 import asyncio
 import logging
 
-from Network.Core import AENetReq
+from Network.Core import AENetReq, AENetRsp
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from .AEDirectoryContext import AEDirectoryContext
@@ -40,11 +40,18 @@ class AEContextManager:
             return
 
         user_key = f"{request.user.uid}:{request.user.ident}"
-        context_ident = request.cont.ident if request.cont.ident else request.cont.type
 
-        context = self._get_context(user_key, context_ident)
+        # 先通过 cont.ident 获取已有 context 实例
+        context = None
+        if request.cont.ident:
+            context = self._get_context(user_key, request.cont.ident)
+
+        # 获取不到，通过 cont.type 创建新 context
         if context is None:
-            context = self._create_context(user_key, context_ident)
+            context = self._create_context(user_key, request.cont.type)
+
+        if context is None:
+            return
 
         loop = asyncio.new_event_loop()
         try:
@@ -57,17 +64,22 @@ class AEContextManager:
         if self._response_sender:
             self._response_sender.send_to(request)
 
+    def send_response(self, request: AENetReq, response: AENetRsp) -> None:
+        """AEContextDelegate 接口实现：Context 把 NetRsp 返回给客户端"""
+        if self._response_sender:
+            self._response_sender.send_to(request)
+
     def _get_context(self, user_key: str, context_ident: str) -> Optional[AEBaseContext]:
         user_map = self._user_contexts.get(user_key)
         if user_map is None:
             return None
         return user_map.get(context_ident)
 
-    def _create_context(self, user_key: str, context_ident: str) -> AEBaseContext:
+    def _create_context(self, user_key: str, context_type_str: str) -> Optional[AEBaseContext]:
         try:
-            context_type = AEContextType(context_ident)
+            context_type = AEContextType(context_type_str)
         except ValueError:
-            logger.warning(f"Unknown context ident: {context_ident}")
+            logger.warning(f"Unknown context type: {context_type_str}")
             return None
 
         context_map = {
@@ -77,12 +89,11 @@ class AEContextManager:
         }
 
         context = context_map[context_type]()
-
         context.set_delegate(self)
 
         if user_key not in self._user_contexts:
             self._user_contexts[user_key] = {}
 
-        self._user_contexts[user_key][context_ident] = context
-        logger.info(f"Context created: user={user_key}, ident={context_ident}")
+        self._user_contexts[user_key][context.ident] = context
+        logger.info(f"Context created: user={user_key}, ident={context.ident}, type={context_type_str}")
         return context
