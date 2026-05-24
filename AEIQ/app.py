@@ -25,8 +25,8 @@ app = FastAPI(
 # 1. 获取 Socket 服务器（网络层）
 socket_server = get_socket_server(host="0.0.0.0", port=8888)
 
-# 2. 创建 Context 管理器（业务层），注入 socket_server 作为发送器
-ae_context_manager = AEContextManager(response_sender=socket_server)
+# 2. 创建 Context 管理器（业务层），注入 socket_server 作为 socket_interface
+ae_context_manager = AEContextManager(socket_interface=socket_server)
 
 # 3. AEContextManager 实现 AESocketListener，直接注册到 socket_server
 socket_server.add_listener(ae_context_manager)

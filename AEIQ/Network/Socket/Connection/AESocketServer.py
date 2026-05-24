@@ -12,9 +12,9 @@ from typing import Optional
 
 from ..Packet.AEPacketReceiveBuffer import AEPacketReceiveBuffer, ParsedPacketResult
 from ..Packet.AEPacket import AEPacket, AEDataType
-from ...Core import AENetReq
+from ...Core import AENetReq, AENetRsp
 from .AESocketManager import AESocketManager
-from .AESocketListener import AESocketListener
+from .AESocketListener import AESocketListener, AESocketInterface
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -29,6 +29,7 @@ class AESocketServer:
     2. AEPacketReceiveBuffer 解析完成后回调本类
     3. 本类转发给 AESocketManager 处理
     4. AESocketManager 通过 AESocketListener 通知上层业务
+    5. 发送能力委托给 AESocketManager
     """
 
     def __init__(self, host: str = '0.0.0.0', port: int = 8888):
@@ -67,6 +68,7 @@ class AESocketServer:
 
             self.running = True
 
+            self._socket_manager.set_socket(self.server_socket)
             self._receive_buffer.start()
 
             self.receive_thread = threading.Thread(
@@ -124,36 +126,13 @@ class AESocketServer:
         """AEPacketReceiveBuffer 解析完成后的回调，转给 AESocketManager"""
         self._socket_manager.on_packet_received(result)
 
-    def send_to(self, request: AENetReq) -> bool:
-        """通过 request.user 从 AESocketManager 获取 addr 进行发送"""
-        if not request.user:
-            logger.error("Cannot send: request has no user info")
-            return False
+    def send_request(self, request: AENetReq) -> bool:
+        """AESocketInterface: 委托给 AESocketManager"""
+        return self._socket_manager.send_request(request)
 
-        client_addr = self._socket_manager.get_addr_by_user(request.user)
-        if not client_addr:
-            logger.error(f"Cannot send: no addr found for user {request.user.uid}:{request.user.ident}")
-            return False
-
-        try:
-            data = request.to_bytes()
-            packet = AEPacket.create(AEDataType.RESPONSE, data)
-            self.server_socket.sendto(packet.to_bytes(), client_addr)
-            logger.debug(f"Sent to {client_addr}, size={len(data)} bytes")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send to {client_addr}: {e}")
-            return False
-
-    def send_pong(self, client_addr: tuple) -> bool:
-        try:
-            packet = AEPacket.create(AEDataType.PONG, b'')
-            self.server_socket.sendto(packet.to_bytes(), client_addr)
-            logger.debug(f"Sent PONG to {client_addr}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send PONG to {client_addr}: {e}")
-            return False
+    def send_response(self, response: AENetRsp) -> bool:
+        """AESocketInterface: 委托给 AESocketManager"""
+        return self._socket_manager.send_response(response)
 
     @property
     def is_running(self) -> bool:

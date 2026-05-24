@@ -7,5 +7,5 @@ class AEContextDelegate(Protocol):
     def send_request(self, request: AENetReq) -> None:
         ...
 
-    def send_response(self, request: AENetReq, response: AENetRsp) -> None:
+    def send_response(self, response: AENetRsp) -> None:
         ...

@@ -1,5 +1,4 @@
 from .AENetReq import AENetReq
-from .AENetRsp import AENetRsp, AENetErrorInfo
+from .AENetRsp import AENetRsp
 
-__all__ = ['AENetReq', 'AENetRsp', 'AENetErrorInfo']
-
+__all__ = ['AENetReq', 'AENetRsp']

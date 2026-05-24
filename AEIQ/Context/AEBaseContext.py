@@ -1,8 +1,8 @@
 import uuid
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetReqContext, AENetReqInfo
+from Network.Core.AENetReq import AENetReqContext
 
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
@@ -22,10 +22,10 @@ class AEBaseContext:
             raise ValueError("Context delegate is not set")
         self.delegate.send_request(request)
 
-    def send_response(self, request: AENetReq, response: AENetRsp) -> None:
+    def send_response(self, response: AENetRsp) -> None:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
-        self.delegate.send_response(request, response)
+        self.delegate.send_response(response)
 
     async def handle_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None
@@ -38,18 +38,15 @@ class AEBaseContext:
 
     def _handle_create(self, request: AENetReq) -> None:
         """返回当前 Context 基础信息"""
-        request_id = request.req.requestId if request.req else None
-
-        result: Dict[str, Any] = {
-            "cont": AENetReqContext(
+        response = AENetRsp(
+            cont=AENetReqContext(
                 type=request.cont.type if request.cont else None,
                 ident=self.ident
-            ).model_dump(exclude_none=True),
-            "req": request.req.model_dump(exclude_none=True) if request.req else {},
-        }
-
-        response = AENetRsp.create_success(requestId=request_id, result=result)
-        self.send_response(request, response)
+            ),
+            rsp=request.req,
+            user=request.user
+        )
+        self.send_response(response)
 
     async def on_request(self, request: AENetReq) -> None:
         """子类重写此方法处理具体业务请求"""

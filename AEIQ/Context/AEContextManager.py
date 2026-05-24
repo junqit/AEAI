@@ -3,14 +3,12 @@ import asyncio
 import logging
 
 from Network.Core import AENetReq, AENetRsp
+from Network.Socket.Connection.AESocketListener import AESocketInterface
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from .AEDirectoryContext import AEDirectoryContext
 from .AEPermissionContext import AEPermissionContext
 from .AEWorkSpaceContext import AEWorkSpaceContext
-
-if TYPE_CHECKING:
-    from Network.Socket.Connection.AESocketServer import AESocketServer
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +16,12 @@ logger = logging.getLogger(__name__)
 class AEContextManager:
     """
     接收 NetReq 后通过 user 区分用户，获取对应的 Context 实例处理请求。
-    Context 通过 AEContextDelegate.send_request 把需要发送的 NetReq 传回本类。
+    Context 通过 AEContextDelegate 把需要发送的数据传回本类，
+    本类通过 socketInterface 发送。
     """
 
-    def __init__(self, response_sender: Optional['AESocketServer'] = None):
-        self._response_sender = response_sender
+    def __init__(self, socket_interface: Optional[AESocketInterface] = None):
+        self._socket_interface = socket_interface
         # user_key -> { context_ident -> AEBaseContext }
         self._user_contexts: Dict[str, Dict[str, AEBaseContext]] = {}
         logger.info("AEContextManager initialized")
@@ -60,14 +59,14 @@ class AEContextManager:
             loop.close()
 
     def send_request(self, request: AENetReq) -> None:
-        """AEContextDelegate 接口实现：Context 把需要发送的 NetReq 传回这里"""
-        if self._response_sender:
-            self._response_sender.send_to(request)
+        """AEContextDelegate: Context 需要发送 NetReq 时调用"""
+        if self._socket_interface:
+            self._socket_interface.send_request(request)
 
-    def send_response(self, request: AENetReq, response: AENetRsp) -> None:
-        """AEContextDelegate 接口实现：Context 把 NetRsp 返回给客户端"""
-        if self._response_sender:
-            self._response_sender.send_to(request)
+    def send_response(self, response: AENetRsp) -> None:
+        """AEContextDelegate: Context 需要发送 NetRsp 时调用"""
+        if self._socket_interface:
+            self._socket_interface.send_response(response)
 
     def _get_context(self, user_key: str, context_ident: str) -> Optional[AEBaseContext]:
         user_map = self._user_contexts.get(user_key)

@@ -1,18 +1,21 @@
 """
 Socket 连接管理器
 
-接收 AESocketServer 转发的解析数据，
-以 AENetReqUser 为 key 存储用户发送数据时的 addr，
-处理完后通过 AESocketListener 转给上层业务
+存储每个用户对应的 AESocketWrapper，
+接收解析完成的数据后通过 AESocketListener 转给上层业务，
+发送数据时委托给对应用户的 AESocketWrapper 处理
 """
 
+import socket
 import threading
 import logging
 from typing import Dict, Optional, List
 
 from ...Core.AENetReq import AENetReq, AENetReqUser
+from ...Core.AENetRsp import AENetRsp
 from ..Packet.AEPacketReceiveBuffer import ParsedPacketResult
 from ..Packet.AEPacket import AEDataType
+from .AESocketWrapper import AESocketWrapper
 from .AESocketListener import AESocketListener
 
 logger = logging.getLogger(__name__)
@@ -24,15 +27,20 @@ class AESocketManager:
 
     职责：
     1. 接收解析完成的数据
-    2. 以 AENetReqUser 为 key 存储 client_addr
+    2. 为每个用户创建/更新 AESocketWrapper
     3. 通过 AESocketListener 通知上层业务
+    4. 发送数据委托给用户对应的 AESocketWrapper
     """
 
     def __init__(self):
-        self._user_addrs: Dict[str, tuple] = {}
+        self._server_socket: Optional[socket.socket] = None
+        self._wrappers: Dict[str, AESocketWrapper] = {}
         self._lock = threading.Lock()
         self._listeners: List[AESocketListener] = []
         logger.info("AESocketManager initialized")
+
+    def set_socket(self, server_socket: socket.socket) -> None:
+        self._server_socket = server_socket
 
     def add_listener(self, listener: AESocketListener) -> None:
         self._listeners.append(listener)
@@ -41,7 +49,9 @@ class AESocketManager:
         self._listeners.remove(listener)
 
     def on_packet_received(self, result: ParsedPacketResult) -> None:
-        """接收解析完成的数据，处理后通过 listener 转给上层"""
+        """接收解析完成的数据，注册用户后通过 listener 转给上层"""
+        logger.info(f"Packet received: type={result.data_type.name}, addr={result.client_addr}, data={result.raw_data.decode('utf-8', errors='replace')}")
+
         if result.data_type == AEDataType.REQUEST:
             request: AENetReq = result.payload
             if request.user:
@@ -53,25 +63,51 @@ class AESocketManager:
         elif result.data_type == AEDataType.HEARTBEAT:
             logger.debug(f"Heartbeat from {result.client_addr}")
 
-    def get_addr_by_user(self, user: AENetReqUser) -> Optional[tuple]:
-        key = self._user_key(user)
-        with self._lock:
-            return self._user_addrs.get(key)
+    def send_request(self, request: AENetReq) -> bool:
+        """发送 AENetReq，委托给用户对应的 AESocketWrapper"""
+        if not request.user:
+            logger.error("Cannot send request: no user info")
+            return False
 
-    def remove_user(self, user: AENetReqUser) -> None:
+        wrapper = self._get_wrapper(request.user)
+        if not wrapper:
+            logger.error(f"Cannot send request: no wrapper for user {request.user.uid}:{request.user.ident}")
+            return False
+
+        return wrapper.send_request(request)
+
+    def send_response(self, response: AENetRsp) -> bool:
+        """发送 AENetRsp，委托给用户对应的 AESocketWrapper"""
+        if not response.user:
+            logger.error("Cannot send response: no user info")
+            return False
+
+        wrapper = self._get_wrapper(response.user)
+        if not wrapper:
+            logger.error(f"Cannot send response: no wrapper for user {response.user.uid}:{response.user.ident}")
+            return False
+
+        return wrapper.send_response(response)
+
+    def _get_wrapper(self, user: AENetReqUser) -> Optional[AESocketWrapper]:
         key = self._user_key(user)
         with self._lock:
-            self._user_addrs.pop(key, None)
+            return self._wrappers.get(key)
 
     def _register_user(self, user: AENetReqUser, client_addr: tuple) -> None:
         key = self._user_key(user)
         with self._lock:
-            self._user_addrs[key] = client_addr
-        logger.debug(f"User registered: {key} -> {client_addr}")
+            wrapper = self._wrappers.get(key)
+            if wrapper:
+                wrapper.update_addr(client_addr)
+            else:
+                wrapper = AESocketWrapper(user, client_addr, self._server_socket)
+                self._wrappers[key] = wrapper
+                logger.debug(f"User wrapper created: {key} -> {client_addr}")
 
     def _user_key(self, user: AENetReqUser) -> str:
         return f"{user.uid}:{user.ident}"
 
     def __len__(self) -> int:
         with self._lock:
-            return len(self._user_addrs)
+            return len(self._wrappers)

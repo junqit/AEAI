@@ -1,7 +1,7 @@
 from .AESocketServer import AESocketServer, get_socket_server, start_socket_server, stop_socket_server
 from .AESocketManager import AESocketManager
 from .AESocketWrapper import AESocketWrapper
-from .AESocketListener import AESocketListener
+from .AESocketListener import AESocketListener, AESocketInterface
 
 __all__ = [
     'AESocketServer',
