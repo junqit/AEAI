@@ -56,6 +56,7 @@ class AESocketManager:
             request: AENetReq = result.payload
             if request.user:
                 self._register_user(request.user, result.client_addr)
+                
             for listener in self._listeners:
                 listener.on_request_received(request)
         elif result.data_type == AEDataType.PING:

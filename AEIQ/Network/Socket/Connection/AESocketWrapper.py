@@ -31,7 +31,9 @@ class AESocketWrapper:
         return self._client_addr
 
     def update_addr(self, client_addr: tuple) -> None:
-        self._client_addr = client_addr
+        if self._client_addr != client_addr:
+            logger.debug(f"Address updated: user={self._user.uid}:{self._user.ident}, {self._client_addr} -> {client_addr}")
+            self._client_addr = client_addr
 
     def send_request(self, request: AENetReq) -> bool:
         try:
