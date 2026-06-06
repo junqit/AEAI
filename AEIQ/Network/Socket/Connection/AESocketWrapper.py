@@ -40,7 +40,6 @@ class AESocketWrapper:
             data = request.to_bytes()
             packet = AEPacket.create(AEDataType.REQUEST, data)
             self._server_socket.sendto(packet.to_bytes(), self._client_addr)
-            logger.debug(f"Sent request to {self._client_addr}, size={len(data)} bytes")
             return True
         except Exception as e:
             logger.error(f"Failed to send request to {self._client_addr}: {e}")
@@ -51,7 +50,6 @@ class AESocketWrapper:
             data = response.to_bytes()
             packet = AEPacket.create(AEDataType.RESPONSE, data)
             self._server_socket.sendto(packet.to_bytes(), self._client_addr)
-            logger.debug(f"Sent response to {self._client_addr}, size={len(data)} bytes")
             return True
         except Exception as e:
             logger.error(f"Failed to send response to {self._client_addr}: {e}")

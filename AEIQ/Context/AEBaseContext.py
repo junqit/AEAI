@@ -5,7 +5,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetReqContext
 from Network.Core.AENetRsp import AENetRspCode
-from .AEContextPath import AE_PATH_CONTEXT_CREATE
+from .AEContextPath import AE_PATH_CONTEXT_CREATE, AE_PATH_CONTEXT_CHAT
 from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,6 @@ class AEBaseContext:
         self.delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        logger.info(f"[BaseContext] send_response: delegate={'set' if self.delegate else 'None'}")
         if not self.delegate:
             raise ValueError("Context delegate is not set")
         self.delegate.send_response(response)
@@ -48,6 +47,10 @@ class AEBaseContext:
 
         if path == AE_PATH_CONTEXT_CREATE:
             self._handle_create(request)
+            return
+
+        if path == AE_PATH_CONTEXT_CHAT:
+            await self.on_chat(request)
             return
 
         await self.on_request(request)
@@ -64,6 +67,10 @@ class AEBaseContext:
             user=request.user
         )
         self.send_response(response)
+
+    async def on_chat(self, request: AENetReq) -> None:
+        """子类重写此方法处理 Chat 消息"""
+        pass
 
     async def on_request(self, request: AENetReq) -> None:
         """子类重写此方法处理具体业务请求"""

@@ -50,7 +50,6 @@ class AESocketManager:
 
     def on_packet_received(self, result: ParsedPacketResult) -> None:
         """接收解析完成的数据，注册用户后通过 listener 转给上层"""
-        logger.info(f"Packet received: type={result.data_type.name}, addr={result.client_addr}, data={result.raw_data.decode('utf-8', errors='replace')}")
 
         if result.data_type == AEDataType.REQUEST:
             request: AENetReq = result.payload

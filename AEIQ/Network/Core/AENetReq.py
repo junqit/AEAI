@@ -19,11 +19,19 @@ class AENetReqUser(BaseModel):
     uid: Optional[str] = None
     ident: Optional[str] = None
 
+class AENetReqQuestion(BaseModel):
+    """问题消息体"""
+    type: Optional[int] = None
+    ident: Optional[str] = None
+    content: Optional[str] = None
+
+
 class AENetReq(BaseModel):
     """网络请求数据"""
     cont: Optional[AENetReqContext] = None
     req: Optional[AENetReqInfo] = None
     user: Optional[AENetReqUser] = None
+    question: Optional[AENetReqQuestion] = None
 
     def to_bytes(self) -> bytes:
         return self.model_dump_json(exclude_none=True).encode('utf-8')

@@ -17,7 +17,6 @@ from .AESocketManager import AESocketManager
 from .AESocketListener import AESocketListener, AESocketInterface
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class AESocketServer:
@@ -107,8 +106,6 @@ class AESocketServer:
         while self.running:
             try:
                 data, client_addr = self.server_socket.recvfrom(65535)
-                logger.debug(f"Received {len(data)} bytes from {client_addr}")
-
                 self._receive_buffer.receive(data, client_addr)
 
             except OSError as e:
@@ -124,7 +121,6 @@ class AESocketServer:
 
     def _on_packet_received(self, result: ParsedPacketResult) -> None:
         """AEPacketReceiveBuffer 解析完成后的回调，转给 AESocketManager"""
-        logger.info(f"[SocketServer] _on_packet_received: type={result.data_type.name}, addr={result.client_addr}")
         self._socket_manager.on_packet_received(result)
 
     def send_request(self, request: AENetReq) -> bool:

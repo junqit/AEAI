@@ -30,7 +30,6 @@ class AEContextManager:
 
     def on_request_received(self, request: AENetReq) -> None:
         """AESocketListener 接口实现"""
-        logger.info(f"NetReq received: {request.model_dump_json(exclude_none=True)}")
 
         if not request.user:
             logger.warning("Request has no user info, ignored")
@@ -72,8 +71,6 @@ class AEContextManager:
 
     def send_response(self, response: AENetRsp) -> None:
         """AEContextDelegate: Context 需要发送 NetRsp 时调用"""
-        logger.info(f"[ContextManager] send_response called: {response.model_dump_json(exclude_none=True)}")
-        logger.info(f"[ContextManager] socket_interface: {'set' if self._socket_interface else 'None'}")
         if self._socket_interface:
             self._socket_interface.send_response(response)
 
@@ -83,12 +80,19 @@ class AEContextManager:
             return None
         return user_map.get(context_ident)
 
+    _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
+
     def _create_context(self, user_key: str, context_type_str: str) -> Optional[AEBaseContext]:
         try:
             context_type = AEContextType(context_type_str)
         except ValueError:
             logger.warning(f"Unknown context type: {context_type_str}")
             return None
+
+        if context_type in self._SINGLETON_TYPES:
+            existing = self._find_context_by_type(user_key, context_type)
+            if existing:
+                return existing
 
         context_map = {
             AEContextType.permission: AEPermissionContext,
@@ -106,12 +110,20 @@ class AEContextManager:
         logger.info(f"Context created: user={user_key}, ident={context.ident}, type={context_type_str}")
         return context
 
+    def _find_context_by_type(self, user_key: str, context_type: AEContextType) -> Optional[AEBaseContext]:
+        user_map = self._user_contexts.get(user_key)
+        if not user_map:
+            return None
+        for context in user_map.values():
+            if context.context_type == context_type:
+                return context
+        return None
+
     def _handle_context_list(self, request: AENetReq) -> None:
         user_key = f"{request.user.uid}:{request.user.ident}"
         user_map = self._user_contexts.get(user_key, {})
 
         contexts = [context.context_config() for context in user_map.values()]
-        logger.info(f"[ContextManager] context_list: user={user_key}, count={len(contexts)}")
 
         response = AENetRsp(
             code=AENetRspCode.success,
