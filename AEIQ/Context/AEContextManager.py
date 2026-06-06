@@ -1,10 +1,12 @@
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 import asyncio
 import logging
 
 from Network.Core import AENetReq, AENetRsp
+from Network.Core.AENetRsp import AENetRspCode, AENetRspResult
 from Network.Socket.Connection.AESocketListener import AESocketInterface
 from .AEBaseContext import AEBaseContext
+from .AEContextPath import AE_PATH_CONTEXT_LIST
 from .AEContextType import AEContextType
 from .AEDirectoryContext import AEDirectoryContext
 from .AEPermissionContext import AEPermissionContext
@@ -32,6 +34,11 @@ class AEContextManager:
 
         if not request.user:
             logger.warning("Request has no user info, ignored")
+            return
+
+        path = request.req.path if request.req else None
+        if path == AE_PATH_CONTEXT_LIST:
+            self._handle_context_list(request)
             return
 
         if not request.cont or not request.cont.type:
@@ -98,3 +105,18 @@ class AEContextManager:
         self._user_contexts[user_key][context.ident] = context
         logger.info(f"Context created: user={user_key}, ident={context.ident}, type={context_type_str}")
         return context
+
+    def _handle_context_list(self, request: AENetReq) -> None:
+        user_key = f"{request.user.uid}:{request.user.ident}"
+        user_map = self._user_contexts.get(user_key, {})
+
+        contexts = [context.context_config() for context in user_map.values()]
+        logger.info(f"[ContextManager] context_list: user={user_key}, count={len(contexts)}")
+
+        response = AENetRsp(
+            code=AENetRspCode.success,
+            rsp=AENetRspResult(data={"contexts": contexts}),
+            req=request.req,
+            user=request.user
+        )
+        self.send_response(response)

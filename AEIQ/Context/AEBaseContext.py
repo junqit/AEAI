@@ -1,10 +1,12 @@
 import uuid
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetReqContext
 from Network.Core.AENetRsp import AENetRspCode
+from .AEContextPath import AE_PATH_CONTEXT_CREATE
+from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +16,18 @@ if TYPE_CHECKING:
 
 class AEBaseContext:
 
-    def __init__(self):
+    def __init__(self, context_type: AEContextType, space: str = ""):
         self.ident: str = str(uuid.uuid4())
+        self.space: str = space
+        self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
+
+    def context_config(self) -> Dict[str, str]:
+        return {
+            "ident": self.ident,
+            "space": self.space,
+            "type": self.context_type.value,
+        }
 
     def set_delegate(self, delegate: 'AEContextDelegate') -> None:
         self.delegate = delegate
@@ -35,7 +46,7 @@ class AEBaseContext:
     async def handle_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None
 
-        if path == "/ae/context/create":
+        if path == AE_PATH_CONTEXT_CREATE:
             self._handle_create(request)
             return
 
