@@ -33,7 +33,7 @@ class AEWorkSpaceContext(AEBaseContext):
         try:
             payload = {
                 "messages": [{"role": "user", "content": question.content}],
-                "llm_type": "deepseek",
+                "llm_type": "GEMINI",
                 "level": "default",
             }
             headers = {"AE-API-Key": LLM_API_KEY}
