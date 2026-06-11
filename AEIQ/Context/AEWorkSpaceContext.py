@@ -33,7 +33,7 @@ class AEWorkSpaceContext(AEBaseContext):
         try:
             payload = {
                 "messages": [{"role": "user", "content": question.content}],
-                "llm_type": "GEMINI",
+                "llm_type": "chatgpt",
                 "level": "default",
             }
             headers = {"AE-API-Key": LLM_API_KEY}
