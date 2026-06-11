@@ -5,7 +5,7 @@ AE ChatGPT Provider - OpenAI ChatGPT API 提供商
 from .ae_base_provider import AEBaseProvider
 from AEQuestion import AEQuestion
 from AEAiLevel import AEAiLevel
-from llms.llm.gpt.gpt import AEGPTModel
+from llm.gpt.gpt import AEGPTModel
 
 
 class AEChatGPTProvider(AEBaseProvider):
