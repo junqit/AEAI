@@ -54,8 +54,8 @@ class AELlmManager:
         self.providers = {
             LLMType.CLAUDE: AEClaudeProvider(),
             LLMType.CHATGPT: AEChatGPTProvider(),
-            LLMType.DEEPSEEK: AEDeepSeekProvider(),
-            LLMType.GEMINI: AEGeminiProvider()
+            LLMType.DEEPSEEK: AEDeepSeekProvider()
+            # LLMType.GEMINI: AEGeminiProvider()
         }
 
         # 加载每个 Provider（如果需要预加载）

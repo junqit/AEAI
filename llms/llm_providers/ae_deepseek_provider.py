@@ -43,8 +43,8 @@ class AEDeepSeekProvider(AEBaseProvider):
         # 1. 根据 level 选择模型
         model = self._get_model_by_level(level)
 
-        # 2. 组装消息列表
-        messages = question.to_messages()
+        # 2. 获取消息列表
+        messages = question.messages
 
         # 3. 如果有系统提示词，添加到消息开头
         if question.system:
