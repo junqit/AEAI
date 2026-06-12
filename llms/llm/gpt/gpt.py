@@ -2,6 +2,7 @@
 GPT API 模型类
 封装 GPT API 的调用、配置和资源管理
 """
+import re
 import requests
 import logging
 from typing import Optional, List, Dict, Any
@@ -36,7 +37,7 @@ class AEGPTModel:
         self,
         model: str,
         messages: List[Dict[str, str]],
-        max_tokens: int = 4096,
+        max_tokens: int = 128000,
         temperature: float = 0.0,
         tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
@@ -65,12 +66,13 @@ class AEGPTModel:
             if tools:
                 payload["tools"] = tools
 
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=99999999)
 
             elapsed = (datetime.now() - start_time).total_seconds()
 
             if response.status_code == 200:
                 result = response.json()
+                self._strip_thinking(result)
                 logger.info(f"GPT API 调用成功 - model={model}, elapsed={elapsed:.2f}s")
                 return result
             else:
@@ -81,6 +83,13 @@ class AEGPTModel:
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.error(f"GPT API 请求异常 - model={model}, elapsed={elapsed:.2f}s, error={str(e)}")
             return f"请求异常: {e}"
+
+    @staticmethod
+    def _strip_thinking(result: dict):
+        content = result.get("content", [])
+        for item in content:
+            if item.get("type") == "text" and item.get("text"):
+                item["text"] = re.sub(r"<think>.*?</think>\s*", "", item["text"], flags=re.DOTALL)
 
     def get_status(self) -> dict:
         return {
@@ -114,7 +123,7 @@ def call_gpt_api(
     model: str,
     messages: list,
     tools: list = None,
-    max_tokens: int = 4096,
+    max_tokens: int = 128000,
     temperature: float = 0.0
 ):
     gpt_model = get_gpt_model()
