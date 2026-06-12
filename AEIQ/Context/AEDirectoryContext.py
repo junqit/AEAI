@@ -2,7 +2,7 @@ import os
 import platform
 import logging
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetRsp import AENetRspCode, AENetRspResult
+from Network.Core.AENetRsp import AENetRspCode
 from .AEBaseContext import AEBaseContext
 from .AEContextPath import AE_PATH_CONTEXT_INFO
 from .AEContextType import AEContextType
@@ -36,7 +36,7 @@ class AEDirectoryContext(AEBaseContext):
         }
         response = AENetRsp(
             code=AENetRspCode.success,
-            rsp=AENetRspResult(data=info),
+            rsp=info,
             req=request.req,
             cont=request.cont,
             user=request.user

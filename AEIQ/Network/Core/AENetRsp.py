@@ -28,7 +28,7 @@ class AENetRsp(BaseModel):
     code: int = AENetRspCode.success
     cont: Optional[AENetReqContext] = None
     req: Optional[AENetReqInfo] = None
-    rsp: Optional[AENetRspResult] = None
+    rsp: Optional[Dict[str, Any]] = None
     user: Optional[AENetReqUser] = None
 
     def to_bytes(self) -> bytes:

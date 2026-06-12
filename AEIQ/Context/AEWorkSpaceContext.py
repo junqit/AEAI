@@ -1,7 +1,7 @@
 import logging
 import httpx
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetRsp import AENetRspCode, AENetRspResult
+from Network.Core.AENetRsp import AENetRspCode
 from .AEBaseContext import AEBaseContext
 from .AEContextPath import AE_PATH_CONTEXT_CHAT_LIST
 from .AEContextType import AEContextType
@@ -22,7 +22,7 @@ class AEWorkSpaceContext(AEBaseContext):
         if not question or not question.content:
             response = AENetRsp(
                 code=AENetRspCode.badRequest,
-                rsp=AENetRspResult(data={"error": "missing question content"}),
+                rsp={"error": "missing question content"},
                 req=request.req,
                 cont=request.cont,
                 user=request.user
@@ -45,7 +45,7 @@ class AEWorkSpaceContext(AEBaseContext):
             reply = result.get("response", "")
             response = AENetRsp(
                 code=AENetRspCode.success,
-                rsp=AENetRspResult(data={"reply": reply}),
+                rsp={"reply": reply},
                 req=request.req,
                 cont=request.cont,
                 user=request.user
@@ -54,7 +54,7 @@ class AEWorkSpaceContext(AEBaseContext):
             logger.error(f"LLM service call failed: {e}")
             response = AENetRsp(
                 code=AENetRspCode.serverError,
-                rsp=AENetRspResult(data={"error": str(e)}),
+                rsp={"error": str(e)},
                 req=request.req,
                 cont=request.cont,
                 user=request.user
@@ -74,7 +74,7 @@ class AEWorkSpaceContext(AEBaseContext):
     def _handle_chat_list(self, request: AENetReq) -> None:
         response = AENetRsp(
             code=AENetRspCode.success,
-            rsp=AENetRspResult(data={"message": "yellow world"}),
+            rsp={"message": "yellow world"},
             req=request.req,
             cont=request.cont,
             user=request.user

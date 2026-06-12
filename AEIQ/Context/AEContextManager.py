@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetRsp import AENetRspCode, AENetRspResult
+from Network.Core.AENetRsp import AENetRspCode
 from Network.Socket.Connection.AESocketListener import AESocketInterface
 from .AEBaseContext import AEBaseContext
 from .AEContextPath import AE_PATH_CONTEXT_LIST
@@ -127,7 +127,7 @@ class AEContextManager:
 
         response = AENetRsp(
             code=AENetRspCode.success,
-            rsp=AENetRspResult(data={"contexts": contexts}),
+            rsp={"contexts": contexts},
             req=request.req,
             user=request.user
         )
