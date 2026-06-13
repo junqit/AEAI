@@ -170,8 +170,8 @@ class AEDirectoryContext(AEBaseContext):
     ROLE = "你是用户的本地开发环境助手。你了解用户当前系统的操作系统、已安装的脚本语言和可用的库。回答问题时优先使用用户环境中已有的工具和库，不推荐用户未安装的依赖。"
 
     def build_role_prompt(self) -> dict:
-        """组装完整的 role prompt，返回 {role: prompt} 结构"""
+        """组装完整的 role prompt，返回 {role: content} 结构"""
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
         from Assistant.AERole import AERole
-        return {"role": AERole.SYSTEM.value, "content": prompt}
+        return {"role": AERole.CONTEXT.value, "content": prompt}

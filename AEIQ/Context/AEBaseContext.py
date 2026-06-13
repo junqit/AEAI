@@ -19,17 +19,17 @@ class AEBaseContext:
 
     def __init__(self, context_type: AEContextType, user: AENetReqUser = None, space: str = ""):
         self.user: Optional[AENetReqUser] = user
-        self.ident: str = self._generate_ident(context_type, user)
+        self.ident: str = self._generate_ident(context_type, user, space)
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
 
     @staticmethod
-    def _generate_ident(context_type: AEContextType, user: Optional[AENetReqUser]) -> str:
+    def _generate_ident(context_type: AEContextType, user: Optional[AENetReqUser], space: str = "") -> str:
         user_info = user.user_key if user else ""
 
         if context_type == AEContextType.workspace:
-            raw = f"{user_info}{uuid.uuid4().hex}"
+            raw = f"{user_info}{space}"
             return hashlib.md5(raw.encode()).hexdigest()
 
         if context_type == AEContextType.directory:

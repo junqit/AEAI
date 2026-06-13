@@ -5,7 +5,7 @@ from typing import List, Dict
 @dataclass
 class AELLMPayload:
     messages: List[Dict[str, str]]
-    llm_type: str = "chatgpt"
+    llm_type: str = "claude"
     level: str = "default"
 
     def to_dict(self) -> dict:

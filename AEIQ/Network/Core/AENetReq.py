@@ -6,6 +6,7 @@ class AENetReqContext(BaseModel):
     """请求上下文"""
     type: Optional[str] = None
     ident: Optional[str] = None
+    space: Optional[str] = None
 
 class AENetReqInfo(BaseModel):
     """请求信息"""

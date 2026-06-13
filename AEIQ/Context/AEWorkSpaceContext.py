@@ -29,7 +29,10 @@ class AEWorkSpaceContext(AEBaseContext):
             return
 
         payload = AELLMPayload(
-            messages=[{"role": AERole.USER.value, "content": question.content}],
+            messages=[
+                {"role": AERole.CONTEXT.value, "content": f"当前工作目录: {self.space}"},
+                {"role": AERole.USER.value, "content": question.content},
+            ],
         )
 
         def on_reply(reply: str):

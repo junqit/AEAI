@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Callable, Any, TYPE_CHECKING
 import asyncio
+import threading
 import logging
 
 from Network.Core import AENetReq, AENetRsp
@@ -27,6 +28,10 @@ class AEContextManager:
         # user_key -> { context_ident -> AEBaseContext }
         self._user_contexts: Dict[str, Dict[str, AEBaseContext]] = {}
         self._directory_ctx: Optional['AEDirectoryContext'] = None
+        # 持久事件循环，避免 httpx 连接池在 loop.close() 时报错
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._loop_thread.start()
         logger.info("AEContextManager initialized")
 
     def on_request_received(self, request: AENetReq) -> None:
@@ -54,16 +59,17 @@ class AEContextManager:
 
         # 获取不到，通过 cont.type 创建新 context
         if context is None:
-            context = self._create_context(user_key, request.cont.type, user=request.user)
+            space = request.cont.space or ""
+            if request.cont.type == AEContextType.workspace.value and not space:
+                logger.warning("Cannot create WorkSpaceContext: space is required")
+                return
+            context = self._create_context(user_key, request.cont.type, user=request.user, space=space)
 
         if context is None:
             return
 
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(context.handle_request(request))
-        finally:
-            loop.close()
+        future = asyncio.run_coroutine_threadsafe(context.handle_request(request), self._loop)
+        future.result()
 
     def send_request(self, request: AENetReq) -> None:
         """AEContextDelegate: Context 需要发送 NetReq 时调用"""
@@ -107,7 +113,7 @@ class AEContextManager:
 
     _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
 
-    def _create_context(self, user_key: str, context_type_str: str, user=None) -> Optional[AEBaseContext]:
+    def _create_context(self, user_key: str, context_type_str: str, user=None, space: str = "") -> Optional[AEBaseContext]:
         try:
             context_type = AEContextType(context_type_str)
         except ValueError:
@@ -125,7 +131,7 @@ class AEContextManager:
             AEContextType.workspace: AEWorkSpaceContext,
         }
 
-        context = context_map[context_type](user=user)
+        context = context_map[context_type](user=user, space=space)
         context.set_delegate(self)
 
         if user_key not in self._user_contexts:
