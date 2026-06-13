@@ -60,13 +60,13 @@ class AEClaudeProvider(AEBaseProvider):
                 self.load()
 
             model = self._get_model_by_level(level)
+
             messages = question.messages
 
             result = self.claude_model.generate(
                 messages=messages,
                 model=model,
                 max_tokens=self.MAX_TOKENS,
-                temperature=0.0,
             )
 
             # 5. 解析响应

@@ -19,10 +19,18 @@ class AEBaseProvider(ABC):
         self.is_loaded = False
 
     def generate(self, question: AEQuestion, level: AEAiLevel) -> str:
+        self._normalize_messages(question)
         logger.info(f"[{self.name}] 发送 - messages={question.messages}")
         result = self._generate(question, level)
         logger.info(f"[{self.name}] 接收 - result={result[:200] if isinstance(result, str) else str(result)[:200]}")
         return result
+
+    @staticmethod
+    def _normalize_messages(question: AEQuestion):
+        """将 context role 转换为 user role，确保所有 LLM API 兼容"""
+        for msg in question.messages:
+            if msg.get("role") == "context" or msg.get("role") == "system":
+                msg["role"] = "user"
 
     @abstractmethod
     def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:

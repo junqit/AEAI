@@ -64,65 +64,27 @@ class AEClaudeModel:
         messages: List[Dict[str, str]],
         model: str,
         max_tokens: int = 4096,
-        temperature: float = 0.0,
-        system: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-        """
-        使用 Claude API 生成文本
-
-        Args:
-            messages: 消息列表 [{"role": "user", "content": "..."}]
-            model: 模型名称
-            max_tokens: 最大 token 数
-            temperature: 温度参数
-            system: 系统提示词（可选）
-            tools: 工具列表（可选）
-
-        Returns:
-            dict: API 响应结果
-
-        Raises:
-            Exception: API 调用失败时抛出异常
-        """
         if not self.is_loaded:
             self.load()
 
-        logger.info(f"🔄 开始调用 Claude API - model={model}, max_tokens={max_tokens}, messages_count={len(messages)}")
         from datetime import datetime
         start_time = datetime.now()
 
         try:
-            # 1. 构建 URL
             url = f"{self.base_url}/v1/messages"
 
-            # 2. 构建 headers
             headers = {
                 "x-api-key": self.auth_token,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json"
             }
 
-            # 3. 构建 payload（按照 Claude API 官方文档格式）
             payload = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "temperature": temperature,
                 "messages": messages
             }
-
-            # 4. 添加可选参数
-            if system:
-                payload["system"] = system
-                logger.debug(f"📝 添加 system: {system[:100]}...")
-
-            if tools:
-                payload["tools"] = tools
-                logger.debug(f"🔧 添加 {len(tools)} 个 tools")
-
-            # 5. 打印请求信息
-            logger.info(f"📤 发送请求到 Claude API - url={url}")
-            logger.debug(f"📋 请求参数: model={model}, max_tokens={max_tokens}, temperature={temperature}, system={'是' if system else '否'}, tools={len(tools) if tools else 0}")
 
             # 6. 发送请求
             response = requests.post(url, headers=headers, json=payload, timeout=60)
@@ -207,33 +169,13 @@ def cleanup_claude_model():
 def call_claude_api(
     messages: list,
     model: str,
-    system: str = None,
-    tools: list = None,
     max_tokens: int = 4096,
-    temperature: float = 0.0
 ):
-    """
-    调用 Claude API（向后兼容函数）
-
-    Args:
-        messages: 消息列表 [{"role": "user", "content": "..."}]
-        model: 模型名称
-        system: 系统提示词
-        tools: 工具列表
-        max_tokens: 最大 token 数
-        temperature: 温度参数
-
-    Returns:
-        dict: API 响应结果
-    """
     claude_model = get_claude_model()
     return claude_model.generate(
         messages=messages,
         model=model,
-        system=system,
-        tools=tools,
         max_tokens=max_tokens,
-        temperature=temperature
     )
 
 

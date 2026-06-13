@@ -38,8 +38,6 @@ class AEGPTModel:
         model: str,
         messages: List[Dict[str, str]],
         max_tokens: int = 128000,
-        temperature: float = 0.0,
-        tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
@@ -60,11 +58,7 @@ class AEGPTModel:
                 "model": model,
                 "messages": messages,
                 "max_tokens": max_tokens,
-                "temperature": temperature,
             }
-
-            if tools:
-                payload["tools"] = tools
 
             response = requests.post(url, headers=headers, json=payload, timeout=99999999)
 
@@ -122,15 +116,11 @@ def cleanup_gpt_model():
 def call_gpt_api(
     model: str,
     messages: list,
-    tools: list = None,
     max_tokens: int = 128000,
-    temperature: float = 0.0
 ):
     gpt_model = get_gpt_model()
     return gpt_model.generate(
         model=model,
         messages=messages,
-        tools=tools,
         max_tokens=max_tokens,
-        temperature=temperature
     )

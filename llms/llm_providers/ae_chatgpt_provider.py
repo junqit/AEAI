@@ -30,7 +30,6 @@ class AEChatGPTProvider(AEBaseProvider):
             model=self.MODEL,
             messages=question.messages,
             max_tokens=self.MAX_TOKENS,
-            temperature=0.7,
         )
 
         if isinstance(result, str):
