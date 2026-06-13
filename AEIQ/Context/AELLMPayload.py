@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from dataclasses import dataclass
+from typing import List, Dict
 
 
 @dataclass
@@ -7,14 +7,10 @@ class AELLMPayload:
     messages: List[Dict[str, str]]
     llm_type: str = "chatgpt"
     level: str = "default"
-    system: Optional[str] = None
 
     def to_dict(self) -> dict:
-        data = {
+        return {
             "messages": self.messages,
             "llm_type": self.llm_type,
             "level": self.level,
         }
-        if self.system:
-            data["system"] = self.system
-        return data

@@ -1,6 +1,7 @@
 import logging
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetRsp import AENetRspCode
+from Assistant.AERole import AERole
 from .AEBaseContext import AEBaseContext
 from .AEContextPath import AE_PATH_CONTEXT_CHAT_LIST
 from .AEContextType import AEContextType
@@ -28,7 +29,7 @@ class AEWorkSpaceContext(AEBaseContext):
             return
 
         payload = AELLMPayload(
-            messages=[{"role": "user", "content": question.content}],
+            messages=[{"role": AERole.USER.value, "content": question.content}],
         )
 
         def on_reply(reply: str):

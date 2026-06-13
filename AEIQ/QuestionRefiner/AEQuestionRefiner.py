@@ -5,6 +5,8 @@ AEQuestionRefiner - 问题精炼器
 import json
 from typing import List, Dict, Any, Optional
 
+from Assistant.AERole import AERole
+
 
 class AEQuestionRefiner:
 
@@ -49,7 +51,7 @@ class AEQuestionRefiner:
             messages.extend(context)
 
         user_content = self._build_user_prompt(question)
-        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": AERole.USER.value, "content": user_content})
 
         return messages
 

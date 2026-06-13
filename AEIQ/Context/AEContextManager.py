@@ -26,6 +26,7 @@ class AEContextManager:
         self._socket_interface = socket_interface
         # user_key -> { context_ident -> AEBaseContext }
         self._user_contexts: Dict[str, Dict[str, AEBaseContext]] = {}
+        self._directory_ctx: Optional['AEDirectoryContext'] = None
         logger.info("AEContextManager initialized")
 
     def on_request_received(self, request: AENetReq) -> None:
@@ -75,9 +76,28 @@ class AEContextManager:
             self._socket_interface.send_response(response)
 
     async def send_llm_request(self, payload, callback: Callable[[str], Any]) -> None:
-        """异步发送 LLM 请求，将响应结果通过 callback 返回给请求的 Context"""
+        """异步发送 LLM 请求，发送前注入 DirectoryContext 的 system prompt"""
         from .AELLMClient import send_llm_request
+        from .AEDirectoryContext import AEDirectoryContext
+
+        # 获取 DirectoryContext，不存在则创建单例缓存
+        directory_ctx = self._find_any_context_by_type(AEContextType.directory)
+        if not directory_ctx:
+            if not self._directory_ctx:
+                self._directory_ctx = AEDirectoryContext()
+            directory_ctx = self._directory_ctx
+
+        role_prompt = directory_ctx.build_role_prompt()
+        payload.messages.insert(0, role_prompt)
+
         await send_llm_request(payload, callback)
+
+    def _find_any_context_by_type(self, context_type: AEContextType) -> Optional[AEBaseContext]:
+        for user_map in self._user_contexts.values():
+            for context in user_map.values():
+                if context.context_type == context_type:
+                    return context
+        return None
 
     def _get_context(self, user_key: str, context_ident: str) -> Optional[AEBaseContext]:
         user_map = self._user_contexts.get(user_key)
