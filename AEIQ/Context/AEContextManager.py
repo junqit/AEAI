@@ -44,7 +44,7 @@ class AEContextManager:
             logger.warning("Request has no context info, ignored")
             return
 
-        user_key = f"{request.user.uid}:{request.user.ident}"
+        user_key = request.user.user_key
 
         # 先通过 cont.ident 获取已有 context 实例
         context = None
@@ -53,7 +53,7 @@ class AEContextManager:
 
         # 获取不到，通过 cont.type 创建新 context
         if context is None:
-            context = self._create_context(user_key, request.cont.type)
+            context = self._create_context(user_key, request.cont.type, user=request.user)
 
         if context is None:
             return
@@ -82,7 +82,7 @@ class AEContextManager:
 
     _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
 
-    def _create_context(self, user_key: str, context_type_str: str) -> Optional[AEBaseContext]:
+    def _create_context(self, user_key: str, context_type_str: str, user=None) -> Optional[AEBaseContext]:
         try:
             context_type = AEContextType(context_type_str)
         except ValueError:
@@ -100,7 +100,7 @@ class AEContextManager:
             AEContextType.workspace: AEWorkSpaceContext,
         }
 
-        context = context_map[context_type]()
+        context = context_map[context_type](user=user)
         context.set_delegate(self)
 
         if user_key not in self._user_contexts:
@@ -120,7 +120,7 @@ class AEContextManager:
         return None
 
     def _handle_context_list(self, request: AENetReq) -> None:
-        user_key = f"{request.user.uid}:{request.user.ident}"
+        user_key = request.user.user_key
         user_map = self._user_contexts.get(user_key, {})
 
         contexts = [context.context_config() for context in user_map.values()]

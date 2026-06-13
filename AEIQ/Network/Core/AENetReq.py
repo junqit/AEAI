@@ -19,6 +19,10 @@ class AENetReqUser(BaseModel):
     uid: Optional[str] = None
     ident: Optional[str] = None
 
+    @property
+    def user_key(self) -> str:
+        return f"{self.uid or ''}:{self.ident or ''}"
+
 class AENetReqQuestion(BaseModel):
     """问题消息体"""
     type: Optional[int] = None

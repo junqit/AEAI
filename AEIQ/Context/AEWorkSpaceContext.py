@@ -14,8 +14,8 @@ LLM_API_KEY = "ae-agent-2024-fixed-key-9527"
 
 class AEWorkSpaceContext(AEBaseContext):
 
-    def __init__(self, space: str = ""):
-        super().__init__(context_type=AEContextType.workspace, space=space)
+    def __init__(self, user=None, space: str = ""):
+        super().__init__(context_type=AEContextType.workspace, user=user, space=space)
 
     async def on_chat(self, request: AENetReq) -> None:
         question = request.question

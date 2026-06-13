@@ -20,7 +20,7 @@ class AESocketWrapper:
         self._user = user
         self._client_addr = client_addr
         self._server_socket = server_socket
-        logger.debug(f"AESocketWrapper created: user={user.uid}:{user.ident}, addr={client_addr}")
+        logger.debug(f"AESocketWrapper created: user={user.user_key}, addr={client_addr}")
 
     @property
     def user(self) -> AENetReqUser:
@@ -32,7 +32,7 @@ class AESocketWrapper:
 
     def update_addr(self, client_addr: tuple) -> None:
         if self._client_addr != client_addr:
-            logger.debug(f"Address updated: user={self._user.uid}:{self._user.ident}, {self._client_addr} -> {client_addr}")
+            logger.debug(f"Address updated: user={self._user.user_key}, {self._client_addr} -> {client_addr}")
             self._client_addr = client_addr
 
     def send_request(self, request: AENetReq) -> bool:

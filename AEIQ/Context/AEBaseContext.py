@@ -1,9 +1,10 @@
 import uuid
+import hashlib
 import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetReqContext
+from Network.Core.AENetReq import AENetReqContext, AENetReqUser
 from Network.Core.AENetRsp import AENetRspCode
 from .AEContextPath import AE_PATH_CONTEXT_CREATE, AE_PATH_CONTEXT_CHAT
 from .AEContextType import AEContextType
@@ -16,11 +17,29 @@ if TYPE_CHECKING:
 
 class AEBaseContext:
 
-    def __init__(self, context_type: AEContextType, space: str = ""):
-        self.ident: str = str(uuid.uuid4())
+    def __init__(self, context_type: AEContextType, user: AENetReqUser = None, space: str = ""):
+        self.user: Optional[AENetReqUser] = user
+        self.ident: str = self._generate_ident(context_type, user)
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
+
+    @staticmethod
+    def _generate_ident(context_type: AEContextType, user: Optional[AENetReqUser]) -> str:
+        user_info = user.user_key if user else ""
+
+        if context_type == AEContextType.workspace:
+            return f"{user_info}_{uuid.uuid4().hex}"
+
+        if context_type == AEContextType.directory:
+            raw = f"{user_info}directory"
+            return hashlib.md5(raw.encode()).hexdigest()
+
+        if context_type == AEContextType.permission:
+            raw = f"{user_info}permission"
+            return hashlib.md5(raw.encode()).hexdigest()
+
+        return str(uuid.uuid4())
 
     def context_config(self) -> Dict[str, str]:
         return {

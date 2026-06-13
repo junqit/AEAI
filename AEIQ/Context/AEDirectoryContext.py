@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 class AEDirectoryContext(AEBaseContext):
 
-    def __init__(self, space: str = ""):
-        super().__init__(context_type=AEContextType.directory, space=space)
+    def __init__(self, user=None, space: str = ""):
+        super().__init__(context_type=AEContextType.directory, user=user, space=space)
 
     async def on_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None

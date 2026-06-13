@@ -71,7 +71,7 @@ class AESocketManager:
 
         wrapper = self._get_wrapper(request.user)
         if not wrapper:
-            logger.error(f"Cannot send request: no wrapper for user {request.user.uid}:{request.user.ident}")
+            logger.error(f"Cannot send request: no wrapper for user {request.user.user_key}")
             return False
 
         return wrapper.send_request(request)
@@ -84,7 +84,7 @@ class AESocketManager:
 
         wrapper = self._get_wrapper(response.user)
         if not wrapper:
-            logger.error(f"Cannot send response: no wrapper for user {response.user.uid}:{response.user.ident}")
+            logger.error(f"Cannot send response: no wrapper for user {response.user.user_key}")
             return False
 
         return wrapper.send_response(response)
@@ -106,7 +106,7 @@ class AESocketManager:
                 logger.debug(f"User wrapper created: {key} -> {client_addr}")
 
     def _user_key(self, user: AENetReqUser) -> str:
-        return f"{user.uid}:{user.ident}"
+        return user.user_key
 
     def __len__(self) -> int:
         with self._lock:
