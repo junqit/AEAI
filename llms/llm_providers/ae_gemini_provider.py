@@ -52,42 +52,19 @@ class AEGeminiProvider(AEBaseProvider):
             logger.error(f"❌ {self.name} 加载失败: {str(e)}", exc_info=True)
             raise
 
-    def generate(self, question: AEQuestion, level: AEAiLevel, max_tokens: int) -> str:
-        """
-        使用 Gemini 本地模型生成回复
-        在这里组装 Gemini 模型需要的所有信息
+    MAX_TOKENS = 32000
 
-        Args:
-            question: 问题对象（包含 messages、system、tools 等所有参数）
-            level: AI 级别
-            max_tokens: 最大 token 数
-
-        Returns:
-            str: Gemini 生成的回复
-        """
-        logger.info(f"🔄 开始生成 Gemini 回复 - level={level.name}, max_tokens={max_tokens}")
-
+    def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
         try:
-            # 确保模型已加载
             if not self.is_loaded:
                 self.load()
 
-            # 1. 从 question 对象中提取参数
-            messages = question.messages  # 消息列表
-            system = question.system  # 系统提示词
+            messages = question.messages
 
-            # 2. 打印调用信息
-            logger.info(f"📋 请求参数 - messages_count={len(messages)}, system={'是' if system else '否'}")
-            logger.debug(f"📝 System 内容: {system[:200] if system else None}...")
-            logger.debug(f"💬 Messages: {messages}")
-
-            # 3. 调用 Gemini 模型 - 传递 messages 和 system
             response = self.gemini_model.generate(
                 messages=messages,
-                max_tokens=max_tokens,
+                max_tokens=self.MAX_TOKENS,
                 temperature=0.7,
-                system=system,
-                tools=question.tools
             )
 
             # 4. 验证响应是否有效

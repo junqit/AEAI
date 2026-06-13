@@ -86,9 +86,6 @@ def _process_llm_sync(
     messages: List[Dict[str, Any]],
     llm_type: LLMType,
     level: AEAiLevel,
-    system: Optional[str],
-    tools: Optional[List[Dict[str, Any]]],
-    context: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
     同步调用 LLM（在线程池中执行，避免阻塞事件循环）
@@ -98,24 +95,18 @@ def _process_llm_sync(
         messages: 消息列表
         llm_type: LLM 类型
         level: AI 级别
-        system: 系统提示词
-        tools: 工具列表
-        context: 上下文信息
 
     Returns:
         Dict: LLM 调用结果
     """
     try:
-        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}]  {tools}开始处理")
+        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}] 开始处理")
 
         # 创建 AEQuestion 对象
         question = AEQuestion(
             messages=messages,
             llm_type=llm_type,
-            level=level,
-            system=system,
-            tools=tools,
-            context=context or {}
+            level=level
         )
 
         # 获取 AELlmManager 实例并调用
@@ -194,9 +185,6 @@ async def process_question(request: AEQuestionRequest):
             request.messages,
             llm_type,
             level,
-            request.system,
-            request.tools,
-            request.context
         )
 
         elapsed = (datetime.now() - start_time).total_seconds()

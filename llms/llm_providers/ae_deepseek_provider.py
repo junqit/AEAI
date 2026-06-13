@@ -24,43 +24,21 @@ class AEDeepSeekProvider(AEBaseProvider):
         self.is_loaded = True
         print(f"✅ {self.name} loaded")
 
-    def generate(self, question: AEQuestion, level: AEAiLevel, max_tokens: int) -> str:
-        """
-        使用 DeepSeek API 生成回复
-        在这里组装 DeepSeek API 需要的所有信息
+    MAX_TOKENS = 64000
 
-        Args:
-            question: 问题对象
-            level: AI 级别
-            max_tokens: 最大 token 数
-
-        Returns:
-            str: DeepSeek 生成的回复
-        """
+    def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
         if not self.is_loaded:
             self.load()
 
-        # 1. 根据 level 选择模型
         model = self._get_model_by_level(level)
-
-        # 2. 获取消息列表
         messages = question.messages
 
-        # 3. 如果有系统提示词，添加到消息开头
-        if question.system:
-            messages = [{"role": "system", "content": question.system}] + messages
-
-        # 4. 组装请求参数
         request_params = {
             "model": model,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_tokens": self.MAX_TOKENS,
             "temperature": 0.7
         }
-
-        # 5. 如果有工具，添加工具参数
-        if question.tools:
-            request_params["tools"] = question.tools
 
         # TODO: 实现 DeepSeek API 调用
         # DeepSeek API 兼容 OpenAI 格式

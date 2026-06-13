@@ -12,6 +12,7 @@ class AEChatGPTProvider(AEBaseProvider):
     """ChatGPT API 提供商"""
 
     MODEL = "ppio/pa/gpt-5.5"
+    MAX_TOKENS = 128000
 
     def __init__(self):
         super().__init__()
@@ -21,21 +22,15 @@ class AEChatGPTProvider(AEBaseProvider):
         self._gpt.load()
         self.is_loaded = True
 
-    def generate(self, question: AEQuestion, level: AEAiLevel, max_tokens: int) -> str:
+    def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
         if not self.is_loaded:
             self.load()
 
-        messages = question.messages
-
-        if question.system:
-            messages = [{"role": "system", "content": question.system}] + messages
-
         result = self._gpt.generate(
             model=self.MODEL,
-            messages=messages,
-            max_tokens=max_tokens,
+            messages=question.messages,
+            max_tokens=self.MAX_TOKENS,
             temperature=0.7,
-            tools=question.tools if question.tools else None
         )
 
         if isinstance(result, str):

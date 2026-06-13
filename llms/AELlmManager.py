@@ -101,7 +101,6 @@ class AELlmManager:
         # 从 question 对象中获取所有参数
         llm_type = question.llm_type
         level = question.level
-        max_tokens = question.max_tokens
 
         start_time = time.time()
 
@@ -117,7 +116,7 @@ class AELlmManager:
             }
 
         try:
-            response = provider.generate(question, level, max_tokens)
+            response = provider.generate(question, level)
             elapsed = time.time() - start_time
             return {
                 "response": response,
