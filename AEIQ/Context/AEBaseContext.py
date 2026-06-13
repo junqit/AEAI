@@ -29,7 +29,8 @@ class AEBaseContext:
         user_info = user.user_key if user else ""
 
         if context_type == AEContextType.workspace:
-            return f"{user_info}_{uuid.uuid4().hex}"
+            raw = f"{user_info}{uuid.uuid4().hex}"
+            return hashlib.md5(raw.encode()).hexdigest()
 
         if context_type == AEContextType.directory:
             raw = f"{user_info}directory"
@@ -39,7 +40,7 @@ class AEBaseContext:
             raw = f"{user_info}permission"
             return hashlib.md5(raw.encode()).hexdigest()
 
-        return str(uuid.uuid4())
+        return uuid.uuid4().hex
 
     def context_config(self) -> Dict[str, str]:
         return {

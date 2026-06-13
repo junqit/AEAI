@@ -38,7 +38,7 @@ class AEWorkSpaceContext(AEBaseContext):
             }
             headers = {"AE-API-Key": LLM_API_KEY}
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=9999999.0) as client:
                 resp = await client.post(LLM_SERVICE_URL, json=payload, headers=headers)
                 result = resp.json()
 
