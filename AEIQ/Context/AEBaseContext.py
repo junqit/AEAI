@@ -62,6 +62,11 @@ class AEBaseContext:
             raise ValueError("Context delegate is not set")
         self.delegate.send_response(response)
 
+    async def send_llm_request(self, payload, callback) -> None:
+        if not self.delegate:
+            raise ValueError("Context delegate is not set")
+        await self.delegate.send_llm_request(payload, callback)
+
     async def handle_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None
 

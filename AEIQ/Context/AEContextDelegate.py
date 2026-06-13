@@ -1,6 +1,9 @@
-from typing import Protocol
+from typing import Protocol, Callable, Any, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
+
+if TYPE_CHECKING:
+    from .AELLMPayload import AELLMPayload
 
 
 class AEContextDelegate(Protocol):
@@ -8,4 +11,7 @@ class AEContextDelegate(Protocol):
         ...
 
     def send_response(self, response: AENetRsp) -> None:
+        ...
+
+    async def send_llm_request(self, payload: 'AELLMPayload', callback: Callable[[str], Any]) -> None:
         ...

@@ -29,6 +29,7 @@ class AEDirectoryContext(AEBaseContext):
 
     def __init__(self, user=None, space: str = ""):
         super().__init__(context_type=AEContextType.directory, user=user, space=space)
+        self._scripts_cache: list = None
 
     async def on_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None
@@ -62,13 +63,21 @@ class AEDirectoryContext(AEBaseContext):
         self.send_response(response)
 
     def _discover_scripts(self) -> list:
-        """查找当前电脑内所有可用的脚本语言"""
+        """查找当前电脑内所有可用的脚本语言，结果缓存只执行一次"""
+        if self._scripts_cache is not None:
+            return self._scripts_cache
         scripts = []
         for name in self.SCRIPT_LANGUAGES:
             which = shutil.which(name)
             if which:
                 scripts.append(self._get_script_info(name, which))
-        return scripts
+        self._scripts_cache = scripts
+        return self._scripts_cache
+
+    def refresh_scripts(self):
+        """外部触发重新扫描脚本信息"""
+        self._scripts_cache = None
+        self._discover_scripts()
 
     @staticmethod
     def _subprocess_env() -> dict:
@@ -110,3 +119,56 @@ class AEDirectoryContext(AEBaseContext):
         except Exception:
             pass
         return []
+
+    def build_system_prompt(self) -> str:
+        """将当前系统信息和脚本信息组装为 role prompt"""
+        sys_info = (
+            f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
+            f"Node: {platform.node()}\n"
+            f"CWD: {os.getcwd()}"
+        )
+
+        scripts = self._discover_scripts()
+        script_parts = []
+        for s in scripts:
+            part = f"- {s['scriptname']} {s['version']} ({s['which']})"
+            if s["packages"]:
+                part += f"\n  已安装库: {', '.join(s['packages'])}"
+            script_parts.append(part)
+
+        if script_parts:
+            scripts_info = "\n".join(script_parts)
+        else:
+            scripts_info = "当前无可用脚本语言。"
+
+        install_instruction = """如果当前环境缺少完成任务所需的脚本语言或库，你可以申请安装。
+申请时请严格按以下 JSON 结构输出：
+
+{
+  "action": "install_request",
+  "packages": [
+    {
+      "scriptname": "需要安装的脚本语言或包管理器名称",
+      "packages": ["需要安装的库名称列表"],
+      "install_script": "根据当前系统环境生成的安装命令"
+    }
+  ],
+  "reason": "安装原因说明"
+}
+
+注意：
+- install_script 必须适配当前操作系统和架构。
+- 仅在已有环境无法满足需求时才申请安装。
+- 优先使用已安装的库。"""
+
+        return (
+            f"[当前系统环境]\n{sys_info}\n\n"
+            f"[可用脚本语言及库]\n{scripts_info}\n\n"
+            f"[安装申请规则]\n{install_instruction}"
+        )
+
+    def build_role_prompt(self, role: str) -> dict:
+        """组装完整的 role prompt，返回 {role: prompt} 结构"""
+        system_info = self.build_system_prompt()
+        prompt = f"[Role]\n{role}\n\n{system_info}"
+        return {"role": role, "prompt": prompt}

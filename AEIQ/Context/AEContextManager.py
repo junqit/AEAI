@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, Callable, Any, TYPE_CHECKING
 import asyncio
 import logging
 
@@ -73,6 +73,11 @@ class AEContextManager:
         """AEContextDelegate: Context 需要发送 NetRsp 时调用"""
         if self._socket_interface:
             self._socket_interface.send_response(response)
+
+    async def send_llm_request(self, payload, callback: Callable[[str], Any]) -> None:
+        """异步发送 LLM 请求，将响应结果通过 callback 返回给请求的 Context"""
+        from .AELLMClient import send_llm_request
+        await send_llm_request(payload, callback)
 
     def _get_context(self, user_key: str, context_ident: str) -> Optional[AEBaseContext]:
         user_map = self._user_contexts.get(user_key)

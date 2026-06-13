@@ -1,15 +1,12 @@
 import logging
-import httpx
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetRsp import AENetRspCode
 from .AEBaseContext import AEBaseContext
 from .AEContextPath import AE_PATH_CONTEXT_CHAT_LIST
 from .AEContextType import AEContextType
+from .AELLMPayload import AELLMPayload
 
 logger = logging.getLogger(__name__)
-
-LLM_SERVICE_URL = "http://127.0.0.1:9999/aellms/question"
-LLM_API_KEY = "ae-agent-2024-fixed-key-9527"
 
 
 class AEWorkSpaceContext(AEBaseContext):
@@ -30,37 +27,30 @@ class AEWorkSpaceContext(AEBaseContext):
             self.send_response(response)
             return
 
-        try:
-            payload = {
-                "messages": [{"role": "user", "content": question.content}],
-                "llm_type": "chatgpt",
-                "level": "default",
-            }
-            headers = {"AE-API-Key": LLM_API_KEY}
+        payload = AELLMPayload(
+            messages=[{"role": "user", "content": question.content}],
+        )
 
-            async with httpx.AsyncClient(timeout=9999999.0) as client:
-                resp = await client.post(LLM_SERVICE_URL, json=payload, headers=headers)
-                result = resp.json()
+        def on_reply(reply: str):
+            if reply:
+                response = AENetRsp(
+                    code=AENetRspCode.success,
+                    rsp={"reply": reply},
+                    req=request.req,
+                    cont=request.cont,
+                    user=request.user
+                )
+            else:
+                response = AENetRsp(
+                    code=AENetRspCode.serverError,
+                    rsp={"error": "LLM returned empty response"},
+                    req=request.req,
+                    cont=request.cont,
+                    user=request.user
+                )
+            self.send_response(response)
 
-            reply = result.get("response", "")
-            response = AENetRsp(
-                code=AENetRspCode.success,
-                rsp={"reply": reply},
-                req=request.req,
-                cont=request.cont,
-                user=request.user
-            )
-        except Exception as e:
-            logger.error(f"LLM service call failed: {e}")
-            response = AENetRsp(
-                code=AENetRspCode.serverError,
-                rsp={"error": str(e)},
-                req=request.req,
-                cont=request.cont,
-                user=request.user
-            )
-
-        self.send_response(response)
+        await self.send_llm_request(payload, on_reply)
 
     async def on_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None
