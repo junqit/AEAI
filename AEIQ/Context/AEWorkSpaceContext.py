@@ -36,6 +36,7 @@ class AEWorkSpaceContext(AEBaseContext):
         )
 
         def on_reply(reply: str):
+            logger.info(f"on_reply called, reply_length={len(reply) if reply else 0}")
             if reply:
                 response = AENetRsp(
                     code=AENetRspCode.success,
@@ -53,6 +54,7 @@ class AEWorkSpaceContext(AEBaseContext):
                     user=request.user
                 )
             self.send_response(response)
+            logger.info(f"send_response completed, code={response.code}")
 
         await self.send_llm_request(payload, on_reply)
 

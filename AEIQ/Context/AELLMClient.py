@@ -28,10 +28,11 @@ async def send_llm_request(payload: AELLMPayload, callback: Callable[[str], Any]
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_dict(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
-        await callback(reply) if asyncio.iscoroutinefunction(callback) else callback(reply)
+        logger.info(f"LLM response received, reply_length={len(reply) if reply else 0}")
+        callback(reply)
     except Exception as e:
         logger.error(f"LLM request failed: {e}")
-        await callback("") if asyncio.iscoroutinefunction(callback) else callback("")
+        callback("")
 
 
 async def close_client():

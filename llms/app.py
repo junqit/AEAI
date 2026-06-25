@@ -101,6 +101,10 @@ async def api_key_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
+@app.get("/")
+async def root():
+    return {"service": config.SERVICE_NAME, "version": config.VERSION, "status": "running"}
+
 # 注册所有路由
 register_routes(app)
 
