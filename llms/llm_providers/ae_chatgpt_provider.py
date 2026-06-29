@@ -11,9 +11,6 @@ from llm.gpt.gpt import AEGPTModel
 class AEChatGPTProvider(AEBaseProvider):
     """ChatGPT API 提供商"""
 
-    MODEL = "ppio/pa/gpt-5.5"
-    MAX_TOKENS = 128000
-
     def __init__(self):
         super().__init__()
         self._gpt = AEGPTModel()
@@ -26,10 +23,10 @@ class AEChatGPTProvider(AEBaseProvider):
         if not self.is_loaded:
             self.load()
 
+        # 只传 messages 与 level，模型名与 max_tokens 由 AEGPTModel 内部决定
         result = self._gpt.generate(
-            model=self.MODEL,
             messages=question.messages,
-            max_tokens=self.MAX_TOKENS,
+            level=level,
         )
 
         if isinstance(result, str):

@@ -7,6 +7,7 @@ class LLMType(Enum):
     CHATGPT = "chatgpt"
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
+    ZHIPU = "zhipu"
 
 class AEAiLevel(Enum):
     default = 1

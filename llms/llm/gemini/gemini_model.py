@@ -9,6 +9,8 @@ import re
 from mlx_lm import load, generate
 from mlx_lm.sample_utils import make_sampler
 
+from AEAiLevel import AEAiLevel
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -20,6 +22,23 @@ logger = logging.getLogger(__name__)
 
 class AEGeminiModel:
     """Gemini 本地模型封装类（基于 mlx_lm）"""
+
+    # 本地 mlx 模型，无远程模型名；各级别使用同一本地模型路径
+    # max_tokens 与 temperature 按 LLM 不同在模型内部设置
+    MAX_TOKENS = 32000
+    TEMPERATURE = 0.7
+
+    def _get_model_by_level(self, level: AEAiLevel) -> str:
+        """
+        根据 AI 级别选择 Gemini 模型路径（模型内部自行判断）
+
+        Args:
+            level: AI 级别
+
+        Returns:
+            str: 模型路径
+        """
+        return self.model_path
 
     def __init__(self, model_path: str = None):
         """
@@ -62,19 +81,14 @@ class AEGeminiModel:
     def generate(
         self,
         messages: List[Dict[str, str]],
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
-        system: Optional[str] = None,
-        tools: List[Dict[str, str]] = None
+        level: AEAiLevel,
     ) -> str:
         """
         使用 Gemini 模型生成文本（支持 messages 格式）
 
         Args:
             messages: 消息列表 [{"role": "user", "content": "..."}]
-            max_tokens: 最大生成 token 数
-            temperature: 温度参数
-            system: 系统提示词（可选，会添加到 messages 开头）
+            level: AI 级别（模型名/max_tokens/temperature 由模型内部决定）
 
         Returns:
             str: 生成的文本
@@ -86,23 +100,15 @@ class AEGeminiModel:
             logger.warning("⚠️ Gemini 模型未加载，正在加载...")
             self.load()
 
-        logger.info(f"🔄 开始生成文本 - messages_count={len(messages)}, max_tokens={max_tokens}, system={'是' if system else '否'}")
+        # max_tokens 与 temperature 由模型内部设置
+        max_tokens = self.MAX_TOKENS
+        temperature = self.TEMPERATURE
+
+        logger.info(f"🔄 开始生成文本 - messages_count={len(messages)}, max_tokens={max_tokens}")
 
         try:
-            # 1. 构建完整的 messages（如果有 system，添加到开头）
+            # 1. 构建完整的 messages
             formatted_messages = []
-            if system:
-                formatted_messages.append({
-                    "role": "system",
-                    "content": system
-                })
-
-            if tools:
-                formatted_messages.append({
-                    "role": "tools",
-                    "content": tools
-                })
-
             formatted_messages.extend(messages)
             logger.info(f"💬 Messages: {formatted_messages}")
 
@@ -113,7 +119,6 @@ class AEGeminiModel:
             )
 
             logger.info(f"📦 Prompt 已生成 - length={len(prompt)}")
-            logger.info(f"📝 Prompt 内容: {prompt}")
 
             response = generate(
                 self.model,

@@ -63,19 +63,6 @@ async def api_key_middleware(request: Request, call_next):
     全局 API Key 验证中间件
     排除健康检查和文档接口
     """
-    # 排除不需要认证的路径
-    excluded_paths = [
-        "/health",
-        "/docs",
-        "/redoc",
-        "/openapi.json",
-        "/"  # 根路径
-    ]
-
-    # 检查是否是排除路径
-    if request.url.path in excluded_paths:
-        return await call_next(request)
-
     # 验证 API Key
     api_key = request.headers.get(config.API_KEY_HEADER)
 

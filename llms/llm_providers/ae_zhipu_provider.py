@@ -1,6 +1,9 @@
 """
-AE Claude Provider - Claude API 提供商
-负责组装 Claude API 需要的所有信息
+AE Zhipu Provider - 智谱 Zhipu API 提供商
+负责组装 Zhipu API 需要的所有信息
+
+key 与接口访问参照 claude_provider：复用同一内部网关与同一 auth_token，
+模型名替换为智谱 GLM 系列。
 """
 import sys
 import logging
@@ -22,28 +25,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class AEClaudeProvider(AEBaseProvider):
-    """Claude API 提供商"""
+class AEZhipuProvider(AEBaseProvider):
+    """Zhipu (智谱) API 提供商"""
 
     def __init__(self):
         super().__init__()
-        self.claude_model = None
+        self.zhipu_model = None
 
     def load(self):
-        """加载 Claude API"""
+        """加载 Zhipu API"""
         if self.is_loaded:
             logger.info(f"{self.name} 已加载，跳过重复加载")
             return
 
         try:
-            # 导入 Claude 模型类
-            from llm.claude import get_claude_model
+            # 导入 Zhipu 模型类
+            from llm.zhipu import get_zhipu_model
 
             logger.info(f"🔄 正在初始化 {self.name}...")
-            self.claude_model = get_claude_model()
+            self.zhipu_model = get_zhipu_model()
 
             # 加载配置
-            self.claude_model.load()
+            self.zhipu_model.load()
 
             self.is_loaded = True
             logger.info(f"✅ {self.name} 加载成功!")
@@ -59,24 +62,25 @@ class AEClaudeProvider(AEBaseProvider):
 
             messages = question.messages
 
-            # 只传 messages 与 level，模型名与 max_tokens 由 AEClaudeModel 内部决定
-            result = self.claude_model.generate(
+            # 只传 messages 与 level，模型名与 max_tokens 由 AEZhipuModel 内部决定
+            result = self.zhipu_model.generate(
                 messages=messages,
                 level=level,
             )
 
-            # 5. 解析响应
+            # 解析响应
             parsed_result = self._parse_response(result)
-            logger.info(f"✅ Claude 回复生成成功 - response_length={len(parsed_result) if parsed_result else 0}")
+            logger.info(f"✅ Zhipu 回复生成成功 - response_length={len(parsed_result) if parsed_result else 0}")
             return parsed_result
 
         except Exception as e:
-            logger.error(f"❌ Claude API 调用失败: {str(e)}", exc_info=True)
-            raise Exception(f"Claude API 调用失败: {str(e)}")
+            logger.error(f"❌ Zhipu API 调用失败: {str(e)}", exc_info=True)
+            raise Exception(f"Zhipu API 调用失败: {str(e)}")
 
     def _parse_response(self, result) -> str:
         """
-        解析 Claude API 响应
+        解析 Zhipu API 响应
+        接口访问参照 claude_provider，响应格式与 Claude 一致（Anthropic 兼容）
 
         Args:
             result: API 响应结果
@@ -85,7 +89,7 @@ class AEClaudeProvider(AEBaseProvider):
             str: 提取的文本内容
         """
         if isinstance(result, dict):
-            # Claude API 标准响应格式: {"content": [{"type": "text", "text": "..."}]}
+            # Claude/Anthropic API 标准响应格式: {"content": [{"type": "text", "text": "..."}]}
             if "content" in result:
                 content = result["content"]
                 if isinstance(content, list) and len(content) > 0:
@@ -112,16 +116,15 @@ class AEClaudeProvider(AEBaseProvider):
     def get_status(self) -> dict:
         """获取提供商状态"""
         status = super().get_status()
-        if self.claude_model:
-            status["model_status"] = self.claude_model.get_status()
+        if self.zhipu_model:
+            status["model_status"] = self.zhipu_model.get_status()
         return status
 
     def cleanup(self):
-        """清理 Claude 资源"""
-        if self.claude_model is not None:
-            self.claude_model.cleanup()
-            self.claude_model = None
+        """清理 Zhipu 资源"""
+        if self.zhipu_model is not None:
+            self.zhipu_model.cleanup()
+            self.zhipu_model = None
 
         self.is_loaded = False
         print(f"🧹 {self.name} cleaned up")
-

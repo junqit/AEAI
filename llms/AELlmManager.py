@@ -11,7 +11,8 @@ from llm_providers import (
     AEClaudeProvider,
     AEChatGPTProvider,
     AEDeepSeekProvider,
-    AEGeminiProvider
+    AEGeminiProvider,
+    AEZhipuProvider
 )
 
 class AELlmManager:
@@ -54,7 +55,8 @@ class AELlmManager:
         self.providers = {
             LLMType.CLAUDE: AEClaudeProvider(),
             LLMType.CHATGPT: AEChatGPTProvider(),
-            LLMType.DEEPSEEK: AEDeepSeekProvider()
+            LLMType.DEEPSEEK: AEDeepSeekProvider(),
+            LLMType.ZHIPU: AEZhipuProvider()
             # LLMType.GEMINI: AEGeminiProvider()
         }
 
@@ -76,7 +78,8 @@ class AELlmManager:
             "claude": LLMType.CLAUDE,
             "chatgpt": LLMType.CHATGPT,
             "deepseek": LLMType.DEEPSEEK,
-            "gemini": LLMType.GEMINI
+            "gemini": LLMType.GEMINI,
+            "zhipu": LLMType.ZHIPU
         }
         self.llm_type = llm_type_map.get(llm_type_str.lower(), LLMType.CLAUDE)
 

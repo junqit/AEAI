@@ -52,8 +52,6 @@ class AEGeminiProvider(AEBaseProvider):
             logger.error(f"❌ {self.name} 加载失败: {str(e)}", exc_info=True)
             raise
 
-    MAX_TOKENS = 32000
-
     def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
         try:
             if not self.is_loaded:
@@ -61,10 +59,10 @@ class AEGeminiProvider(AEBaseProvider):
 
             messages = question.messages
 
+            # 只传 messages 与 level，模型名/max_tokens/temperature 由 AEGeminiModel 内部决定
             response = self.gemini_model.generate(
                 messages=messages,
-                max_tokens=self.MAX_TOKENS,
-                temperature=0.7,
+                level=level,
             )
 
             # 4. 验证响应是否有效

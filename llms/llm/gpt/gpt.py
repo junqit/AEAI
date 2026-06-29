@@ -7,13 +7,24 @@ import requests
 import logging
 from typing import Optional, List, Dict, Any
 
+from AEAiLevel import AEAiLevel
+
 logger = logging.getLogger(__name__)
 
 
 class AEGPTModel:
     """GPT API 模型封装类"""
 
-    MODEL = "ppio/pa/gpt-5.5"
+    # AI 级别 → 模型名映射，由模型内部自行判断
+    MODEL_MAP = {
+        AEAiLevel.default: "ppio/pa/gpt-5.5",
+        AEAiLevel.middle: "ppio/pa/gpt-5.5",
+        AEAiLevel.high: "ppio/pa/gpt-5.5",
+    }
+    DEFAULT_MODEL = "ppio/pa/gpt-5.5"
+    # max_tokens 按 LLM 不同在模型内部设置
+    MAX_TOKENS = 128000
+
     BASE_URL = "http://model.mify.ai.srv/anthropic"
     AUTH_TOKEN = "sk-psTx7IFlW79l67Or8JqLsBL0CqCtkhVlHoOMfRMts1Ugkdiu"
 
@@ -21,6 +32,18 @@ class AEGPTModel:
         self.base_url = self.BASE_URL
         self.auth_token = self.AUTH_TOKEN
         self.is_loaded = False
+
+    def _get_model_by_level(self, level: AEAiLevel) -> str:
+        """
+        根据 AI 级别选择 GPT 模型名（模型内部自行判断）
+
+        Args:
+            level: AI 级别
+
+        Returns:
+            str: 模型名称
+        """
+        return self.MODEL_MAP.get(level, self.DEFAULT_MODEL)
 
     def load(self):
         if self.is_loaded:
@@ -35,12 +58,15 @@ class AEGPTModel:
 
     def generate(
         self,
-        model: str,
         messages: List[Dict[str, str]],
-        max_tokens: int = 128000,
+        level: AEAiLevel,
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
+
+        # 模型名与 max_tokens 均由模型内部根据 level 自行决定
+        model = self._get_model_by_level(level)
+        max_tokens = self.MAX_TOKENS
 
         from datetime import datetime
         start_time = datetime.now()
@@ -114,13 +140,11 @@ def cleanup_gpt_model():
 
 
 def call_gpt_api(
-    model: str,
     messages: list,
-    max_tokens: int = 128000,
+    level: AEAiLevel,
 ):
     gpt_model = get_gpt_model()
     return gpt_model.generate(
-        model=model,
         messages=messages,
-        max_tokens=max_tokens,
+        level=level,
     )

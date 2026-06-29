@@ -7,6 +7,8 @@ import json
 import logging
 from typing import Optional, List, Dict, Any
 
+from AEAiLevel import AEAiLevel
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +20,28 @@ logger = logging.getLogger(__name__)
 
 class AEClaudeModel:
     """Claude API 模型封装类"""
+
+    # AI 级别 → 模型名映射，由模型内部自行判断
+    MODEL_MAP = {
+        AEAiLevel.default: "ppio/pa/claude-haiku-4-5-20251001",
+        AEAiLevel.middle: "ppio/pa/claude-sonnet-4-5-20250929",
+        AEAiLevel.high: "ppio/pa/claude-opus-4-6"
+    }
+    DEFAULT_MODEL = "ppio/pa/claude-haiku-4-5-20251001"
+    # max_tokens 按 LLM 不同在模型内部设置
+    MAX_TOKENS = 128000
+
+    def _get_model_by_level(self, level: AEAiLevel) -> str:
+        """
+        根据 AI 级别选择 Claude 模型名（模型内部自行判断）
+
+        Args:
+            level: AI 级别
+
+        Returns:
+            str: 模型名称
+        """
+        return self.MODEL_MAP.get(level, self.DEFAULT_MODEL)
 
     def __init__(self, base_url: str = None, auth_token: str = None):
         """
@@ -62,11 +86,14 @@ class AEClaudeModel:
     def generate(
         self,
         messages: List[Dict[str, str]],
-        model: str,
-        max_tokens: int = 4096,
+        level: AEAiLevel,
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
+
+        # 模型名与 max_tokens 均由模型内部根据 level 自行决定
+        model = self._get_model_by_level(level)
+        max_tokens = self.MAX_TOKENS
 
         from datetime import datetime
         start_time = datetime.now()
@@ -94,7 +121,7 @@ class AEClaudeModel:
             # 7. 处理响应
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"✅ Claude API 调用成功 - elapsed={elapsed:.2f}s, status=200")
+                logger.info(f"✅ Claude API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200")
                 logger.debug(f"📄 响应内容: {str(result)[:500]}...")
                 return result
             else:
@@ -168,14 +195,12 @@ def cleanup_claude_model():
 
 def call_claude_api(
     messages: list,
-    model: str,
-    max_tokens: int = 4096,
+    level: AEAiLevel,
 ):
     claude_model = get_claude_model()
     return claude_model.generate(
         messages=messages,
-        model=model,
-        max_tokens=max_tokens,
+        level=level,
     )
 
 
