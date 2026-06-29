@@ -1,7 +1,7 @@
 """测试 Context 管理器"""
 
 from Context import Context, ContextManager
-from llms.question.AEQuestion import LLMType
+from llms.question.AEQuestion import AELLMType
 from llms.AEAiLevel import AEAiLevel
 
 
@@ -45,11 +45,11 @@ def test_context_instance():
     print("测试 Context 实例")
     print("=" * 50)
 
-    context = Context("test_user", LLMType.CLAUDE, AEAiLevel.default)
+    context = Context("test_user", AELLMType.CLAUDE, AEAiLevel.default)
 
     # 测试属性
     assert context.session_id == "test_user"
-    assert context.llm_type == LLMType.CLAUDE
+    assert context.llm_type == AELLMType.CLAUDE
     assert context.level == AEAiLevel.default
     assert len(context.messages) == 0
     print("✓ Context 属性初始化正确")

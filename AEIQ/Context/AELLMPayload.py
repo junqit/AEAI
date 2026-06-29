@@ -1,26 +1,13 @@
 from dataclasses import dataclass
-from enum import Enum
 from typing import List, Dict
 
-
-class LLMType(Enum):
-    CLAUDE = "claude"
-    CHATGPT = "chatgpt"
-    DEEPSEEK = "deepseek"
-    GEMINI = "gemini"
-    ZHIPU = "zhipu"
-
-
-class AEAiLevel(Enum):
-    default = 1
-    middle = 2
-    high = 3
+from common.aellm_enums import AELLMType, AEAiLevel
 
 
 @dataclass
 class AELLMPayload:
     messages: List[Dict[str, str]]
-    llm_type: LLMType = LLMType.CHATGPT
+    llm_type: AELLMType = AELLMType.ZHIPU
     level: AEAiLevel = AEAiLevel.default
 
     def to_dict(self) -> dict:

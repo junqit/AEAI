@@ -5,7 +5,7 @@ AELlmManager - 统一的 LLM 管理器
 """
 import os
 from typing import Optional, Dict, Any
-from question.AEQuestion import LLMType, AEQuestion
+from question.AEQuestion import AELLMType, AEQuestion
 from AEAiLevel import AEAiLevel
 from llm_providers import (
     AEClaudeProvider,
@@ -41,9 +41,12 @@ class AELlmManager:
         # 初始化所有 Provider
         self._init_providers()
 
-        # 从环境变量获取默认 LLM 类型
+        # 从环境变量获取默认 LLM 类型（直接用枚举值反查，无需维护字符串映射表）
         default_llm = os.getenv("DEFAULT_LLM_TYPE", "claude").lower()
-        self._set_llm_type(default_llm)
+        try:
+            self.llm_type = AELLMType(default_llm)
+        except ValueError:
+            self.llm_type = AELLMType.CLAUDE
 
         print(f"AELlmManager initialized with LLM type: {self.llm_type.value}")
 
@@ -53,11 +56,11 @@ class AELlmManager:
 
         # 实例化所有 Provider
         self.providers = {
-            LLMType.CLAUDE: AEClaudeProvider(),
-            LLMType.CHATGPT: AEChatGPTProvider(),
-            LLMType.DEEPSEEK: AEDeepSeekProvider(),
-            LLMType.ZHIPU: AEZhipuProvider()
-            # LLMType.GEMINI: AEGeminiProvider()
+            AELLMType.CLAUDE: AEClaudeProvider(),
+            AELLMType.CHATGPT: AEChatGPTProvider(),
+            AELLMType.DEEPSEEK: AEDeepSeekProvider(),
+            AELLMType.ZHIPU: AEZhipuProvider()
+            # AELLMType.GEMINI: AEGeminiProvider()
         }
 
         # 加载每个 Provider（如果需要预加载）
@@ -71,17 +74,6 @@ class AELlmManager:
                 # 继续加载其他 Provider，不中断整个初始化过程
 
         print("All providers initialized.")
-
-    def _set_llm_type(self, llm_type_str: str):
-        """设置 LLM 类型"""
-        llm_type_map = {
-            "claude": LLMType.CLAUDE,
-            "chatgpt": LLMType.CHATGPT,
-            "deepseek": LLMType.DEEPSEEK,
-            "gemini": LLMType.GEMINI,
-            "zhipu": LLMType.ZHIPU
-        }
-        self.llm_type = llm_type_map.get(llm_type_str.lower(), LLMType.CLAUDE)
 
     def generate(self, question: AEQuestion) -> Dict[str, Any]:
         """
@@ -148,20 +140,20 @@ class AELlmManager:
             "providers": providers_status
         }
 
-    def set_llm_type(self, llm_type: LLMType):
+    def set_llm_type(self, llm_type: AELLMType):
         """动态切换 LLM 类型"""
         self.llm_type = llm_type
 
         # 如果切换到 Gemini，确保模型已加载
-        if llm_type == LLMType.GEMINI:
-            gemini_provider = self.providers.get(LLMType.GEMINI)
+        if llm_type == AELLMType.GEMINI:
+            gemini_provider = self.providers.get(AELLMType.GEMINI)
             if gemini_provider and not gemini_provider.is_loaded:
                 print("Loading Gemini model for switched LLM type...")
                 gemini_provider.load()
 
         print(f"LLM type switched to: {llm_type.value}")
 
-    def cleanup_provider(self, llm_type: LLMType):
+    def cleanup_provider(self, llm_type: AELLMType):
         """清理指定 Provider 的资源"""
         provider = self.providers.get(llm_type)
         if provider:

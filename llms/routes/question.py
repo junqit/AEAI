@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from question.AEQuestion import LLMType, AEQuestion, AEAiLevel
+from question.AEQuestion import AELLMType, AEQuestion, AEAiLevel
 from AELlmManager import get_ae_llm_manager
 
 # 配置日志
@@ -84,7 +84,7 @@ router = APIRouter(prefix="/aellms/question", tags=["question"])
 def _process_llm_sync(
     request_id: str,
     messages: List[Dict[str, Any]],
-    llm_type: LLMType,
+    llm_type: AELLMType,
     level: AEAiLevel,
 ) -> Dict[str, Any]:
     """
@@ -151,10 +151,11 @@ async def process_question(request: AEQuestionRequest):
     try:
         # 解析 LLM 类型
         llm_type_map = {
-            "claude": LLMType.CLAUDE,
-            "chatgpt": LLMType.CHATGPT,
-            "deepseek": LLMType.DEEPSEEK,
-            "gemini": LLMType.GEMINI
+            "claude": AELLMType.CLAUDE,
+            "chatgpt": AELLMType.CHATGPT,
+            "deepseek": AELLMType.DEEPSEEK,
+            "gemini": AELLMType.GEMINI,
+            "zhipu": AELLMType.ZHIPU
         }
         llm_type = llm_type_map.get(request.llm_type.lower())
         if not llm_type:

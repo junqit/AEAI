@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+# 添加父目录(Service/)到路径，使共享包 common 可被导入
+# 须早于会间接导入 AELLMPayload 的 import（AEContextManager → AELLMPayload → common）
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from AEIQConfig import config

@@ -9,6 +9,8 @@ from pathlib import Path
 
 # 添加当前目录到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent))
+# 添加父目录(Service/)到路径，使共享包 common 可被导入
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware

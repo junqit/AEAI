@@ -1,21 +1,10 @@
-from enum import Enum
-from typing import List, Dict, Any
 from dataclasses import dataclass
+from typing import List, Dict, Any
+from common.aellm_enums import AELLMType, AEAiLevel  # noqa: F401  (re-export)
 
-class LLMType(Enum):
-    CLAUDE = "claude"
-    CHATGPT = "chatgpt"
-    DEEPSEEK = "deepseek"
-    GEMINI = "gemini"
-    ZHIPU = "zhipu"
-
-class AEAiLevel(Enum):
-    default = 1
-    middle = 2
-    high = 3
 
 @dataclass
 class AEQuestion:
     messages: List[Dict[str, Any]]
-    llm_type: LLMType
+    llm_type: AELLMType
     level: AEAiLevel = AEAiLevel.default
