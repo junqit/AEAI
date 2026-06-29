@@ -124,8 +124,6 @@ class AEDirectoryContext(AEBaseContext):
         """将当前系统信息和脚本信息组装为 role prompt"""
         sys_info = (
             f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
-            f"Node: {platform.node()}\n"
-            f"CWD: {os.getcwd()}"
         )
 
         scripts = self._discover_scripts()

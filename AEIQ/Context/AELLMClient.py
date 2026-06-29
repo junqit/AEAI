@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Callable, Any
 
 import httpx
 
@@ -21,18 +20,18 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
-async def send_llm_request(payload: AELLMPayload, callback: Callable[[str], Any]) -> None:
-    """异步发送 LLM 请求，支持并发复用连接池"""
+async def send_llm_request(payload: AELLMPayload) -> str:
+    """异步发送 LLM 请求，支持并发复用连接池，返回 LLM 回复文本"""
     try:
         client = _get_client()
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_dict(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
         logger.info(f"LLM response received, reply_length={len(reply) if reply else 0}")
-        callback(reply)
+        return reply
     except Exception as e:
         logger.error(f"LLM request failed: {e}")
-        callback("")
+        return ""
 
 
 async def close_client():

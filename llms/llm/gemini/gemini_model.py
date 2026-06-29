@@ -10,6 +10,7 @@ from mlx_lm import load, generate
 from mlx_lm.sample_utils import make_sampler
 
 from AEAiLevel import AEAiLevel
+from common.llm_utils import split_system_messages
 
 # 配置日志
 logging.basicConfig(
@@ -104,12 +105,17 @@ class AEGeminiModel:
         max_tokens = self.MAX_TOKENS
         temperature = self.TEMPERATURE
 
-        logger.info(f"🔄 开始生成文本 - messages_count={len(messages)}, max_tokens={max_tokens}")
+        # 将 system/context 角色消息合并为一条 system 消息（mlx chat template 认 system 角色）
+        system_text, chat_messages = split_system_messages(messages)
+
+        logger.info(f"🔄 开始生成文本 - messages_count={len(chat_messages)}, max_tokens={max_tokens}")
 
         try:
-            # 1. 构建完整的 messages
+            # 1. 构建完整的 messages（system 在前）
             formatted_messages = []
-            formatted_messages.extend(messages)
+            if system_text:
+                formatted_messages.append({"role": "system", "content": system_text})
+            formatted_messages.extend(chat_messages)
             logger.info(f"💬 Messages: {formatted_messages}")
 
             prompt = self.tokenizer.apply_chat_template(

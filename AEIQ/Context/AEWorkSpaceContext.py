@@ -30,33 +30,31 @@ class AEWorkSpaceContext(AEBaseContext):
 
         payload = AELLMPayload(
             messages=[
-                {"role": AERole.CONTEXT.value, "content": f"当前工作目录: {self.space}"},
+                {"role": AERole.CONTEXT.value, "content": self.space},
                 {"role": AERole.USER.value, "content": question.content},
             ],
         )
 
-        def on_reply(reply: str):
-            logger.info(f"on_reply called, reply_length={len(reply) if reply else 0}")
-            if reply:
-                response = AENetRsp(
-                    code=AENetRspCode.success,
-                    rsp={"reply": reply},
-                    req=request.req,
-                    cont=request.cont,
-                    user=request.user
-                )
-            else:
-                response = AENetRsp(
-                    code=AENetRspCode.serverError,
-                    rsp={"error": "LLM returned empty response"},
-                    req=request.req,
-                    cont=request.cont,
-                    user=request.user
-                )
-            self.send_response(response)
-            logger.info(f"send_response completed, code={response.code}")
-
-        await self.send_llm_request(payload, on_reply)
+        reply = await self.send_llm_request(payload)
+        logger.info(f"on_reply called, reply_length={len(reply) if reply else 0}")
+        if reply:
+            response = AENetRsp(
+                code=AENetRspCode.success,
+                rsp={"reply": reply},
+                req=request.req,
+                cont=request.cont,
+                user=request.user
+            )
+        else:
+            response = AENetRsp(
+                code=AENetRspCode.serverError,
+                rsp={"error": "LLM returned empty response"},
+                req=request.req,
+                cont=request.cont,
+                user=request.user
+            )
+        self.send_response(response)
+        logger.info(f"send_response completed, code={response.code}")
 
     async def on_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None

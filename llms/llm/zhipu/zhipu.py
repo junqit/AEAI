@@ -11,6 +11,7 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from AEAiLevel import AEAiLevel
+from common.llm_utils import split_system_messages
 
 # 配置日志
 logging.basicConfig(
@@ -99,6 +100,9 @@ class AEZhipuModel:
         model = self._get_model_by_level(level)
         max_tokens = self.MAX_TOKENS
 
+        # 将 system/context 角色消息提取为顶层 system，避免出现连续 user 消息
+        system_text, messages = split_system_messages(messages)
+
         from datetime import datetime
         start_time = datetime.now()
 
@@ -116,6 +120,8 @@ class AEZhipuModel:
                 "max_tokens": max_tokens,
                 "messages": messages
             }
+            if system_text:
+                payload["system"] = system_text
 
             # 发送请求
             response = requests.post(url, headers=headers, json=payload, timeout=60)
