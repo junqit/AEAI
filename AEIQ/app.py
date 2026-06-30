@@ -1,4 +1,11 @@
 import sys
+
+# 运行环境要求：Python >= 3.7（dict 插入有序等特性依赖），低于此版本中止运行
+if sys.version_info < (3, 7):
+    raise SystemExit(
+        "需要 Python >= 3.7，当前版本 %s，无法运行" % ".".join(map(str, sys.version_info[:3]))
+    )
+
 from pathlib import Path
 # 添加父目录(Service/)到路径，使共享包 common 可被导入
 # 须早于会间接导入 AELLMPayload 的 import（AEContextManager → AELLMPayload → common）

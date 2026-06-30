@@ -5,6 +5,13 @@ AI Agent with Router, Skills, MCP, RAG
 """
 
 import sys
+
+# 运行环境要求：Python >= 3.7（dict 插入有序等特性依赖），低于此版本中止运行
+if sys.version_info < (3, 7):
+    raise SystemExit(
+        "需要 Python >= 3.7，当前版本 %s，无法运行" % ".".join(map(str, sys.version_info[:3]))
+    )
+
 from pathlib import Path
 
 # 添加当前目录到 Python 路径

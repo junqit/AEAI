@@ -172,4 +172,4 @@ class AEDirectoryContext(AEBaseContext):
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
         from Assistant.AERole import AERole
-        return {"role": AERole.CONTEXT.value, "content": prompt}
+        return {"role": AERole.SYSTEM.value, "content": prompt}

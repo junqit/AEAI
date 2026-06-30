@@ -1,0 +1,6 @@
+[project]
+name = "ae-agents"
+version = "2.0.0"
+description = "AI Agent with Router, Skills, MCP, RAG"
+# 工程依赖 Python 3.7+（dict 插入有序等特性），低于此版本无法运行
+requires-python = ">=3.7"
