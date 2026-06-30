@@ -2,9 +2,9 @@
 AEFlowDelegate - Flow 内部信息向外流转的委托协议
 
 Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / ContextManager）交互：
-  1. get_flow_input_schema  获取输入数据结构
-  2. flow_llm               发送 AELLMPayload 调用 LLM
-  3. flow_complete          Flow 完成，按 input_schema 结构返回 map
+  1. next_flow_input_schema  获取输入数据结构
+  2. flow_llm                发送 AELLMPayload 调用 LLM
+  3. flow_complete           Flow 完成，按 input_schema 结构返回 map
 
 任何类只要实现以下方法即视为符合协议，无需继承。
 """
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class AEFlowDelegate(Protocol):
     """Flow 委托协议：Flow 内部信息向外流转的出口"""
 
-    def get_flow_input_schema(self, ident: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def next_flow_input_schema(self, ident: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         获取输入数据结构。
 

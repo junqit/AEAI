@@ -5,6 +5,7 @@ AEFlowInterface - Flow 接口协议
   - ident:       flow 标识（属性）
   - inputSchema(): 输入参数数据结构（方法），flow 在不同状态下可返回不同结构
   - delegate:     AEFlowDelegate，Flow 内部信息向外流转的出口
+  - receiveInputSchemaData(): 接收按 inputSchema 组织的输入数据
 """
 from typing import Protocol, runtime_checkable, TYPE_CHECKING
 
@@ -36,5 +37,16 @@ class AEFlowInterface(Protocol):
 
         Args:
             flow: 待添加的 flow，须符合 AEFlowInterface 协议
+        """
+        ...
+
+    def receiveInputSchemaData(self, data: dict) -> None:
+        """
+        接收按 inputSchema 组织的输入数据。
+
+        Flow 在执行前由外部注入其输入数据，供后续 build_prompt / 生成等使用。
+
+        Args:
+            data: 输入数据，结构应与 inputSchema() 返回的 schema 对应
         """
         ...
