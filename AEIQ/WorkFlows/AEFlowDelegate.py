@@ -8,25 +8,26 @@ Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / C
 
 任何类只要实现以下方法即视为符合协议，无需继承。
 """
-from typing import Any, Dict, Optional, Protocol, TYPE_CHECKING, runtime_checkable
+from typing import Optional, Protocol, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
     from Context.AELLMPayload import AELLMPayload
+    from .AEFlowInfo import AEFlowInfo
 
 
 @runtime_checkable
 class AEFlowDelegate(Protocol):
     """Flow 委托协议：Flow 内部信息向外流转的出口"""
 
-    def next_flow_input_schema(self, ident: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def next_flow_input_schema(self, info: Optional['AEFlowInfo'] = None) -> Optional['AEFlowInfo']:
         """
-        获取输入数据结构。
+        获取子 flow 的元信息。
 
         Args:
-            ident: 指定流的标识；为 None / 空时返回下个工作流的输入参数结构
+            info: 指定 flow 的元信息（用其 ident 查找）；为 None / 空时返回下个工作流的元信息
 
         Returns:
-            输入数据结构（JSON Schema 或结构描述）；无可用时返回 None
+            AEFlowInfo：flow 元信息（含 ident / input_schema / out_schema）；无可用时返回 None
         """
         ...
 
@@ -42,14 +43,11 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def flow_complete(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def flow_complete(self, result: 'AEFlowInfo') -> None:
         """
-        Flow 完成，根据获取到的 input_schema 结构返回 map 结构。
+        Flow 完成通知：result 为完成 flow 的元信息（AEFlowInfo）。
 
         Args:
-            result: Flow 产出的数据
-
-        Returns:
-            按 input_schema 结构组织后的 map
+            result: 完成 flow 的元信息（含 ident）
         """
         ...

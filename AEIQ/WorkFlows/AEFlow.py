@@ -12,9 +12,10 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
   - flow_llm()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，按下游 inputSchema 整理结果
 """
-import uuid
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
+
+from .AEFlowInfo import AEFlowInfo
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
@@ -22,13 +23,14 @@ if TYPE_CHECKING:
     from Context.AELLMPayload import AELLMPayload
 
 
-class AEFlow:
-    """Flow 基类，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
+class AEFlow(AEFlowInfo):
+    """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
-    def __init__(self):
-        # ----- AEFlowInterface 属性 -----
-        # ident 由 flow 自身生成（UUID），不由外部传入
-        self.ident: str = uuid.uuid4().hex
+    def __init__(self, ident: Optional[str] = None):
+        # ----- AEFlowInfo 属性 -----
+        # ident 可由外部传入，为空则 AEFlowInfo 内部自动生成（UUID）；外部只读；
+        # input_schema / out_schema / outResult 不在初始化阶段配置，后续按需设置
+        super().__init__(ident=ident)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
         # ----- 内部状态 -----
@@ -41,35 +43,39 @@ class AEFlow:
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
-    def inputSchema(self) -> dict:
+    def inputSchema(self) -> "AEFlowInfo":
         """
-        返回当前状态下的输入参数数据结构。
+        返回当前 flow 的元信息（AEFlowInfo）。
 
-        子类按自身状态覆写，可返回不同的数据结构。
+        AEFlow 自身即 AEFlowInfo（含 ident / input_schema / out_schema）；
+        子类可覆写以按状态返回不同元信息。
 
         Returns:
-            dict: 输入参数数据结构
+            AEFlowInfo: flow 元信息
         """
-        raise NotImplementedError("子类必须实现 inputSchema()")
+        return self
 
-    def receiveInputSchemaData(self, data: dict) -> None:
+    def receiveInputSchemaData(self, data: "AEFlowInfo") -> None:
         """
-        接收输入数据并按 inputSchema() 校验（不存储）。
+        接收输入源的 AEFlowInfo，校验其 out_schema 覆盖本 flow input_schema 的 required 字段（不存储）。
 
-        若 inputSchema() 返回 JSON-Schema 形态（含 properties），校验 required 字段，
-        缺失则抛 ValueError；否则不做处理。子类可覆写以定制校验逻辑。
+        若本 flow 的 input_schema 与输入源的 out_schema 均为 JSON-Schema 形态（含 properties），
+        校验本 flow required 字段是否在输入源 out_schema 的 properties 中，缺失则抛 ValueError；
+        否则不做处理。子类可覆写以定制校验逻辑。
 
         Args:
-            data: 输入数据，结构应与 inputSchema() 返回的 schema 对应
+            data: 输入源的 AEFlowInfo（其 out_schema 描述上游产出结构）
 
         Raises:
-            ValueError: 缺少 required 字段时
+            ValueError: 输入源 out_schema 缺少本 flow 必填字段时
         """
-        schema = self.inputSchema()
-        if isinstance(schema, dict) and isinstance(data, dict) and "properties" in schema:
-            missing = [r for r in schema.get("required", []) if r not in data]
+        my_schema = self.input_schema
+        src_schema = data.out_schema if data is not None else None
+        if isinstance(my_schema, dict) and isinstance(src_schema, dict) and "properties" in src_schema:
+            src_props = set(src_schema["properties"].keys())
+            missing = [r for r in my_schema.get("required", []) if r not in src_props]
             if missing:
-                raise ValueError(f"输入数据缺少必填字段: {missing}")
+                raise ValueError(f"输入源 out_schema 缺少本 flow 必填字段: {missing}")
 
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
@@ -86,27 +92,25 @@ class AEFlow:
 
     # ==================== AEFlowDelegate 实现 ====================
 
-    def next_flow_input_schema(self, ident: Optional[str] = None) -> Optional[dict]:
+    def next_flow_input_schema(self, info: "Optional[AEFlowInfo]" = None) -> "Optional[AEFlowInfo]":
         """
-        获取输入数据结构。
+        获取子 flow 的元信息（AEFlowInfo）。
 
-        - ident 非空：返回该子 flow 的 inputSchema
-        - ident 为空：返回本层下一个（current+1）子 flow 的 inputSchema；
-          本层无下一个时，向上委托外层 delegate 继续查找
+        - info 非空：按 info.ident 返回该子 flow
+        - info 为空：返回本层下一个（current+1）子 flow；本层无下一个时向上委托外层 delegate
 
         Args:
-            ident: 指定子 flow 的 ident；为 None 时取下一个
+            info: 指定 flow 的元信息（用其 ident 查找）；为 None 时取下一个
 
         Returns:
-            dict: 输入参数数据结构；无可用时返回 None
+            AEFlowInfo: 子 flow 元信息（AEFlow 即 AEFlowInfo）；无可用时返回 None
         """
-        if ident:
-            flow = self._flows.get(ident)
-            return flow.inputSchema() if flow is not None else None
+        if info is not None:
+            return self._flows.get(info.ident)
         order = list(self._flows.keys())
         nxt = self._current_index + 1
         if 0 <= nxt < len(order):
-            return self._flows[order[nxt]].inputSchema()
+            return self._flows[order[nxt]]
         # 本层无下一个子 flow：向上委托外层 delegate
         if self.delegate is not None:
             return self.delegate.next_flow_input_schema()
@@ -132,21 +136,20 @@ class AEFlow:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         return await self.delegate.flow_llm(payload)
 
-    def flow_complete(self, result: dict) -> dict:
+    def flow_complete(self, result: "AEFlowInfo") -> None:
         """
-        子 flow 完成：从 result 取 ident 匹配 _flows 内的工作流，
-        命中则把 result 传给该 flow 的 receiveInputSchemaData（按其 inputSchema 校验）；并推进序号。
+        Flow 完成通知：result 为完成 flow 的元信息（AEFlowInfo）。
+
+        按 result.ident 匹配 _flows：
+          - 命中（本层直接子 flow 完成）→ 推进当前子 flow 序号
+          - 未命中 → 向上委托 delegate.flow_complete(result)
+        无返回值。
 
         Args:
-            result: 当前子 flow 产出的数据，需含 ident 指向下一个工作流
-
-        Returns:
-            dict: 原始 result
+            result: 完成 flow 的元信息（含 ident）
         """
-        ident = result.get("ident") if isinstance(result, dict) else None
-        if ident:
-            target = self._flows.get(ident)
-            if target is not None:
-                target.receiveInputSchemaData(result)
-        self._current_index += 1
-        return result
+        ident = result.ident
+        if ident and ident in self._flows:
+            self._current_index += 1
+        elif self.delegate is not None:
+            self.delegate.flow_complete(result)
