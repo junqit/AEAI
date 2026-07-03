@@ -44,6 +44,9 @@ class AEFlow(AEFlowInfo):
         super().__init__(ident=ident)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
+        # ----- 角色信息 -----
+        self.title: str = ""           # 职称
+        self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
         self._current_index: int = 0                    # 当前执行的子 flow 序号

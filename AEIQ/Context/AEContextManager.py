@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Callable, Any, TYPE_CHECKING
 import asyncio
 import threading
 import logging
+import json
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetRsp import AENetRspCode
@@ -81,21 +82,70 @@ class AEContextManager:
             logger.info(f"Sending response: code={response.code}, rsp_size={len(response.to_bytes())}")
             self._socket_interface.send_response(response)
 
-    async def send_llm_request(self, payload) -> str:
-        """异步发送 LLM 请求，发送前注入已存在的 DirectoryContext 的 system prompt，返回 LLM 回复"""
+    def send_llm_request(self, payload) -> str:
+        """发送 LLM 请求，发送前注入已存在的 DirectoryContext 的 system prompt；
+        收到回复后解析 JSON 的 ident 字段，把数据传给对应 Context 处理，返回 LLM 回复"""
         from .AELLMClient import send_llm_request
 
         # 仅获取已存在的 DirectoryContext；不存在则不注入 role prompt
         directory_ctx = self._find_any_context_by_type(AEContextType.directory)
         if directory_ctx:
             role_prompt = directory_ctx.build_role_prompt()
-            payload.messages.insert(0, role_prompt)
+            # payload.messages.insert(0, role_prompt)
             logger.info(f"✅ 注入 DirectoryContext role prompt - ident={directory_ctx.ident}")
         else:
             logger.warning(f"⚠️ 未找到 DirectoryContext，跳过 role prompt 注入 - manager={id(self)}")
 
-        logger.info(f"📤 发送 LLM 请求 - payload={payload.to_dict()}")
-        return await send_llm_request(payload)
+        reply = send_llm_request(payload)
+        # 解析回复 JSON，按 ident 路由到对应 Context
+        self._dispatch_llm_response(reply)
+        return reply
+
+    def _dispatch_llm_response(self, reply: str) -> None:
+        """解析 LLM 回复 JSON，按其中的 ident 把数据传给对应 Context"""
+        if not reply:
+            logger.warning("LLM 回复为空，跳过 dispatch")
+            return
+        try:
+            data = json.loads(self._strip_code_fence(reply))
+        except (ValueError, TypeError) as e:
+            logger.error(f"LLM 回复非合法 JSON，无法解析 ident: {e}, reply={reply!r}")
+            return
+        if not isinstance(data, dict):
+            logger.error(f"LLM 回复非 JSON 对象: {reply!r}")
+            return
+        ident = data.get("ident")
+        if not ident:
+            logger.error(f"LLM 回复缺少 ident 字段: {data!r}")
+            return
+        context = self._find_context_by_ident(ident)
+        if context is None:
+            logger.error(f"未找到 ident={ident!r} 对应的 Context，丢弃 LLM 回复")
+            return
+        context.receive_llm_response(data)
+
+    @staticmethod
+    def _strip_code_fence(text: str) -> str:
+        """去掉 LLM 回复可能包裹的 ```json ... ``` 代码块围栏"""
+        t = text.strip()
+        if t.startswith("```"):
+            lines = t.splitlines()
+            # 去掉首行 ```json
+            if lines:
+                lines = lines[1:]
+            # 去掉末尾 ```
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            t = "\n".join(lines)
+        return t
+
+    def _find_context_by_ident(self, context_ident: str) -> Optional[AEBaseContext]:
+        """跨所有 user 按 ident 查找 Context"""
+        for user_map in self._user_contexts.values():
+            context = user_map.get(context_ident)
+            if context is not None:
+                return context
+        return None
 
     def _find_any_context_by_type(self, context_type: AEContextType) -> Optional[AEBaseContext]:
         """跨所有 user 查找指定类型的 context，附带诊断日志"""

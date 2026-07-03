@@ -62,10 +62,21 @@ class AEBaseContext:
             raise ValueError("Context delegate is not set")
         self.delegate.send_response(response)
 
-    async def send_llm_request(self, payload) -> str:
+    def send_llm_request(self, payload) -> str:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
-        return await self.delegate.send_llm_request(payload)
+        return self.delegate.send_llm_request(payload)
+
+    def receive_llm_response(self, data: dict) -> None:
+        """
+        接收 LLM 回复数据（AEContextManager 已按 ident 路由到本 Context）。
+
+        基类默认仅记录日志；子类覆写以处理收到的数据。
+
+        Args:
+            data: LLM 回复解析后的 JSON（含 ident 及 out_schema 填充结果）
+        """
+        logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
 
     async def handle_request(self, request: AENetReq) -> None:
         path = request.req.path if request.req else None

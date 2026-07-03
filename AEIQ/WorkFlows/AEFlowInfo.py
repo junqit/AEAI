@@ -5,6 +5,7 @@ AEFlow 继承本类以获得这些元信息属性。
 创建所需数据结构见 CREATE_SCHEMA：当前仅需 ident（创建时必填，不可为空）；
 input_schema / out_schema / outResult 不在创建时配置，后续按需设置。
 """
+import uuid
 from typing import Any, Dict, Optional
 
 
@@ -21,10 +22,16 @@ class AEFlowInfo:
     }
 
     def __init__(self, ident: str):
-        # ident 创建时必填，不可为空
+        # ident 长度为 0 时内部生成
         if not ident:
-            raise ValueError("创建时 ident 不可为空")
+            ident = uuid.uuid4().hex
+
         self._ident: str = ident
+
+                # ----- 角色信息 -----
+        self.title: str = ""           # 职称
+        self.responsibility: str = ""  # 职责要求
+
         # input_schema / out_schema / outResult 不在初始化阶段配置，后续可设置
         self.input_schema: Optional[dict] = None
         self.out_schema: Optional[dict] = None
