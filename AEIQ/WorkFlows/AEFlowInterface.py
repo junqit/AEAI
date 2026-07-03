@@ -41,14 +41,14 @@ class AEFlowInterface(Protocol):
         """
         ...
 
-    def receiveInputSchemaData(self, data: 'AEFlowInfo') -> None:
+    def receiveInputSchemaData(self, data: dict) -> None:
         """
-        接收输入源的元信息（AEFlowInfo）。
+        接收输入数据（map），内部解析并按 inputSchema 校验。
 
-        Flow 在执行前由外部注入输入源的 AEFlowInfo（其 out_schema 描述上游产出结构），
-        供校验 / build_prompt / 生成等使用。
+        Flow 在执行前由外部注入输入数据 map，方法内部解析该 map（如按 inputSchema 校验
+        required 字段），供后续 build_prompt / 生成等使用。
 
         Args:
-            data: 输入源的 AEFlowInfo
+            data: 输入数据 map
         """
         ...

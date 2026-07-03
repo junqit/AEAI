@@ -12,10 +12,13 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
   - flow_llm()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，按下游 inputSchema 整理结果
 """
+import logging
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
@@ -26,9 +29,9 @@ if TYPE_CHECKING:
 class AEFlow(AEFlowInfo):
     """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
-    def __init__(self, ident: Optional[str] = None):
+    def __init__(self, ident: str):
         # ----- AEFlowInfo 属性 -----
-        # ident 可由外部传入，为空则 AEFlowInfo 内部自动生成（UUID）；外部只读；
+        # ident 创建时必填（不可为空）；外部只读；
         # input_schema / out_schema / outResult 不在初始化阶段配置，后续按需设置
         super().__init__(ident=ident)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
@@ -53,29 +56,53 @@ class AEFlow(AEFlowInfo):
         Returns:
             AEFlowInfo: flow 元信息
         """
-        return self
+        return self.input_schema
 
-    def receiveInputSchemaData(self, data: "AEFlowInfo") -> None:
+    def receiveInputSchemaData(self, data: dict) -> None:
         """
-        接收输入源的 AEFlowInfo，校验其 out_schema 覆盖本 flow input_schema 的 required 字段（不存储）。
+        接收输入数据（map），按其中的 ident 路由（ident 仅用于本层路由，已使用）：
 
-        若本 flow 的 input_schema 与输入源的 out_schema 均为 JSON-Schema 形态（含 properties），
-        校验本 flow required 字段是否在输入源 out_schema 的 properties 中，缺失则抛 ValueError；
-        否则不做处理。子类可覆写以定制校验逻辑。
+          - ident 命中自身 → 解析 data 中的 out_schema，交给 flow_receive_llm 处理
+            （子类在 flow_receive_llm 中处理收到的数据）
+          - ident 命中 _flows 内子 flow → 将内层 out_schema 转发给该子 flow 的
+            receiveInputSchemaData（ident 已消费，不再下传）
+          - 均未命中 → 错误日志输出收到的数据
+
+        data 约定为 flow_llm 向上转发时的封装形态：{"ident": <目标 ident>, "out_schema": <...>}，
+        每层路由消费一层 ident，逐层下传内层 out_schema。
 
         Args:
-            data: 输入源的 AEFlowInfo（其 out_schema 描述上游产出结构）
-
-        Raises:
-            ValueError: 输入源 out_schema 缺少本 flow 必填字段时
+            data: 输入数据 map（含 ident / out_schema）
         """
-        my_schema = self.input_schema
-        src_schema = data.out_schema if data is not None else None
-        if isinstance(my_schema, dict) and isinstance(src_schema, dict) and "properties" in src_schema:
-            src_props = set(src_schema["properties"].keys())
-            missing = [r for r in my_schema.get("required", []) if r not in src_props]
-            if missing:
-                raise ValueError(f"输入源 out_schema 缺少本 flow 必填字段: {missing}")
+        if not isinstance(data, dict):
+            logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
+            return
+        ident = data.get("ident")
+        # ident 仅用于本层路由，已使用；后续只传内层 out_schema
+        out_schema = data.get("out_schema")
+        # 命中自身：交给子类处理
+        if ident == self.ident:
+            self.flow_receive_llm(out_schema)
+            return
+        # 非自身：在 _flows 内按 ident 命中子 flow，转发内层 out_schema
+        flow = self._flows.get(ident)
+        if flow is not None:
+            flow.receiveInputSchemaData(out_schema)
+        else:
+            logger.error(
+                "[AEFlow:%s] 未命中任何 flow（ident=%r），收到的数据: %r",
+                self.ident, ident, data,
+            )
+
+    def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
+        """
+        处理经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
+
+        基类默认空实现；子类覆写以处理收到的数据（如按 out_schema 落地结果、驱动后续 flow）。
+
+        Args:
+            out_schema: 从输入 map 中解析出的 out_schema 数据
+        """
 
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
@@ -121,7 +148,8 @@ class AEFlow(AEFlowInfo):
         发送 AELLMPayload 调用 LLM。
 
         AEFlow 自身不持有 LLM 客户端，真实发送由外层 delegate（具体 AEFlowDelegate 实现，
-        如 AEContextManager 适配器）完成；本方法校验 delegate 后向上转发。
+        如 AEContextManager 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident
+        包装 payload.out_schema，再向上转发。
 
         Args:
             payload: AELLMPayload 结构体
@@ -134,6 +162,8 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
+        # 用当前 flow 的 ident 包装 payload.out_schema
+        payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
         return await self.delegate.flow_llm(payload)
 
     def flow_complete(self, result: "AEFlowInfo") -> None:
