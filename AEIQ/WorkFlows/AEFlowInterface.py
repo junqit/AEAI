@@ -3,15 +3,16 @@ AEFlowInterface - Flow 接口协议
 
 所有 Flow 实现需遵循此协议。
   - ident:       flow 标识（属性）
+  - status:      flow 执行状态（属性，AEFlowStatus）
   - inputSchema(): 输入参数数据结构（方法），flow 在不同状态下可返回不同结构
   - delegate:     AEFlowDelegate，Flow 内部信息向外流转的出口
   - receiveInputSchemaData(): 接收按 inputSchema 组织的输入数据
 """
-from typing import Protocol, runtime_checkable, TYPE_CHECKING
+from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
-    from .AEFlowInfo import AEFlowInfo
+    from .AEFlow import AEFlowStatus
 
 
 @runtime_checkable
@@ -19,16 +20,17 @@ class AEFlowInterface(Protocol):
     """Flow 接口协议，所有 flow 需遵循此协议进行实现"""
 
     ident: str
+    status: 'AEFlowStatus'
     delegate: 'AEFlowDelegate'
 
-    def inputSchema(self) -> 'AEFlowInfo':
+    def inputSchema(self) -> 'Optional[dict]':
         """
-        返回当前 flow 的元信息（AEFlowInfo，含 ident / input_schema / out_schema）。
+        返回当前 flow 的输入数据结构（input_schema，dict）。
 
-        同一 flow 在不同状态下可返回不同的元信息。
+        同一 flow 在不同状态下可返回不同的输入数据结构。
 
         Returns:
-            AEFlowInfo: flow 元信息
+            Optional[dict]: input_schema，未设置时为 None
         """
         ...
 

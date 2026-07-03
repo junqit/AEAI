@@ -14,6 +14,7 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
 """
 import logging
 import weakref
+from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo
@@ -24,6 +25,13 @@ if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
     from Context.AELLMPayload import AELLMPayload
+
+
+class AEFlowStatus(str, Enum):
+    """Flow 执行状态"""
+    default = "default"        # 初始状态
+    processing = "processing"  # 执行中
+    complete = "complete"      # 已完成
 
 
 class AEFlow(AEFlowInfo):
@@ -39,6 +47,8 @@ class AEFlow(AEFlowInfo):
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
         self._current_index: int = 0                    # 当前执行的子 flow 序号
+        # flow 执行状态，初始为 default
+        self.status: AEFlowStatus = AEFlowStatus.default
 
     # ==================== AEFlowInterface 实现 ====================
 
@@ -46,15 +56,14 @@ class AEFlow(AEFlowInfo):
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
-    def inputSchema(self) -> "AEFlowInfo":
+    def inputSchema(self) -> "Optional[dict]":
         """
-        返回当前 flow 的元信息（AEFlowInfo）。
+        返回当前 flow 的输入数据结构（input_schema，dict）。
 
-        AEFlow 自身即 AEFlowInfo（含 ident / input_schema / out_schema）；
-        子类可覆写以按状态返回不同元信息。
+        子类可覆写以按状态返回不同的输入数据结构。
 
         Returns:
-            AEFlowInfo: flow 元信息
+            Optional[dict]: input_schema，未设置时为 None
         """
         return self.input_schema
 
@@ -117,6 +126,37 @@ class AEFlow(AEFlowInfo):
         flow.set_delegate(self)
         self._flows[flow.ident] = flow
 
+    def nextFlow(self) -> "Optional[AEFlowInterface]":
+        """
+        获取下一个待执行的子 flow：按 addFlow 顺序首个状态为 default 的子 flow。
+
+        Returns:
+            AEFlowInterface: 首个 default 状态的子 flow；均非 default 时返回 None
+        """
+        for flow in self._flows.values():
+            if flow.status == AEFlowStatus.default:
+                return flow
+        return None
+
+    def send_llm_payload(self, payload: "AELLMPayload") -> None:
+        """
+        通过 delegate 发送 AELLMPayload（无返回值）。
+
+        校验 delegate 后，用当前 flow 的 ident 包装 payload.out_schema，再向上转发
+        （回程按 ident 路由回本 flow）。
+
+        Args:
+            payload: AELLMPayload 结构体
+
+        Raises:
+            RuntimeError: delegate 未设置时
+        """
+        if self.delegate is None:
+            raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
+        # 用当前 flow 的 ident 包装 payload.out_schema
+        payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
+        self.delegate.flow_llm(payload)
+
     # ==================== AEFlowDelegate 实现 ====================
 
     def next_flow_input_schema(self, info: "Optional[AEFlowInfo]" = None) -> "Optional[AEFlowInfo]":
@@ -143,9 +183,9 @@ class AEFlow(AEFlowInfo):
             return self.delegate.next_flow_input_schema()
         return None
 
-    async def flow_llm(self, payload: "AELLMPayload") -> str:
+    def flow_llm(self, payload: "AELLMPayload") -> None:
         """
-        发送 AELLMPayload 调用 LLM。
+        发送 AELLMPayload 调用 LLM（无返回值）。
 
         AEFlow 自身不持有 LLM 客户端，真实发送由外层 delegate（具体 AEFlowDelegate 实现，
         如 AEContextManager 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident
@@ -154,9 +194,6 @@ class AEFlow(AEFlowInfo):
         Args:
             payload: AELLMPayload 结构体
 
-        Returns:
-            str: LLM 回复文本
-
         Raises:
             RuntimeError: delegate 未设置时
         """
@@ -164,22 +201,25 @@ class AEFlow(AEFlowInfo):
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         # 用当前 flow 的 ident 包装 payload.out_schema
         payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
-        return await self.delegate.flow_llm(payload)
+        self.delegate.flow_llm(payload)
 
     def flow_complete(self, result: "AEFlowInfo") -> None:
         """
         Flow 完成通知：result 为完成 flow 的元信息（AEFlowInfo）。
 
         按 result.ident 匹配 _flows：
-          - 命中（本层直接子 flow 完成）→ 推进当前子 flow 序号
+          - 命中（本层直接子 flow 完成）→ 推进当前子 flow 序号，并通过
+            receiveInputSchemaData 将 result.outResult 传入命中的子 flow
           - 未命中 → 向上委托 delegate.flow_complete(result)
         无返回值。
 
         Args:
-            result: 完成 flow 的元信息（含 ident）
+            result: 完成 flow 的元信息（含 ident / outResult）
         """
         ident = result.ident
         if ident and ident in self._flows:
             self._current_index += 1
+            # 将完成 flow 的 outResult 传入命中的子 flow
+            self._flows[ident].receiveInputSchemaData(result.outResult)
         elif self.delegate is not None:
             self.delegate.flow_complete(result)

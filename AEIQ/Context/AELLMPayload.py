@@ -20,12 +20,14 @@ class AELLMPayload:
             raise ValueError(f"temperature 必须在 0.0 - 1.0 之间，当前值: {self.temperature}")
 
     def to_dict(self) -> dict:
-        # out_schema 作为 role:system 消息置于 messages 首位，显式要求 LLM 严格按 out_schema 输出
+        # out_schema 作为 role:system 消息置于 messages 首位：
+        # 整体数据结构按 out_schema 输出，已存在的值保持不变，仅需将 "********" 处替换为实际内容
         messages = list(self.messages)
         if self.out_schema is not None:
             instruction = (
-                "你必须严格按照以下 out_schema（JSON Schema）输出结果，"
-                "仅输出符合该结构的合法 JSON，不要输出任何 JSON 之外的文字或解释：\n"
+                "严格按照以下 out_schema 结构输出结果：整体数据结构按 out_schema 进行，"
+                "已存在的值保持不变（无需修改），仅需将其中标记为 \"********\" 的位置"
+                "替换为实际内容后输出。仅输出合法 JSON，不要输出任何 JSON 之外的文字或解释：\n"
                 + json.dumps(self.out_schema, ensure_ascii=False, indent=2)
             )
             messages.insert(0, {"role": "system", "content": instruction})

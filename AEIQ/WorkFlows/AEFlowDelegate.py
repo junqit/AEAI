@@ -31,15 +31,12 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    async def flow_llm(self, payload: 'AELLMPayload') -> str:
+    def flow_llm(self, payload: 'AELLMPayload') -> None:
         """
-        发送 AELLMPayload 结构体调用 LLM。
+        发送 AELLMPayload 结构体调用 LLM（无返回值）。
 
         Args:
             payload: AELLMPayload 结构体
-
-        Returns:
-            str: LLM 回复文本
         """
         ...
 
