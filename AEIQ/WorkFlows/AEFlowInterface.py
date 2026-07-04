@@ -34,13 +34,13 @@ class AEFlowInterface(Protocol):
         """
         ...
 
-    def autoConfigInputSchema(self, schema: dict) -> None:
+    def autoConfigInputSchema(self, schema: 'Optional[dict]' = None) -> None:
         """
         设置 input_schema，并通过 AELLMPayload 发起 input_schema 请求
         （以 input_schema 作为 out_schema 上送，回程按 ident 路由回本 flow）。
 
         Args:
-            schema: 输入数据结构（dict）
+            schema: 输入数据结构（dict）；为 None 时沿用当前 input_schema
         """
         ...
 

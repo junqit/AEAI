@@ -115,10 +115,11 @@ class AEFlow(AEFlowInfo):
         """
         收到经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
 
-        按当前 status 分发到对应处理方法：
-          - default   → flow_receive_default
-          - processing → flow_receive_processing
-          - complete   → flow_receive_complete（已 complete 不应再收到数据，打印错误）
+        按当前 status 分发到对应处理方法（每个方法标识下一个状态并处理）：
+          - default      → flow_receive_default        （→ inputSchemed）
+          - inputSchemed → flow_receive_input_schemed  （→ processing）
+          - processing   → flow_receive_processing     （→ complete）
+          - complete     → flow_receive_complete       （已 complete 不应再收到数据，打印错误）
 
         子类覆写各状态方法以处理收到的数据，而非覆写本方法。
 
@@ -130,6 +131,8 @@ class AEFlow(AEFlowInfo):
         if self.status == AEFlowStatus.default:
             self.flow_receive_default(out_schema)
         elif self.status == AEFlowStatus.inputSchemed:
+            self.flow_receive_input_schemed(out_schema)
+        elif self.status == AEFlowStatus.processing:
             self.flow_receive_processing(out_schema)
         else:  # AEFlowStatus.complete
             self.flow_receive_complete(out_schema)
@@ -143,10 +146,23 @@ class AEFlow(AEFlowInfo):
         if self.delegate is not None:
             self.delegate.flow_complete(self.to_map(), self.status)
 
+    def flow_receive_input_schemed(self, out_schema: "Optional[dict]") -> None:
+        """
+        status=inputSchemed：接收数据时将 status 切换为 processing，并通过 delegate.flow_complete 通知返回。
+        子类覆写时调用 super 以保留状态切换与通知。
+        """
+        self.status = AEFlowStatus.processing
+        if self.delegate is not None:
+            self.delegate.flow_complete(self.to_map(), self.status)
+
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
         """
-        status=processing：接收并处理数据。基类默认空实现；子类覆写以处理。
+        status=processing：接收数据时将 status 切换为 complete，并通过 delegate.flow_complete 通知返回。
+        子类覆写时调用 super 以保留状态切换与通知。
         """
+        self.status = AEFlowStatus.complete
+        if self.delegate is not None:
+            self.delegate.flow_complete(self.to_map(), self.status)
 
     def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
         """
@@ -186,7 +202,7 @@ class AEFlow(AEFlowInfo):
         """
         通过 delegate 发送 AELLMPayload（无返回值）。
 
-        校验 delegate 后，用当前 flow 的 ident 包装 payload.out_schema，再向上转发
+        校验 delegate 后，用当前 flow 的 ident / title 包装 payload.out_schema，再向上转发
         （回程按 ident 路由回本 flow）。
 
         Args:
@@ -197,29 +213,30 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 用当前 flow 的 ident 包装 payload.out_schema
-        # payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
+        payload.out_schema = {
+            "ident": self.ident,
+            "title": self.title,
+            "out_schema": payload.out_schema,
+        }
         self.delegate.flow_llm(payload)
 
-    def autoConfigInputSchema(self, schema: dict) -> None:
+    def autoConfigInputSchema(self, schema: "Optional[dict]" = None) -> None:
         """
-        设置 input_schema，并通过 AELLMPayload 发起 input_schema 请求：
-        以本 flow 的 input_schema 作为 out_schema 上送，由 LLM 按 schema 输出数据，
-        回程按 ident 路由回本 flow。
+        通过 AELLMPayload 请求 LLM 主动生成本 flow 的 input_schema：
+        不预设 out_schema（不约束 LLM 按既有结构输出），由 LLM 依据 title 与 responsibility
+        主动生成此角色可接收任务的数据结构，回程作为 input_schema 落地。
 
         Args:
-            schema: 输入数据结构（dict）
+            schema: 输入数据结构（dict）；为 None 时沿用当前 self.input_schema（仅作记录，不下发约束 LLM）
         """
-        self.input_schema = schema
         from Context.AELLMPayload import AELLMPayload
         payload = AELLMPayload(
             messages=[
                 {"role": AERole.SYSTEM.value, "content": self.title},
                 {"role": AERole.SYSTEM.value, "content": f"当前的职责：{self.responsibility}"},
-                {"role": AERole.SYSTEM.value, "content": "按当前的内容给出此 flow 可接收的数据格式"},
+                {"role": AERole.USER.value, "content": "按当前的内容给出此工作输入参数据的json格式"},
             ]
         )
-        payload.out_schema = self.input_schema
         self.send_llm_payload(payload)
 
     # ==================== AEFlowDelegate 实现 ====================
@@ -253,8 +270,8 @@ class AEFlow(AEFlowInfo):
         发送 AELLMPayload 调用 LLM（无返回值）。
 
         AEFlow 自身不持有 LLM 客户端，真实发送由外层 delegate（具体 AEFlowDelegate 实现，
-        如 AEContextManager 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident
-        包装 payload.out_schema，再向上转发。
+        如 AEContextManager 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident / title
+        包装 payload.out_schema，再向上转发（回程按 ident 路由回本 flow）。
 
         Args:
             payload: AELLMPayload 结构体
@@ -264,8 +281,12 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 用当前 flow 的 ident 包装 payload.out_schema
-        payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
+        # 用当前 flow 的 ident / title 包装 payload.out_schema
+        payload.out_schema = {
+            "ident": self.ident,
+            "title": self.title,
+            "out_schema": payload.out_schema,
+        }
         self.delegate.flow_llm(payload)
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:

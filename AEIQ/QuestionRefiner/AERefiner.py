@@ -9,11 +9,6 @@ from WorkFlows.AEFlow import AEFlow
 class AERefiner(AEFlow):
     """问题精炼 Flow：改写用户问题，输出 question。"""
 
-    # 输入结构（LLM 按此填充 question）
-    INPUT_SCHEMA = {
-        "question": "llm 填写用户的问题",
-    }
-
     def __init__(self, ident: str):
         super().__init__(ident=ident)
         # 职称 / 职责要求
@@ -29,8 +24,6 @@ class AERefiner(AEFlow):
             "6. 输出应该直接作为后续 AI 的输入。\n"
             "如果问题已经清晰，则仅做轻微优化。"
         )
-        # input_schema：本 flow 的输入结构（父 flow 取作 LLM out_schema）
-        self.input_schema = self.INPUT_SCHEMA
 
     def flow_receive_default(self, out_schema) -> None:
         """status=default：切换到 processing（基类处理状态切换）。"""

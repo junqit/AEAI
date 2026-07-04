@@ -123,6 +123,12 @@ class AEZhipuModel:
             if system_text:
                 payload["system"] = system_text
 
+            # 结构性打印 payload 数据
+            logger.info(
+                "📤 Zhipu 发送 payload:\n%s",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
+
             # 发送请求
             response = requests.post(url, headers=headers, json=payload, timeout=60)
 
