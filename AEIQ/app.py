@@ -20,6 +20,10 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# 屏蔽 httpx / httpcore 的 DEBUG 噪音日志
+for _name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
+
 # 导入路由模块
 import routes.post_root as post_root_module
 import routes.websocket_chat as websocket_chat_module

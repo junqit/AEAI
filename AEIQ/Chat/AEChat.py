@@ -20,6 +20,8 @@ class AEChat(AEFlow):
 
     def __init__(self, ident: str):
         super().__init__(ident=ident)
+        # 职称
+        self.title = "Chat"
         # 最近一次接收的问题消息（按需读取，不参与路由）
         self.question: Optional[AENetReqQuestion] = None
         # 添加首个子 flow：问题精炼

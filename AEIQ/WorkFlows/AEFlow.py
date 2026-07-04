@@ -12,6 +12,7 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
   - flow_llm()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，按下游 inputSchema 整理结果
 """
+import json
 import logging
 import weakref
 from enum import Enum
@@ -61,14 +62,15 @@ class AEFlow(AEFlowInfo):
 
     def inputSchema(self) -> "Optional[dict]":
         """
-        返回当前 flow 的输入数据结构（input_schema，dict）。
+        返回当前 flow 的输入数据结构，并用本 flow 的 ident 包装。
 
-        子类可覆写以按状态返回不同的输入数据结构。
+        形态：{"ident": <self.ident>, "out_schema": <input_schema>}，
+        供父 flow 取作 LLM out_schema，回程按 ident 逐层路由回本 flow。
 
         Returns:
-            Optional[dict]: input_schema，未设置时为 None
+            Optional[dict]: ident + input_schema 的封装；input_schema 未设置时 out_schema 为 None
         """
-        return self.input_schema
+        return {"ident": self.ident, "out_schema": self.input_schema}
 
     def receiveInputSchemaData(self, data: dict) -> None:
         """
@@ -86,6 +88,15 @@ class AEFlow(AEFlowInfo):
         Args:
             data: 输入数据 map（含 ident / out_schema）
         """
+        # 先打印收到的数据
+        if isinstance(data, dict):
+            logger.info(
+                "[AEFlow:%s][%s] receiveInputSchemaData 收到:\n%s",
+                self.ident, self.title,
+                json.dumps(data, ensure_ascii=False, indent=2),
+            )
+        else:
+            logger.info("[AEFlow:%s][%s] receiveInputSchemaData 收到: %r", self.ident, self.title, data)
         if not isinstance(data, dict):
             logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
             return
@@ -110,11 +121,20 @@ class AEFlow(AEFlowInfo):
         """
         处理经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
 
-        基类默认空实现；子类覆写以处理收到的数据（如按 out_schema 落地结果、驱动后续 flow）。
+        基类默认打印收到的结果数据（带本 flow 的 ident）；子类覆写以处理收到的数据
+        （如按 out_schema 落地结果、驱动后续 flow）。
 
         Args:
             out_schema: 从输入 map 中解析出的 out_schema 数据
         """
+        if isinstance(out_schema, dict):
+            logger.info(
+                "[AEFlow:%s] 收到自己的结果数据:\n%s",
+                self.ident,
+                json.dumps(out_schema, ensure_ascii=False, indent=2),
+            )
+        else:
+            logger.info("[AEFlow:%s] 收到自己的结果数据: %r", self.ident, out_schema)
 
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
