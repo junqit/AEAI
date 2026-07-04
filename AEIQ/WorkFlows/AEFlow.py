@@ -19,6 +19,7 @@ from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo
+from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,10 @@ if TYPE_CHECKING:
 
 class AEFlowStatus(str, Enum):
     """Flow 执行状态"""
-    default = "default"        # 初始状态
-    processing = "processing"  # 执行中
-    complete = "complete"      # 已完成
+    default = "default"            # 初始状态
+    inputSchemed = "inputSchemed"  # input_schema 已设置
+    processing = "processing"      # 执行中
+    complete = "complete"          # 已完成
 
 
 class AEFlow(AEFlowInfo):
@@ -123,18 +125,23 @@ class AEFlow(AEFlowInfo):
         Args:
             out_schema: 从输入 map 中解析出的 out_schema 数据
         """
+        # 持有收到的 input_schema 结构性数据
+        self.input = out_schema
         if self.status == AEFlowStatus.default:
             self.flow_receive_default(out_schema)
-        elif self.status == AEFlowStatus.processing:
+        elif self.status == AEFlowStatus.inputSchemed:
             self.flow_receive_processing(out_schema)
         else:  # AEFlowStatus.complete
             self.flow_receive_complete(out_schema)
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
-        status=default：接收数据时将 status 切换为 processing；子类覆写时调用 super 以保留状态切换。
+        status=default：接收数据时将 status 切换为 inputSchemed，并通过 delegate.flow_complete 通知返回。
+        子类覆写时调用 super 以保留状态切换与通知。
         """
-        self.status = AEFlowStatus.processing
+        self.status = AEFlowStatus.inputSchemed
+        if self.delegate is not None:
+            self.delegate.flow_complete(self.to_map(), self.status)
 
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
         """
@@ -191,8 +198,29 @@ class AEFlow(AEFlowInfo):
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         # 用当前 flow 的 ident 包装 payload.out_schema
-        payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
+        # payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
         self.delegate.flow_llm(payload)
+
+    def autoConfigInputSchema(self, schema: dict) -> None:
+        """
+        设置 input_schema，并通过 AELLMPayload 发起 input_schema 请求：
+        以本 flow 的 input_schema 作为 out_schema 上送，由 LLM 按 schema 输出数据，
+        回程按 ident 路由回本 flow。
+
+        Args:
+            schema: 输入数据结构（dict）
+        """
+        self.input_schema = schema
+        from Context.AELLMPayload import AELLMPayload
+        payload = AELLMPayload(
+            messages=[
+                {"role": AERole.SYSTEM.value, "content": self.title},
+                {"role": AERole.SYSTEM.value, "content": f"当前的职责：{self.responsibility}"},
+                {"role": AERole.SYSTEM.value, "content": "按当前的内容给出此 flow 可接收的数据格式"},
+            ]
+        )
+        payload.out_schema = self.input_schema
+        self.send_llm_payload(payload)
 
     # ==================== AEFlowDelegate 实现 ====================
 
@@ -240,23 +268,77 @@ class AEFlow(AEFlowInfo):
         payload.out_schema = {"ident": self.ident, "out_schema": payload.out_schema}
         self.delegate.flow_llm(payload)
 
-    def flow_complete(self, result: "AEFlowInfo") -> None:
+    def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
         """
-        Flow 完成通知：result 为完成 flow 的元信息（AEFlowInfo）。
+        Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
 
-        按 result.ident 匹配 _flows：
-          - 命中（本层直接子 flow 完成）→ 推进当前子 flow 序号，并通过
-            receiveInputSchemaData 将 result.outResult 传入命中的子 flow
-          - 未命中 → 向上委托 delegate.flow_complete(result)
+        按 result["ident"] 从 _flows 获取 flow：
+          - 命中（本层直接子 flow）→ 推进当前子 flow 序号，并通过
+            receiveInputSchemaData 将 result["outResult"] 传入命中的子 flow
+          - 未命中 → 按 flowStatus 分发到对应状态方法：
+            - default      → flow_complete_default
+            - inputSchemed → flow_complete_input_schemed
+            - processing   → flow_complete_processing
+            - complete     → flow_complete_complete
         无返回值。
 
         Args:
-            result: 完成 flow 的元信息（含 ident / outResult）
+            result: 完成 flow 的元信息 map（含 ident / outResult）
+            flowStatus: 完成 flow 的状态
         """
-        ident = result.ident
-        if ident and ident in self._flows:
+        ident = result.get("ident") if isinstance(result, dict) else None
+        flow = self._flows.get(ident) if ident else None
+        if flow is not None:
             self._current_index += 1
             # 将完成 flow 的 outResult 传入命中的子 flow
-            self._flows[ident].receiveInputSchemaData(result.outResult)
-        elif self.delegate is not None:
-            self.delegate.flow_complete(result)
+            flow.receiveInputSchemaData(result.get("outResult"))
+            return
+        
+        # 未获取到 flow：按 status 分发到对应状态方法
+        if flowStatus == AEFlowStatus.default:
+            self.flow_complete_default(result)
+        elif flowStatus == AEFlowStatus.inputSchemed:
+            self.flow_complete_input_schemed(result)
+        elif flowStatus == AEFlowStatus.processing:
+            self.flow_complete_processing(result)
+        else:  # AEFlowStatus.complete
+            self.flow_complete_complete(result)
+
+    def flow_complete_default(self, result: dict) -> None:
+        """status=default：未命中子 flow 的完成通知，非预期，记录告警。"""
+        logger.warning(
+            "[AEFlow:%s] flow_complete status=default，忽略: %r",
+            self.ident, result,
+        )
+
+    def flow_complete_input_schemed(self, result: dict) -> None:
+        """
+        status=inputSchemed：下一个 flow 已拿到 input_schema。
+        以当前 flow 的 input 添加到 messages，以下一个 flow 的 inputSchema() 作为 out_schema，
+        通过 AELLMPayload 发起请求，让 LLM 按下一 flow 的 input_schema 输出。
+
+        Args:
+            result: 触发通知的 flow 元信息 map（仅用于上下文，不再取 input_schema）
+        """
+        from Context.AELLMPayload import AELLMPayload
+        # 获取下一个 flow，其 inputSchema() 作为 out_schema
+        next_flow = self.nextFlow()
+        if next_flow is None:
+            logger.warning("[AEFlow:%s] flow_complete_input_schemed 无下一个可用 flow", self.ident)
+            return
+        # 当前 flow 的 input 已是 {role, content} 结构，直接作为 messages
+        payload = AELLMPayload(messages=[self.input])
+        payload.out_schema = next_flow.inputSchema()
+        self.send_llm_payload(payload)
+
+    def flow_complete_processing(self, result: dict) -> None:
+        """status=processing：未命中子 flow 的完成通知，非预期，记录告警。"""
+        logger.warning(
+            "[AEFlow:%s] flow_complete status=processing，忽略: %r",
+            self.ident, result,
+        )
+
+    def flow_complete_complete(self, result: dict) -> None:
+        """status=complete：子 flow 已完成，向上委托通知。"""
+        if self.delegate is not None:
+            self.delegate.flow_complete(result, AEFlowStatus.complete)

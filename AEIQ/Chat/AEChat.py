@@ -11,6 +11,7 @@ from WorkFlows.AEFlow import AEFlow, AEFlowStatus
 from Network.Core.AENetReq import AENetReqQuestion
 from Context.AELLMPayload import AELLMPayload
 from QuestionRefiner.AERefiner import AERefiner
+from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -43,23 +44,14 @@ class AEChat(AEFlow):
         if question is None:
             logger.error("[AEChat:%s] 收到的 AENetReqQuestion 为空", self.ident)
             return
-        # 进入处理中
-        self.status = AEFlowStatus.processing
+        # 收到消息即进入 inputSchemed
+        self.status = AEFlowStatus.inputSchemed
         self.question = question
+        # 用 input 持有 question 的结构（role=user, content=question.content）
+        self.input = {"role": AERole.USER.value, "content": question.content or ""}
         logger.info(
             "[AEChat:%s] 收到问题 type=%s ident=%s content=%r",
             self.ident, question.type, question.ident, question.content,
         )
 
-        # 组装 AELLMPayload：role=user, content=question.content
-        payload = AELLMPayload(
-            messages=[{"role": "user", "content": question.content or ""}]
-        )
-        # 取下一个待执行子 flow，将其 input_schema 赋给 payload.out_schema
-        first = self.nextFlow()
-        if first is None:
-            logger.error("[AEChat:%s] 无可用子 flow，无法设置 out_schema", self.ident)
-            return
-        payload.out_schema = first.inputSchema()
-        # 通过 delegate 发送 payload
-        self.send_llm_payload(payload)
+        self.nextFlow().autoConfigInputSchema()

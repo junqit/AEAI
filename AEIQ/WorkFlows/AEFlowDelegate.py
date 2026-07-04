@@ -13,6 +13,7 @@ from typing import Optional, Protocol, TYPE_CHECKING, runtime_checkable
 if TYPE_CHECKING:
     from Context.AELLMPayload import AELLMPayload
     from .AEFlowInfo import AEFlowInfo
+    from .AEFlow import AEFlowStatus
 
 
 @runtime_checkable
@@ -40,11 +41,12 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def flow_complete(self, result: 'AEFlowInfo') -> None:
+    def flow_complete(self, result: dict, flowStatus: 'AEFlowStatus') -> None:
         """
-        Flow 完成通知：result 为完成 flow 的元信息（AEFlowInfo）。
+        Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
 
         Args:
-            result: 完成 flow 的元信息（含 ident）
+            result: 完成 flow 的元信息 map（含 ident）
+            flowStatus: 完成 flow 的状态
         """
         ...

@@ -36,11 +36,24 @@ class AEFlowInfo:
         self.input_schema: Optional[dict] = None
         self.out_schema: Optional[dict] = None
         self.outResult: Optional[Any] = None
+        # input：持有收到的 input_schema 结构性数据
+        self.input: Optional[Any] = None
 
     @property
     def ident(self) -> str:
         """flow 标识（只读）"""
         return self._ident
+
+    def to_map(self) -> dict:
+        """返回元信息的 map 形态（ident / title / responsibility / input_schema / out_schema / outResult）"""
+        return {
+            "ident": self.ident,
+            "title": self.title,
+            "responsibility": self.responsibility,
+            "input_schema": self.input_schema,
+            "out_schema": self.out_schema,
+            "outResult": self.outResult,
+        }
 
     @staticmethod
     def createInfo(data: Optional[dict] = None) -> dict:

@@ -62,9 +62,10 @@ class AEWorkSpaceContext(AEBaseContext):
         """AEFlowDelegate: Context 非 flow 容器，不持有子 flow 序列，返回 None"""
         return None
 
-    def flow_complete(self, result: "AEFlowInfo") -> None:
+    def flow_complete(self, result, flowStatus) -> None:
         """AEFlowDelegate: flow 完成通知，记录日志"""
-        logger.info(f"WorkSpaceContext {self.ident} 收到 flow_complete - flow_ident={getattr(result, 'ident', None)}")
+        flow_ident = result.get("ident") if isinstance(result, dict) else None
+        logger.info(f"WorkSpaceContext {self.ident} 收到 flow_complete - flow_ident={flow_ident}, status={flowStatus}")
 
     def receive_llm_response(self, data: dict) -> None:
         """

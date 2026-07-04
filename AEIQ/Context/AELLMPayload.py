@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 from common.aellm_enums import AELLMType, AEAiLevel
+from Assistant.AERole import AERole
 
 
 @dataclass
@@ -30,7 +31,7 @@ class AELLMPayload:
                 "替换为实际内容后输出。仅输出合法 JSON，不要输出任何 JSON 之外的文字或解释：\n"
                 + json.dumps(self.out_schema, ensure_ascii=False, indent=2)
             )
-            messages.insert(0, {"role": "system", "content": instruction})
+            messages.insert(0, {"role": AERole.SYSTEM.value, "content": instruction})
         # llm_type 输出枚举值（如 "chatgpt"），level 输出成员名（如 "default"），
         # 与下游 llms 服务约定的字符串协议保持一致，避免硬编码字符串
         return {
