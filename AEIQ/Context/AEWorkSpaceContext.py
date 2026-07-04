@@ -1,5 +1,6 @@
 import json
 import uuid
+import asyncio
 import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
@@ -26,6 +27,7 @@ class AEWorkSpaceContext(AEBaseContext):
 
     async def on_chat(self, request: AENetReq) -> None:
         question = request.question
+        
         if not question or not question.content:
             response = AENetRsp(
                 code=AENetRspCode.badRequest,
@@ -41,9 +43,11 @@ class AEWorkSpaceContext(AEBaseContext):
         chat = AEChat(ident=uuid.uuid4().hex)
         chat.set_delegate(self)
         self._chat_map[chat.ident] = chat
-
-        chat.receiveQuestion(question)
         logger.info(f"AEChat created and stored - chat_ident={chat.ident}, space={self.space}")
+
+        # receiveQuestion 内含同步阻塞的 LLM 往返，丢到线程池异步处理，避免阻塞 _loop
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, chat.receiveQuestion, question)
 
     # ==================== AEFlowDelegate 实现 ====================
 

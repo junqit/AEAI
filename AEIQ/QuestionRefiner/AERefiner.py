@@ -32,10 +32,10 @@ class AERefiner(AEFlow):
         # input_schema：本 flow 的输入结构（父 flow 取作 LLM out_schema）
         self.input_schema = self.INPUT_SCHEMA
 
-    def flow_receive_llm(self, out_schema) -> None:
-        """处理路由到本 flow 的 LLM 回复：打印收到的数据，解析 question 存为 outResult。"""
-        print(f"[AERefiner:{self.ident}] 收到数据: {out_schema}")
-        if isinstance(out_schema, dict):
-            refined = out_schema.get("question")
-            if refined is not None:
-                self.outResult = refined
+    def flow_receive_default(self, out_schema) -> None:
+        """status=default：切换到 processing（基类处理状态切换）。"""
+        super().flow_receive_default(out_schema)
+
+    def flow_receive_processing(self, out_schema) -> None:
+        """status=processing：沿用基类空实现。"""
+        super().flow_receive_processing(out_schema)

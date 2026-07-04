@@ -74,16 +74,14 @@ class AEFlow(AEFlowInfo):
 
     def receiveInputSchemaData(self, data: dict) -> None:
         """
-        接收输入数据（map），按其中的 ident 路由（ident 仅用于本层路由，已使用）：
+        接收输入数据（map），按其中的 ident 路由：
 
-          - ident 命中自身 → 解析 data 中的 out_schema，交给 flow_receive_llm 处理
+          - 先通过 ident 在 _flows 内获取子 flow；命中 → 转发内层 out_schema 给该子 flow
+          - 不存在 ident（或未命中子 flow）→ 自己处理：交 flow_receive_llm
             （子类在 flow_receive_llm 中处理收到的数据）
-          - ident 命中 _flows 内子 flow → 将内层 out_schema 转发给该子 flow 的
-            receiveInputSchemaData（ident 已消费，不再下传）
-          - 均未命中 → 错误日志输出收到的数据
 
         data 约定为 flow_llm 向上转发时的封装形态：{"ident": <目标 ident>, "out_schema": <...>}，
-        每层路由消费一层 ident，逐层下传内层 out_schema。
+        每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
 
         Args:
             data: 输入数据 map（含 ident / out_schema）
@@ -100,41 +98,57 @@ class AEFlow(AEFlowInfo):
         if not isinstance(data, dict):
             logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
             return
+        
         ident = data.get("ident")
-        # ident 仅用于本层路由，已使用；后续只传内层 out_schema
-        out_schema = data.get("out_schema")
-        # 命中自身：交给子类处理
-        if ident == self.ident:
-            self.flow_receive_llm(out_schema)
-            return
-        # 非自身：在 _flows 内按 ident 命中子 flow，转发内层 out_schema
-        flow = self._flows.get(ident)
+        # 先通过 ident 在 _flows 内获取子 flow；命中则转发内层 out_schema
+        flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
-            flow.receiveInputSchemaData(out_schema)
-        else:
-            logger.error(
-                "[AEFlow:%s] 未命中任何 flow（ident=%r），收到的数据: %r",
-                self.ident, ident, data,
-            )
+            flow.receiveInputSchemaData(data.get("out_schema"))
+            return
+        
+        # 不存在 ident（或未命中子 flow）：自己处理
+        self.flow_receive_llm(data.get("out_schema", data))
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """
-        处理经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
+        收到经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
 
-        基类默认打印收到的结果数据（带本 flow 的 ident）；子类覆写以处理收到的数据
-        （如按 out_schema 落地结果、驱动后续 flow）。
+        按当前 status 分发到对应处理方法：
+          - default   → flow_receive_default
+          - processing → flow_receive_processing
+          - complete   → flow_receive_complete（已 complete 不应再收到数据，打印错误）
+
+        子类覆写各状态方法以处理收到的数据，而非覆写本方法。
 
         Args:
             out_schema: 从输入 map 中解析出的 out_schema 数据
         """
-        if isinstance(out_schema, dict):
-            logger.info(
-                "[AEFlow:%s] 收到自己的结果数据:\n%s",
-                self.ident,
-                json.dumps(out_schema, ensure_ascii=False, indent=2),
-            )
-        else:
-            logger.info("[AEFlow:%s] 收到自己的结果数据: %r", self.ident, out_schema)
+        if self.status == AEFlowStatus.default:
+            self.flow_receive_default(out_schema)
+        elif self.status == AEFlowStatus.processing:
+            self.flow_receive_processing(out_schema)
+        else:  # AEFlowStatus.complete
+            self.flow_receive_complete(out_schema)
+
+    def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
+        """
+        status=default：接收数据时将 status 切换为 processing；子类覆写时调用 super 以保留状态切换。
+        """
+        self.status = AEFlowStatus.processing
+
+    def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
+        """
+        status=processing：接收并处理数据。基类默认空实现；子类覆写以处理。
+        """
+
+    def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
+        """
+        status=complete：已 complete 不应再收到数据，打印错误。
+        """
+        logger.error(
+            "[AEFlow:%s][%s] 已 complete，不应再收到数据: %r",
+            self.ident, self.title, out_schema,
+        )
 
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
