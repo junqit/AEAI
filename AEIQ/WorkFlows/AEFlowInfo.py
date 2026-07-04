@@ -51,7 +51,7 @@ class AEFlowInfo:
             "title": self.title,
             "responsibility": self.responsibility,
             "input_schema": self.input_schema,
-            "out_schema": self.out_schema,
+            "llm_out": self.out_schema,
             "outResult": self.outResult,
         }
 

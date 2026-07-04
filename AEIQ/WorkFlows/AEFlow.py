@@ -66,13 +66,13 @@ class AEFlow(AEFlowInfo):
         """
         返回当前 flow 的输入数据结构，并用本 flow 的 ident 包装。
 
-        形态：{"ident": <self.ident>, "out_schema": <input_schema>}，
+        形态：{"ident": <self.ident>, "llm_out": <input_schema>}，
         供父 flow 取作 LLM out_schema，回程按 ident 逐层路由回本 flow。
 
         Returns:
             Optional[dict]: ident + input_schema 的封装；input_schema 未设置时 out_schema 为 None
         """
-        return {"ident": self.ident, "out_schema": self.input_schema}
+        return {"ident": self.ident, "llm_out": self.input_schema}
 
     def receiveInputSchemaData(self, data: dict) -> None:
         """
@@ -82,7 +82,7 @@ class AEFlow(AEFlowInfo):
           - 不存在 ident（或未命中子 flow）→ 自己处理：交 flow_receive_llm
             （子类在 flow_receive_llm 中处理收到的数据）
 
-        data 约定为 flow_llm 向上转发时的封装形态：{"ident": <目标 ident>, "out_schema": <...>}，
+        data 约定为 flow_llm 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
 
         Args:
@@ -105,11 +105,11 @@ class AEFlow(AEFlowInfo):
         # 先通过 ident 在 _flows 内获取子 flow；命中则转发内层 out_schema
         flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
-            flow.receiveInputSchemaData(data.get("out_schema"))
+            flow.receiveInputSchemaData(data.get("llm_out"))
             return
         
         # 不存在 ident（或未命中子 flow）：自己处理
-        self.flow_receive_llm(data.get("out_schema", data))
+        self.flow_receive_llm(data.get("llm_out", data))
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """
@@ -139,9 +139,13 @@ class AEFlow(AEFlowInfo):
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
-        status=default：接收数据时将 status 切换为 inputSchemed，并通过 delegate.flow_complete 通知返回。
+        status=default：收到的数据即 LLM 生成的 input_schema，存入 self.input_schema，
+        将 status 切换为 inputSchemed，并通过 delegate.flow_complete 通知返回。
         子类覆写时调用 super 以保留状态切换与通知。
         """
+        logger.info("[AEFlow:%s][%s] 阶段=default → inputSchemed", self.ident, self.title)
+        # default 状态收到的即 input_schema（autoConfigInputSchema 生成）
+        self.input_schema = out_schema
         self.status = AEFlowStatus.inputSchemed
         if self.delegate is not None:
             self.delegate.flow_complete(self.to_map(), self.status)
@@ -151,6 +155,7 @@ class AEFlow(AEFlowInfo):
         status=inputSchemed：接收数据时将 status 切换为 processing，并通过 delegate.flow_complete 通知返回。
         子类覆写时调用 super 以保留状态切换与通知。
         """
+        logger.info("[AEFlow:%s][%s] 阶段=inputSchemed → processing", self.ident, self.title)
         self.status = AEFlowStatus.processing
         if self.delegate is not None:
             self.delegate.flow_complete(self.to_map(), self.status)
@@ -160,6 +165,7 @@ class AEFlow(AEFlowInfo):
         status=processing：接收数据时将 status 切换为 complete，并通过 delegate.flow_complete 通知返回。
         子类覆写时调用 super 以保留状态切换与通知。
         """
+        logger.info("[AEFlow:%s][%s] 阶段=processing → complete", self.ident, self.title)
         self.status = AEFlowStatus.complete
         if self.delegate is not None:
             self.delegate.flow_complete(self.to_map(), self.status)
@@ -169,7 +175,7 @@ class AEFlow(AEFlowInfo):
         status=complete：已 complete 不应再收到数据，打印错误。
         """
         logger.error(
-            "[AEFlow:%s][%s] 已 complete，不应再收到数据: %r",
+            "[AEFlow:%s][%s] 阶段=complete，不应再收到数据: %r",
             self.ident, self.title, out_schema,
         )
 
@@ -216,7 +222,7 @@ class AEFlow(AEFlowInfo):
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
-            "out_schema": payload.out_schema,
+            "llm_out": payload.out_schema,
         }
         self.delegate.flow_llm(payload)
 
@@ -234,7 +240,7 @@ class AEFlow(AEFlowInfo):
             messages=[
                 {"role": AERole.SYSTEM.value, "content": self.title},
                 {"role": AERole.SYSTEM.value, "content": f"当前的职责：{self.responsibility}"},
-                {"role": AERole.USER.value, "content": "按当前的内容给出此工作输入参数据的json格式"},
+                {"role": AERole.USER.value, "content": "按当前的内容给出当前功能匹配的输入参数据json格式，不要多余参数"},
             ]
         )
         self.send_llm_payload(payload)
@@ -285,7 +291,7 @@ class AEFlow(AEFlowInfo):
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
-            "out_schema": payload.out_schema,
+            "llm_out": payload.out_schema,
         }
         self.delegate.flow_llm(payload)
 
@@ -293,13 +299,11 @@ class AEFlow(AEFlowInfo):
         """
         Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
 
-        按 result["ident"] 从 _flows 获取 flow：
-          - 命中（本层直接子 flow）→ 推进当前子 flow 序号，并通过
-            receiveInputSchemaData 将 result["outResult"] 传入命中的子 flow
-          - 未命中 → 按 flowStatus 分发到对应状态方法：
-            - default      → flow_complete_default
+        - 命中直接子 flow → 推进当前子 flow 序号，并把 result["outResult"] 传入该子 flow（若有）
+        - 未取到 flow → 进行当前自己各个状态的处理：
             - inputSchemed → flow_complete_input_schemed
             - processing   → flow_complete_processing
+            - default      → flow_complete_default
             - complete     → flow_complete_complete
         无返回值。
 
@@ -309,19 +313,20 @@ class AEFlow(AEFlowInfo):
         """
         ident = result.get("ident") if isinstance(result, dict) else None
         flow = self._flows.get(ident) if ident else None
+        # 命中直接子 flow：推进序号 + 传 outResult（若有）
         if flow is not None:
             self._current_index += 1
-            # 将完成 flow 的 outResult 传入命中的子 flow
-            flow.receiveInputSchemaData(result.get("outResult"))
+            out_result = result.get("outResult")
+            if out_result is not None:
+                flow.receiveInputSchemaData(out_result)
             return
-        
-        # 未获取到 flow：按 status 分发到对应状态方法
-        if flowStatus == AEFlowStatus.default:
-            self.flow_complete_default(result)
-        elif flowStatus == AEFlowStatus.inputSchemed:
+        # 未取到 flow：进行当前自己各个状态的处理
+        if flowStatus == AEFlowStatus.inputSchemed:
             self.flow_complete_input_schemed(result)
         elif flowStatus == AEFlowStatus.processing:
             self.flow_complete_processing(result)
+        elif flowStatus == AEFlowStatus.default:
+            self.flow_complete_default(result)
         else:  # AEFlowStatus.complete
             self.flow_complete_complete(result)
 
@@ -334,21 +339,28 @@ class AEFlow(AEFlowInfo):
 
     def flow_complete_input_schemed(self, result: dict) -> None:
         """
-        status=inputSchemed：下一个 flow 已拿到 input_schema。
-        以当前 flow 的 input 添加到 messages，以下一个 flow 的 inputSchema() 作为 out_schema，
-        通过 AELLMPayload 发起请求，让 LLM 按下一 flow 的 input_schema 输出。
+        status=inputSchemed：完成的 flow（已拿到 input_schema）作为 next_flow。
+        把当前 flow 的问题（input）转换成 next_flow.inputSchema() 的结构：
+        以当前 flow 的 input 作为 messages，以 next_flow.inputSchema() 作为 out_schema，
+        通过 AELLMPayload 发起请求，让 LLM 把当前问题改写/填充为下一 flow 的 input_schema 结构。
 
         Args:
-            result: 触发通知的 flow 元信息 map（仅用于上下文，不再取 input_schema）
+            result: 完成 flow 的元信息 map（用其 ident 取到 next_flow）
         """
         from Context.AELLMPayload import AELLMPayload
-        # 获取下一个 flow，其 inputSchema() 作为 out_schema
-        next_flow = self.nextFlow()
+        # 完成的 flow（已拿到 input_schema）作为 next_flow
+        next_ident = result.get("ident") if isinstance(result, dict) else None
+        next_flow = self._flows.get(next_ident) if next_ident else None
         if next_flow is None:
-            logger.warning("[AEFlow:%s] flow_complete_input_schemed 无下一个可用 flow", self.ident)
+            logger.warning("[AEFlow:%s] flow_complete_input_schemed 未找到 next_flow(ident=%r)", self.ident, next_ident)
             return
-        # 当前 flow 的 input 已是 {role, content} 结构，直接作为 messages
-        payload = AELLMPayload(messages=[self.input])
+        # 拼 messages：self.input 作为待转换的内容（role=system，标明为待转换内容），
+        # role:user 指令引用「上面的内容」转换成要求的数据结构（即 out_schema），形成关联
+        payload = AELLMPayload(messages=[
+            {"role": AERole.SYSTEM.value, "content": f"需要转换的内容：\n{self.input}"},
+            {"role": AERole.USER.value, "content": "把需要转换的内容转换成要求的数据结构"},
+        ])
+        # 要求的数据结构 = next_flow.inputSchema()
         payload.out_schema = next_flow.inputSchema()
         self.send_llm_payload(payload)
 

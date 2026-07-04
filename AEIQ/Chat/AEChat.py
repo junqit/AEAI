@@ -11,7 +11,6 @@ from WorkFlows.AEFlow import AEFlow, AEFlowStatus
 from Network.Core.AENetReq import AENetReqQuestion
 from Context.AELLMPayload import AELLMPayload
 from QuestionRefiner.AERefiner import AERefiner
-from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +46,9 @@ class AEChat(AEFlow):
         # 收到消息即进入 inputSchemed
         self.status = AEFlowStatus.inputSchemed
         self.question = question
-        # 用 input 持有 question 的结构（role=user, content=question.content）
-        self.input = {"role": AERole.USER.value, "content": question.content or ""}
+        # 用 input 持有待转换的内容（question.content），后续由 flow_complete_input_schemed
+        # 作为 role=system 的 content，转换成 next_flow.inputSchema() 结构
+        self.input = question.content or ""
         logger.info(
             "[AEChat:%s] 收到问题 type=%s ident=%s content=%r",
             self.ident, question.type, question.ident, question.content,

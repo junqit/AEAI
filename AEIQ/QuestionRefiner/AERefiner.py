@@ -3,7 +3,11 @@ AERefiner - 问题精炼 Flow，继承 AEFlow。
 
 将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题。
 """
+import logging
+
 from WorkFlows.AEFlow import AEFlow
+
+logger = logging.getLogger(__name__)
 
 
 class AERefiner(AEFlow):
@@ -26,9 +30,11 @@ class AERefiner(AEFlow):
         )
 
     def flow_receive_default(self, out_schema) -> None:
-        """status=default：切换到 processing（基类处理状态切换）。"""
+        """status=default：收到 LLM 生成的 input_schema，交基类切换到 inputSchemed。"""
+        logger.info("[AERefiner:%s][%s] 阶段=default 收到 input_schema", self.ident, self.title)
         super().flow_receive_default(out_schema)
 
     def flow_receive_processing(self, out_schema) -> None:
-        """status=processing：沿用基类空实现。"""
+        """status=processing：收到转换后的输入数据，交基类切换到 complete。"""
+        logger.info("[AERefiner:%s][%s] 阶段=processing 收到输入数据", self.ident, self.title)
         super().flow_receive_processing(out_schema)
