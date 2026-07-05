@@ -9,7 +9,7 @@ class AENetQues(BaseModel):
     content: Optional[str] = None
 
 
-class AENetReqContext(BaseModel):
+class AENetCont(BaseModel):
     """请求上下文"""
     type: Optional[str] = None
     ident: Optional[str] = None
@@ -39,7 +39,7 @@ class AEUserInfo(BaseModel):
 
 class AENetReq(BaseModel):
     """网络请求数据"""
-    cont: Optional[AENetReqContext] = None
+    cont: Optional[AENetCont] = None
     req: Optional[AENetReqInfo] = None
     user: Optional[AEUserInfo] = None
 

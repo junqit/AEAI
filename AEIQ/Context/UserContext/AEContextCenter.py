@@ -12,7 +12,7 @@ import platform
 import logging
 from typing import Dict, Optional
 
-from Network.Core.AENetReq import AENetReqContext
+from Network.Core.AENetReq import AENetCont
 from Network.Core.AENetRsp import AENetRsp, AENetRspCode
 from ..Context.AEBaseContext import AEBaseContext
 from ..Context.AEContextDelegate import AEContextDelegate
@@ -37,7 +37,7 @@ class AEContextCenter:
 
     # ==================== Context 命中与创建 ====================
 
-    def resolve_context(self, cont: Optional[AENetReqContext]) -> Optional[AEBaseContext]:
+    def resolve_context(self, cont: Optional[AENetCont]) -> Optional[AEBaseContext]:
         """按 cont.ident 命中已有 context；命中不到则按 cont.type 创建。"""
         if cont is None or not cont.type:
             logger.warning("Request has no context info, ignored")
@@ -101,22 +101,31 @@ class AEContextCenter:
 
     # ==================== Path 处理（收 cont，经 delegate 发响应） ====================
 
-    async def handle_create(self, cont: AENetReqContext) -> None:
+    def handle_context_list(self) -> None:
+        """返回该用户下所有 context 配置列表。"""
+        contexts = [context.context_config() for context in self.get_all()]
+        response = AENetRsp(
+            code=AENetRspCode.success,
+            rsp={"contexts": contexts},
+        )
+        self._delegate.send_response(response)
+
+    def handle_create(self, cont: AENetCont) -> None:
         """创建/命中 context，返回其基础信息。"""
         context = self.resolve_context(cont)
         if context is None:
             return
         response = AENetRsp(
             code=AENetRspCode.success,
-            cont=AENetReqContext(
+            cont=AENetCont(
                 type=cont.type if cont else None,
                 ident=context.ident,
             ),
         )
         self._delegate.send_response(response)
 
-    async def handle_chat(self, cont: AENetReqContext) -> None:
-        """处理 chat：校验 ques，在 workspace 下创建 AEChat 并驱动 LLM。"""
+    def handle_chat(self, cont: AENetCont) -> None:
+        """处理 chat：校验 ques，交 workspace 接收（receive_chat 内部异步流转，不等回）。"""
         context = self.resolve_context(cont)
         if context is None:
             return
@@ -135,9 +144,9 @@ class AEContextCenter:
             logger.warning(f"chat 仅支持 WorkSpace，当前 type={context.context_type!r}")
             return
 
-        await context.create_chat(question)
+        context.receive_chat(question)
 
-    async def handle_chat_list(self, cont: AENetReqContext) -> None:
+    def handle_chat_list(self, cont: AENetCont) -> None:
         """返回 workspace 下的 chat 列表；cont 用该 workspace 配置（含 space）。"""
         context = self.resolve_context(cont)
         if context is None:
@@ -152,7 +161,7 @@ class AEContextCenter:
         response = AENetRsp(
             code=AENetRspCode.success,
             rsp={"data": {"chats": chats}},
-            cont=AENetReqContext(
+            cont=AENetCont(
                 type=context.context_type.value,
                 ident=context.ident,
                 space=context.space,
@@ -160,7 +169,7 @@ class AEContextCenter:
         )
         self._delegate.send_response(response)
 
-    async def handle_info(self, cont: AENetReqContext) -> None:
+    async def handle_info(self, cont: AENetCont) -> None:
         """返回 directory 的系统/脚本环境信息（脚本扫描丢线程池，不阻塞 loop）。"""
         context = self.resolve_context(cont)
         if context is None:

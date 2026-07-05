@@ -2,7 +2,7 @@ from enum import IntEnum
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
-from .AENetReq import AENetReqContext, AENetReqInfo, AEUserInfo
+from .AENetReq import AENetCont, AENetReqInfo, AEUserInfo
 
 
 class AENetRspCode(IntEnum):
@@ -26,7 +26,7 @@ class AENetRspResult(BaseModel):
 class AENetRsp(BaseModel):
     """网络响应数据"""
     code: int = AENetRspCode.success
-    cont: Optional[AENetReqContext] = None
+    cont: Optional[AENetCont] = None
     req: Optional[AENetReqInfo] = None
     rsp: Optional[Dict[str, Any]] = None
     user: Optional[AEUserInfo] = None

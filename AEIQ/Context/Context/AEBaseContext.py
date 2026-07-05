@@ -25,6 +25,8 @@ class AEBaseContext:
         # chat.ident -> AEChat，持有本 context 下的会话
         self._chat_map: Dict[str, AEChat] = {}
 
+    # ==================== 私有方法 ====================
+
     @staticmethod
     def _generate_ident(context_type: AEContextType, space: str = "") -> str:
         if context_type == AEContextType.workspace:
@@ -38,12 +40,40 @@ class AEBaseContext:
 
         return uuid.uuid4().hex
 
+    # ==================== 接口（外部调用 / 子类覆写） ====================
+
     def context_config(self) -> Dict[str, str]:
         return {
             "ident": self.ident,
             "space": self.space,
             "type": self.context_type.value,
         }
+
+    def receive_llm_response(self, data: dict) -> None:
+        """
+        接收 LLM 回复数据（AEUserContext 已按 ident 路由到本 Context）。
+
+        基类默认仅记录日志；子类覆写以处理收到的数据。
+
+        Args:
+            data: LLM 回复解析后的 JSON（含 ident 及 out_schema 填充结果）
+        """
+        logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
+
+    def receive_chat(self, question: AENetQues) -> None:
+        """接收 AENetQues：内部创建 AEChat 并把消息交给它处理（不等回，flow 内部异步流转）。
+
+        - 新建 AEChat，delegate 设为当前 context，按 chat.ident 存入 _chat_map
+        - receiveQuestion 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
+        """
+        chat = AEChat(ident=uuid.uuid4().hex)
+        chat.set_delegate(self)
+        self._chat_map[chat.ident] = chat
+        logger.info(f"AEChat created - chat_ident={chat.ident}, context={self.ident}")
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, chat.receiveQuestion, question)
+
+    # ==================== delegate 转发 ====================
 
     def set_delegate(self, delegate: 'AEContextDelegate') -> None:
         self.delegate = delegate
@@ -62,27 +92,3 @@ class AEBaseContext:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
         self.delegate.send_llm_request(payload)
-
-    def receive_llm_response(self, data: dict) -> None:
-        """
-        接收 LLM 回复数据（AEUserContext 已按 ident 路由到本 Context）。
-
-        基类默认仅记录日志；子类覆写以处理收到的数据。
-
-        Args:
-            data: LLM 回复解析后的 JSON（含 ident 及 out_schema 填充结果）
-        """
-        logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
-
-    async def create_chat(self, question: AENetQues) -> None:
-        """接收 AENetQues，在内部创建 AEChat 并驱动其处理（含 LLM 往返）。
-
-        - 新建 AEChat，delegate 设为当前 context，按 chat.ident 存入 _chat_map
-        - receiveQuestion 内含同步阻塞的 LLM 往返，丢到线程池异步处理，避免阻塞 loop
-        """
-        chat = AEChat(ident=uuid.uuid4().hex)
-        chat.set_delegate(self)
-        self._chat_map[chat.ident] = chat
-        logger.info(f"AEChat created - chat_ident={chat.ident}, context={self.ident}")
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, chat.receiveQuestion, question)

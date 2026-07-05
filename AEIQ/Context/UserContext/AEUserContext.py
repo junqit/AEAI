@@ -12,7 +12,6 @@ import contextvars
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AEUserInfo
-from Network.Core.AENetRsp import AENetRspCode
 from ..Context.AEContextDelegate import AENetworkDelegate
 from ..Context.AEContextPath import (
     AE_PATH_CONTEXT_LIST,
@@ -63,18 +62,19 @@ class AEUserContext:
 
         # context list 无需具体 context
         if path == AE_PATH_CONTEXT_LIST:
-            await self._handle_context_list()
+            self._context_center.handle_context_list()
             return
 
-        # 路径分解：create / chat / chat_list / info，交 AEContextCenter 异步处理（各自内部 resolve）
+        # 路径分解：create / chat / chat_list / info，交 AEContextCenter 处理（各自内部 resolve）
+        # 仅 info（subprocess）有异步 I/O 需 await；create / chat / chat_list 为同步处理
         if path == AE_PATH_CONTEXT_CREATE:
-            await self._context_center.handle_create(cont)
+            self._context_center.handle_create(cont)
             return
         if path == AE_PATH_CONTEXT_CHAT:
-            await self._context_center.handle_chat(cont)
+            self._context_center.handle_chat(cont)
             return
         if path == AE_PATH_CONTEXT_CHAT_LIST:
-            await self._context_center.handle_chat_list(cont)
+            self._context_center.handle_chat_list(cont)
             return
         if path == AE_PATH_CONTEXT_INFO:
             await self._context_center.handle_info(cont)
@@ -109,14 +109,3 @@ class AEUserContext:
 
         reply = await send_llm_request(payload)
         self._context_center.dispatch_llm_response(reply)
-
-    # ==================== 自有方法 ====================
-
-    async def _handle_context_list(self) -> None:
-        """返回该用户当前所有 context 配置列表。"""
-        contexts = [context.context_config() for context in self._context_center.get_all()]
-        response = AENetRsp(
-            code=AENetRspCode.success,
-            rsp={"contexts": contexts},
-        )
-        self.send_response(response)
