@@ -8,7 +8,6 @@ Context 的命中/创建/存储与 LLM 回复的分发交由 AEContextCenter 完
 import asyncio
 import logging
 import threading
-import contextvars
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AEUserInfo
@@ -23,9 +22,6 @@ from ..Context.AEContextPath import (
 from .AEContextCenter import AEContextCenter
 
 logger = logging.getLogger(__name__)
-
-# 当前请求的 req（按 asyncio task 隔离），send_response 回填进响应，供客户端按 path 路由
-_req_ctx: contextvars.ContextVar = contextvars.ContextVar("ae_req")
 
 
 class AEUserContext:
@@ -55,29 +51,28 @@ class AEUserContext:
             logger.warning("Request has no context info, ignored")
             return
 
-        # 按当前 task 记录 req，供 send_response 回填（并发 task 互不串）
-        _req_ctx.set(request.req)
         path = request.req.path if request.req else None
         cont = request.cont
+        req = request.req
 
         # context list 无需具体 context
         if path == AE_PATH_CONTEXT_LIST:
-            self._context_center.handle_context_list()
+            self._context_center.handle_context_list(req)
             return
 
         # 路径分解：create / chat / chat_list / info，交 AEContextCenter 处理（各自内部 resolve）
         # 仅 info（subprocess）有异步 I/O 需 await；create / chat / chat_list 为同步处理
         if path == AE_PATH_CONTEXT_CREATE:
-            self._context_center.handle_create(cont)
+            self._context_center.handle_create(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT:
-            self._context_center.handle_chat(cont)
+            self._context_center.handle_chat(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT_LIST:
-            self._context_center.handle_chat_list(cont)
+            self._context_center.handle_chat_list(cont, req)
             return
         if path == AE_PATH_CONTEXT_INFO:
-            await self._context_center.handle_info(cont)
+            await self._context_center.handle_info(cont, req)
             return
 
         logger.info(f"Unhandled path: {path}")
@@ -92,11 +87,8 @@ class AEUserContext:
         self.delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        """Context 需要发送 NetRsp 时调用，回填 user/req 后转发给 delegate。
-        req 取 contextvar（_dispatch 在本 task 内设置），并发 task 互不串。"""
+        """Context 需要发送 NetRsp 时调用，回填 user 后转发给 delegate（req 由各 handle_* 写入）。"""
         response.user = self.user
-        if response.req is None:
-            response.req = _req_ctx.get(None)
         self.delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:

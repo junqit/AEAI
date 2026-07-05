@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 
 from WorkFlows.AEFlow import AEFlow, AEFlowStatus
-from Network.Core.AENetReq import AENetQues
+from Network.Core.AENetReq import AENetQues, AENetReqInfo
 from Context.Context.AELLMPayload import AELLMPayload
 from QuestionRefiner.AERefiner import AERefiner
 
@@ -24,6 +24,8 @@ class AEChat(AEFlow):
         self.title = "Chat"
         # 最近一次接收的问题消息（按需读取，不参与路由）
         self.question: Optional[AENetQues] = None
+        # 触发本 chat 的请求信息（回响应时回填 req，供客户端按 path 路由）
+        self.req: Optional[AENetReqInfo] = None
         # 添加首个子 flow：问题精炼
         self.addFlow(AERefiner(ident=uuid.uuid4().hex))
 

@@ -5,7 +5,7 @@ import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetQues
+from Network.Core.AENetReq import AENetQues, AENetReqInfo
 from Chat.AEChat import AEChat
 from .AEContextType import AEContextType
 
@@ -60,13 +60,14 @@ class AEBaseContext:
         """
         logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
 
-    def receive_chat(self, question: AENetQues) -> None:
-        """接收 AENetQues：内部创建 AEChat 并把消息交给它处理（不等回，flow 内部异步流转）。
+    def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
+        """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，把消息交给它处理（不等回，flow 内部异步流转）。
 
-        - 新建 AEChat，delegate 设为当前 context，按 chat.ident 存入 _chat_map
+        - 新建 AEChat，delegate 设为当前 context，req 存入 chat，按 chat.ident 存入 _chat_map（添加持有）
         - receiveQuestion 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
         """
         chat = AEChat(ident=uuid.uuid4().hex)
+        chat.req = req
         chat.set_delegate(self)
         self._chat_map[chat.ident] = chat
         logger.info(f"AEChat created - chat_ident={chat.ident}, context={self.ident}")
