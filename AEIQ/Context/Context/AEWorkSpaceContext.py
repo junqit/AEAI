@@ -26,7 +26,7 @@ class AEWorkSpaceContext(AEBaseContext):
         self._chat_map: Dict[str, AEChat] = {}
 
     async def on_chat(self, request: AENetReq) -> None:
-        question = request.question
+        question = request.cont.ques if request.cont else None
         
         if not question or not question.content:
             response = AENetRsp(
@@ -69,7 +69,7 @@ class AEWorkSpaceContext(AEBaseContext):
 
     def receive_llm_response(self, data: dict) -> None:
         """
-        处理 LLM 回复（已被 AEContextManager 按第一层 ident 路由到本 Context）：
+        处理 LLM 回复（已被 AEUserContext 按第一层 ident 路由到本 Context）：
 
         - 判断第一层 ident 是否为本 Context 的 ident
         - 取内层 out_schema（含 chat.ident + 实际 schema）

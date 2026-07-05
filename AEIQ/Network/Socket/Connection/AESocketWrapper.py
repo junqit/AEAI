@@ -2,7 +2,7 @@ import socket
 import logging
 from typing import Optional
 
-from ...Core.AENetReq import AENetReq, AENetReqUser
+from ...Core.AENetReq import AENetReq, AEUserInfo
 from ...Core.AENetRsp import AENetRsp
 from ..Packet.AEPacket import AEPacket, AEDataType
 
@@ -16,14 +16,14 @@ class AESocketWrapper:
     记录用户信息与最后一次收到数据的 addr，负责发送数据
     """
 
-    def __init__(self, user: AENetReqUser, client_addr: tuple, server_socket: socket.socket):
+    def __init__(self, user: AEUserInfo, client_addr: tuple, server_socket: socket.socket):
         self._user = user
         self._client_addr = client_addr
         self._server_socket = server_socket
         logger.debug(f"AESocketWrapper created: user={user.user_key}, addr={client_addr}")
 
     @property
-    def user(self) -> AENetReqUser:
+    def user(self) -> AEUserInfo:
         return self._user
 
     @property

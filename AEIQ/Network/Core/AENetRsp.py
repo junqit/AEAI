@@ -2,7 +2,7 @@ from enum import IntEnum
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
-from .AENetReq import AENetReqContext, AENetReqInfo, AENetReqUser
+from .AENetReq import AENetReqContext, AENetReqInfo, AEUserInfo
 
 
 class AENetRspCode(IntEnum):
@@ -29,7 +29,7 @@ class AENetRsp(BaseModel):
     cont: Optional[AENetReqContext] = None
     req: Optional[AENetReqInfo] = None
     rsp: Optional[Dict[str, Any]] = None
-    user: Optional[AENetReqUser] = None
+    user: Optional[AEUserInfo] = None
 
     def to_bytes(self) -> bytes:
         return self.model_dump_json(exclude_none=True, exclude={'user'}).encode('utf-8')

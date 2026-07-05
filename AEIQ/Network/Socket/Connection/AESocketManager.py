@@ -11,7 +11,7 @@ import threading
 import logging
 from typing import Dict, Optional, List
 
-from ...Core.AENetReq import AENetReq, AENetReqUser
+from ...Core.AENetReq import AENetReq, AEUserInfo
 from ...Core.AENetRsp import AENetRsp
 from ..Packet.AEPacketReceiveBuffer import ParsedPacketResult
 from ..Packet.AEPacket import AEDataType
@@ -89,12 +89,12 @@ class AESocketManager:
 
         return wrapper.send_response(response)
 
-    def _get_wrapper(self, user: AENetReqUser) -> Optional[AESocketWrapper]:
+    def _get_wrapper(self, user: AEUserInfo) -> Optional[AESocketWrapper]:
         key = self._user_key(user)
         with self._lock:
             return self._wrappers.get(key)
 
-    def _register_user(self, user: AENetReqUser, client_addr: tuple) -> None:
+    def _register_user(self, user: AEUserInfo, client_addr: tuple) -> None:
         key = self._user_key(user)
         with self._lock:
             wrapper = self._wrappers.get(key)
@@ -105,7 +105,7 @@ class AESocketManager:
                 self._wrappers[key] = wrapper
                 logger.debug(f"User wrapper created: {key} -> {client_addr}")
 
-    def _user_key(self, user: AENetReqUser) -> str:
+    def _user_key(self, user: AEUserInfo) -> str:
         return user.user_key
 
     def __len__(self) -> int:

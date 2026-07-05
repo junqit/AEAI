@@ -8,13 +8,13 @@ if sys.version_info < (3, 7):
 
 from pathlib import Path
 # 添加父目录(Service/)到路径，使共享包 common 可被导入
-# 须早于会间接导入 AELLMPayload 的 import（AEContextManager → AELLMPayload → common）
+# 须早于会间接导入 AELLMPayload 的 import（AENetRouteCenter → AEUserContext → AELLMPayload → common）
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from AEIQConfig import config
-from Context.AEContextManager import AEContextManager
+from Context.NetRoutCenter.AENetRouteCenter import AENetRouteCenter
 from Network.Socket.Connection.AESocketServer import get_socket_server
 import logging
 
@@ -38,11 +38,11 @@ logger = logging.getLogger(__name__)
 # 1. 获取 Socket 服务器（网络层）
 socket_server = get_socket_server(host="0.0.0.0", port=8888)
 
-# 2. 创建 Context 管理器（业务层），注入 socket_server 作为 socket_interface
-ae_context_manager = AEContextManager(socket_interface=socket_server)
+# 2. 创建网络路由中心（业务层），注入 socket_server 作为 socket_interface
+ae_net_route_center = AENetRouteCenter(socket_interface=socket_server)
 
-# 3. AEContextManager 实现 AESocketListener 接口，直接注册到 socket_server
-socket_server.add_listener(ae_context_manager)
+# 3. AENetRouteCenter 实现 AESocketListener 接口，直接注册到 socket_server
+socket_server.add_listener(ae_net_route_center)
 
 logger.info("Layered architecture assembled: Network -> Business")
 # ========================================

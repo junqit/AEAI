@@ -11,7 +11,7 @@ Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / C
 from typing import Optional, Protocol, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
-    from Context.AELLMPayload import AELLMPayload
+    from Context.Context.AELLMPayload import AELLMPayload
     from .AEFlowInfo import AEFlowInfo
     from .AEFlow import AEFlowStatus
 

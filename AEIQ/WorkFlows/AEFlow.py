@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
-    from Context.AELLMPayload import AELLMPayload
+    from Context.Context.AELLMPayload import AELLMPayload
 
 
 class AEFlowStatus(str, Enum):
@@ -235,7 +235,7 @@ class AEFlow(AEFlowInfo):
         Args:
             schema: 输入数据结构（dict）；为 None 时沿用当前 self.input_schema（仅作记录，不下发约束 LLM）
         """
-        from Context.AELLMPayload import AELLMPayload
+        from Context.Context.AELLMPayload import AELLMPayload
         payload = AELLMPayload(
             messages=[
                 {"role": AERole.SYSTEM.value, "content": self.title},
@@ -276,7 +276,7 @@ class AEFlow(AEFlowInfo):
         发送 AELLMPayload 调用 LLM（无返回值）。
 
         AEFlow 自身不持有 LLM 客户端，真实发送由外层 delegate（具体 AEFlowDelegate 实现，
-        如 AEContextManager 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident / title
+        如 AENetRouteCenter 适配器）完成。本方法校验 delegate 后，用当前 flow 的 ident / title
         包装 payload.out_schema，再向上转发（回程按 ident 路由回本 flow）。
 
         Args:
@@ -351,7 +351,7 @@ class AEFlow(AEFlowInfo):
         Args:
             result: 完成 flow 的元信息 map（用其 ident 取到 next_flow）
         """
-        from Context.AELLMPayload import AELLMPayload
+        from Context.Context.AELLMPayload import AELLMPayload
         # 完成的 flow（已拿到 input_schema）作为 next_flow
         next_ident = result.get("ident") if isinstance(result, dict) else None
         next_flow = self._flows.get(next_ident) if next_ident else None

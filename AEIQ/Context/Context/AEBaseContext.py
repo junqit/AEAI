@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetReqContext, AENetReqUser
+from Network.Core.AENetReq import AENetReqContext, AEUserInfo
 from Network.Core.AENetRsp import AENetRspCode
 from .AEContextPath import AE_PATH_CONTEXT_CREATE, AE_PATH_CONTEXT_CHAT
 from .AEContextType import AEContextType
@@ -17,15 +17,15 @@ if TYPE_CHECKING:
 
 class AEBaseContext:
 
-    def __init__(self, context_type: AEContextType, user: AENetReqUser = None, space: str = ""):
-        self.user: Optional[AENetReqUser] = user
+    def __init__(self, context_type: AEContextType, user: AEUserInfo = None, space: str = ""):
+        self.user: Optional[AEUserInfo] = user
         self.ident: str = self._generate_ident(context_type, user, space)
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
 
     @staticmethod
-    def _generate_ident(context_type: AEContextType, user: Optional[AENetReqUser], space: str = "") -> str:
+    def _generate_ident(context_type: AEContextType, user: Optional[AEUserInfo], space: str = "") -> str:
         user_info = user.user_key if user else ""
 
         if context_type == AEContextType.workspace:
@@ -69,7 +69,7 @@ class AEBaseContext:
 
     def receive_llm_response(self, data: dict) -> None:
         """
-        接收 LLM 回复数据（AEContextManager 已按 ident 路由到本 Context）。
+        接收 LLM 回复数据（AEUserContext 已按 ident 路由到本 Context）。
 
         基类默认仅记录日志；子类覆写以处理收到的数据。
 
