@@ -42,8 +42,8 @@ class AELLMPayload:
             ]
             if has_empty:
                 parts.append(
-                    "其中为空 llm_out（null/无值）的位置，请根据上述对话内容上下文"
-                    "生成该层对应的 JSON 结构数据。"
+                    "其中 llm_out 为空（null/无值）的位置，请根据用户的问题"
+                    "生成该层对应的 JSON 数据结构。"
                 )
             parts.append("仅输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n")
             parts.append(json.dumps(self.out_schema, ensure_ascii=False, indent=2))

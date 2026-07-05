@@ -240,7 +240,7 @@ class AEFlow(AEFlowInfo):
             messages=[
                 {"role": AERole.SYSTEM.value, "content": self.title},
                 {"role": AERole.SYSTEM.value, "content": f"当前的职责：{self.responsibility}"},
-                {"role": AERole.USER.value, "content": "按当前的内容给出当前功能匹配的输入参数据json格式，不要多余参数"},
+                {"role": AERole.USER.value, "content": "按当前的内容给出当前功能匹配的输入参数据单层json格式"},
             ]
         )
         self.send_llm_payload(payload)
@@ -299,8 +299,8 @@ class AEFlow(AEFlowInfo):
         """
         Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
 
-        - 命中直接子 flow → 推进当前子 flow 序号，并把 result["outResult"] 传入该子 flow（若有）
-        - 未取到 flow → 进行当前自己各个状态的处理：
+        - 命中直接子 flow → 把数据交给该子 flow 处理（receiveInputSchemaData），不再做自身状态处理
+        - 未命中子 flow → 按自身 flowStatus 处理：
             - inputSchemed → flow_complete_input_schemed
             - processing   → flow_complete_processing
             - default      → flow_complete_default
@@ -313,14 +313,18 @@ class AEFlow(AEFlowInfo):
         """
         ident = result.get("ident") if isinstance(result, dict) else None
         flow = self._flows.get(ident) if ident else None
-        # 命中直接子 flow：推进序号 + 传 outResult（若有）
+        # 命中子 flow：把 result 内的 llm_out 交给子 flow 处理
         if flow is not None:
             self._current_index += 1
-            out_result = result.get("outResult")
-            if out_result is not None:
-                flow.receiveInputSchemaData(out_result)
+            llm_out = result.get("llm_out") if isinstance(result, dict) else None
+            logger.info(
+                "[AEFlow:%s][%s] flow_complete 命中子 flow(%s)，传入 llm_out:\n%s",
+                self.ident, self.title, ident,
+                json.dumps(llm_out, ensure_ascii=False, indent=2) if llm_out is not None else repr(llm_out),
+            )
+            flow.receiveInputSchemaData(llm_out)
             return
-        # 未取到 flow：进行当前自己各个状态的处理
+        # 未命中子 flow：按自己的状态进行处理
         if flowStatus == AEFlowStatus.inputSchemed:
             self.flow_complete_input_schemed(result)
         elif flowStatus == AEFlowStatus.processing:
