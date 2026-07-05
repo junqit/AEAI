@@ -1,14 +1,8 @@
 import json
-import uuid
-import asyncio
 import logging
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
-from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetRsp import AENetRspCode
-from Chat.AEChat import AEChat
 from .AEBaseContext import AEBaseContext
-from .AEContextPath import AE_PATH_CONTEXT_CHAT_LIST
 from .AEContextType import AEContextType
 
 if TYPE_CHECKING:
@@ -20,34 +14,8 @@ logger = logging.getLogger(__name__)
 
 class AEWorkSpaceContext(AEBaseContext):
 
-    def __init__(self, user=None, space: str = ""):
-        super().__init__(context_type=AEContextType.workspace, user=user, space=space)
-        # chat.ident -> AEChat，持有本 workspace 下的会话
-        self._chat_map: Dict[str, AEChat] = {}
-
-    async def on_chat(self, request: AENetReq) -> None:
-        question = request.cont.ques if request.cont else None
-        
-        if not question or not question.content:
-            response = AENetRsp(
-                code=AENetRspCode.badRequest,
-                rsp={"error": "missing question content"},
-                req=request.req,
-                cont=request.cont,
-                user=request.user
-            )
-            self.send_response(response)
-            return
-
-        # 创建新 AEChat，delegate 设为当前 Context，接收用户信息，按 chat.ident 存入 chat_map
-        chat = AEChat(ident=uuid.uuid4().hex)
-        chat.set_delegate(self)
-        self._chat_map[chat.ident] = chat
-        logger.info(f"AEChat created and stored - chat_ident={chat.ident}, space={self.space}")
-
-        # receiveQuestion 内含同步阻塞的 LLM 往返，丢到线程池异步处理，避免阻塞 _loop
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, chat.receiveQuestion, question)
+    def __init__(self, space: str = ""):
+        super().__init__(context_type=AEContextType.workspace, space=space)
 
     # ==================== AEFlowDelegate 实现 ====================
 
@@ -104,22 +72,3 @@ class AEWorkSpaceContext(AEBaseContext):
             logger.error(f"[WorkSpace:{self.ident}] chat 内层 out_schema 非 map: {out_schema!r}")
             return
         chat.receiveInputSchemaData(out_schema)
-
-    async def on_request(self, request: AENetReq) -> None:
-        path = request.req.path if request.req else None
-
-        if path == AE_PATH_CONTEXT_CHAT_LIST:
-            self._handle_chat_list(request)
-            return
-
-        logger.info(f"AEWorkSpaceContext on_request: {request.model_dump_json(exclude_none=True)}")
-
-    def _handle_chat_list(self, request: AENetReq) -> None:
-        response = AENetRsp(
-            code=AENetRspCode.success,
-            rsp={"message": "yellow world"},
-            req=request.req,
-            cont=request.cont,
-            user=request.user
-        )
-        self.send_response(response)

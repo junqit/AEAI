@@ -28,6 +28,6 @@ class AENetworkDelegate(Protocol):
 class AEContextDelegate(AENetworkDelegate, Protocol):
     """Context 委托协议：在 AENetworkDelegate 基础上增加 LLM 请求。"""
 
-    def send_llm_request(self, payload: 'AELLMPayload') -> str:
-        """发送 LLM 请求，返回 LLM 回复。"""
+    def send_llm_request(self, payload: 'AELLMPayload') -> None:
+        """发送 LLM 请求（无返回值；回复到达后经 dispatch 回流到对应 Context）。"""
         ...

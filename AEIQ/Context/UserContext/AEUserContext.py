@@ -1,41 +1,42 @@
 """
-AEUserContext - 单用户的 Context 管理中心。
+AEUserContext - 单用户的请求入口与隔离单元。
 
-接收该用户传来的 AENetReq，负责相关 context 的创建与存储、context list 处理，
-并分发到对应 Context 处理。AENetRouteCenter 通过 user.user_key 命中对应的本类实例，
-把请求转交本类处理。每个 AEUserContext 持有自己的持久事件循环。
-本类已按用户隔离，内部 context 表只需 ident -> AEBaseContext。
+AENetRouteCenter 通过 user.user_key 命中对应的本类实例，把请求转交本类处理。
+本类持有：用户信息、网络委托（AENetworkDelegate）、持久事件循环；
+Context 的命中/创建/存储与 LLM 回复的分发交由 AEContextCenter 完成。
 """
 import asyncio
-import json
 import logging
 import threading
-from typing import Dict, Optional
+import contextvars
 
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AEUserInfo
 from Network.Core.AENetRsp import AENetRspCode
-from ..Context.AEBaseContext import AEBaseContext
 from ..Context.AEContextDelegate import AENetworkDelegate
-from ..Context.AEContextPath import AE_PATH_CONTEXT_LIST
-from ..Context.AEContextType import AEContextType
-from ..Context.AEPermissionContext import AEPermissionContext
-from ..Context.AEDirectoryContext import AEDirectoryContext
-from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
+from ..Context.AEContextPath import (
+    AE_PATH_CONTEXT_LIST,
+    AE_PATH_CONTEXT_CREATE,
+    AE_PATH_CONTEXT_CHAT,
+    AE_PATH_CONTEXT_CHAT_LIST,
+    AE_PATH_CONTEXT_INFO,
+)
+from .AEContextCenter import AEContextCenter
 
 logger = logging.getLogger(__name__)
 
+# 当前请求的 req（按 asyncio task 隔离），send_response 回填进响应，供客户端按 path 路由
+_req_ctx: contextvars.ContextVar = contextvars.ContextVar("ae_req")
+
 
 class AEUserContext:
-    """单用户的 Context 管理中心：创建/存储/分发该用户的 contexts，持有独立事件循环。"""
-
-    _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
+    """单用户请求入口：用户隔离 + 事件循环 + 网络/LLM 发送；Context 管理委托给 AEContextCenter。"""
 
     def __init__(self, user: AEUserInfo, delegate: AENetworkDelegate):
         self.user = user
         self.delegate = delegate
-        # context_ident -> AEBaseContext（本类已按用户隔离，无需再按 user_key 分层）
-        self._user_contexts: Dict[str, AEBaseContext] = {}
+        # Context 命中/创建/存储 + LLM 回复分发
+        self._context_center = AEContextCenter(self)
         # 持久事件循环，避免 httpx 连接池在 loop.close() 时报错
         self._loop = asyncio.new_event_loop()
         self._loop_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
@@ -45,40 +46,45 @@ class AEUserContext:
     # ==================== 接口（请求入口） ====================
 
     def handle_request(self, request: AENetReq) -> None:
-        """处理该用户请求：关键判断后处理 context list；否则获取/创建 context 并在其上执行。"""
+        """处理该用户请求：提交到事件循环异步处理，不阻塞调用方（socket 解析线程）。"""
+        asyncio.run_coroutine_threadsafe(self._dispatch(request), self._loop)
+
+    async def _dispatch(self, request: AENetReq) -> None:
+        """全路径分解后命中/创建 context 并分发（在事件循环内异步执行，无同步阻塞）。"""
         # 关键判断：context 信息
         if not request.cont or not request.cont.type:
             logger.warning("Request has no context info, ignored")
             return
 
-        # context list 路径（放在关键判断之后）
+        # 按当前 task 记录 req，供 send_response 回填（并发 task 互不串）
+        _req_ctx.set(request.req)
         path = request.req.path if request.req else None
+        cont = request.cont
+
+        # context list 无需具体 context
         if path == AE_PATH_CONTEXT_LIST:
-            self._handle_context_list(request)
+            await self._handle_context_list()
             return
 
-        # 先通过 cont.ident 获取已有 context 实例
-        context = None
-        if request.cont.ident:
-            context = self._get_context(request.cont.ident)
-
-        # 获取不到，通过 cont.type 创建新 context
-        if context is None:
-            space = request.cont.space or ""
-            if request.cont.type == AEContextType.workspace.value and not space:
-                logger.warning("Cannot create WorkSpaceContext: space is required")
-                return
-            context = self._create_context(request.cont.type, user=request.user, space=space)
-
-        if context is None:
+        # 路径分解：create / chat / chat_list / info，交 AEContextCenter 异步处理（各自内部 resolve）
+        if path == AE_PATH_CONTEXT_CREATE:
+            await self._context_center.handle_create(cont)
+            return
+        if path == AE_PATH_CONTEXT_CHAT:
+            await self._context_center.handle_chat(cont)
+            return
+        if path == AE_PATH_CONTEXT_CHAT_LIST:
+            await self._context_center.handle_chat_list(cont)
+            return
+        if path == AE_PATH_CONTEXT_INFO:
+            await self._context_center.handle_info(cont)
             return
 
-        future = asyncio.run_coroutine_threadsafe(context.handle_request(request), self._loop)
-        future.result()
+        logger.info(f"Unhandled path: {path}")
 
     # ==================== AEContextDelegate 实现 ====================
     # 网络请求/回复转发给 delegate（AENetworkDelegate）；
-    # LLM 请求由本类自行调用客户端并在本用户内派发，不经 delegate。
+    # LLM 请求由本类调用客户端，回复交由 AEContextCenter 在本用户内派发。
 
     def send_request(self, request: AENetReq) -> None:
         """Context 需要发送 NetReq 时调用，转发给 delegate"""
@@ -86,108 +92,31 @@ class AEUserContext:
         self.delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        """Context 需要发送 NetRsp 时调用，转发给 delegate"""
+        """Context 需要发送 NetRsp 时调用，回填 user/req 后转发给 delegate。
+        req 取 contextvar（_dispatch 在本 task 内设置），并发 task 互不串。"""
         response.user = self.user
+        if response.req is None:
+            response.req = _req_ctx.get(None)
         self.delegate.send_response(response)
 
-    def send_llm_request(self, payload) -> str:
-        """发送 LLM 请求，收到回复后在本用户内按 ident 路由到对应 Context"""
-        from ..Context.AELLMClient import send_llm_request as _send_llm
+    def send_llm_request(self, payload) -> None:
+        """异步发送 LLM 请求：提交到 loop 立即返回（无返回值）；回复到达后由 AEContextCenter 派发。"""
+        asyncio.run_coroutine_threadsafe(self._do_llm(payload), self._loop)
 
-        reply = _send_llm(payload)
-        self._dispatch_llm_response(reply)
-        return reply
+    async def _do_llm(self, payload) -> None:
+        """在 loop 上 await async LLM，回复到达后直接 dispatch 驱动 flow（与请求同在一个异步线程）。"""
+        from ..Context.AELLMClient import send_llm_request
 
-    def _dispatch_llm_response(self, reply: str) -> None:
-        """解析 LLM 回复 JSON，按其中的 ident 把数据传给本用户内对应 Context"""
-        if not reply:
-            logger.warning("LLM 回复为空，跳过 dispatch")
-            return
-        try:
-            data = json.loads(self._strip_code_fence(reply))
-        except (ValueError, TypeError) as e:
-            logger.error(f"[{self.user.user_key}] LLM 回复非合法 JSON: {e}, reply={reply!r}")
-            return
-        if not isinstance(data, dict):
-            logger.error(f"[{self.user.user_key}] LLM 回复非 JSON 对象: {reply!r}")
-            return
-        ident = data.get("ident")
-        if not ident:
-            logger.error(f"[{self.user.user_key}] LLM 回复缺少 ident: {data!r}")
-            return
-        context = self._find_context_by_ident(ident)
-        if context is None:
-            logger.error(f"[{self.user.user_key}] 未找到 ident={ident!r} 的 Context，丢弃 LLM 回复")
-            return
-        context.receive_llm_response(data)
-
-    @staticmethod
-    def _strip_code_fence(text: str) -> str:
-        """去掉 LLM 回复可能包裹的 ```json ... ``` 代码块围栏"""
-        t = text.strip()
-        if t.startswith("```"):
-            lines = t.splitlines()
-            if lines:
-                lines = lines[1:]
-            if lines and lines[-1].strip().startswith("```"):
-                lines = lines[:-1]
-            t = "\n".join(lines)
-        return t
+        reply = await send_llm_request(payload)
+        self._context_center.dispatch_llm_response(reply)
 
     # ==================== 自有方法 ====================
 
-    def _handle_context_list(self, request: AENetReq) -> None:
+    async def _handle_context_list(self) -> None:
         """返回该用户当前所有 context 配置列表。"""
-        contexts = [context.context_config() for context in self._user_contexts.values()]
+        contexts = [context.context_config() for context in self._context_center.get_all()]
         response = AENetRsp(
             code=AENetRspCode.success,
             rsp={"contexts": contexts},
-            req=request.req,
-            user=request.user,
         )
-        self.delegate.send_response(response)
-
-    def _get_context(self, context_ident: str) -> Optional[AEBaseContext]:
-        return self._user_contexts.get(context_ident)
-
-    def _create_context(self, context_type_str: str, user=None, space: str = "") -> Optional[AEBaseContext]:
-        try:
-            context_type = AEContextType(context_type_str)
-        except ValueError:
-            logger.warning(f"Unknown context type: {context_type_str}")
-            return None
-
-        if context_type in self._SINGLETON_TYPES:
-            existing = self._find_context_by_type(context_type)
-            if existing:
-                return existing
-
-        context_map = {
-            AEContextType.permission: AEPermissionContext,
-            AEContextType.directory: AEDirectoryContext,
-            AEContextType.workspace: AEWorkSpaceContext,
-        }
-
-        context = context_map[context_type](user=user, space=space)
-        context.set_delegate(self)
-
-        self._user_contexts[context.ident] = context
-        logger.info(
-            f"Context created: user_key={self.user.user_key}, ident={context.ident}, "
-            f"type={context_type_str}({context_type!r})"
-        )
-        return context
-
-    def _find_context_by_type(self, context_type: AEContextType) -> Optional[AEBaseContext]:
-        for context in self._user_contexts.values():
-            if context.context_type == context_type:
-                return context
-        return None
-
-    def _find_context_by_ident(self, context_ident: str) -> Optional[AEBaseContext]:
-        """在本 AEUserContext 内按 ident 查找 context。"""
-        return self._user_contexts.get(context_ident)
-
-    def get_contexts(self):
-        """返回该用户下所有 context。"""
-        return list(self._user_contexts.values())
+        self.send_response(response)

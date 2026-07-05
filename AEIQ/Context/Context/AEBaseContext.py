@@ -1,12 +1,12 @@
 import uuid
+import asyncio
 import hashlib
 import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetReqContext, AEUserInfo
-from Network.Core.AENetRsp import AENetRspCode
-from .AEContextPath import AE_PATH_CONTEXT_CREATE, AE_PATH_CONTEXT_CHAT
+from Network.Core.AENetReq import AENetQues
+from Chat.AEChat import AEChat
 from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
@@ -17,28 +17,24 @@ if TYPE_CHECKING:
 
 class AEBaseContext:
 
-    def __init__(self, context_type: AEContextType, user: AEUserInfo = None, space: str = ""):
-        self.user: Optional[AEUserInfo] = user
-        self.ident: str = self._generate_ident(context_type, user, space)
+    def __init__(self, context_type: AEContextType, space: str = ""):
+        self.ident: str = self._generate_ident(context_type, space)
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
+        # chat.ident -> AEChat，持有本 context 下的会话
+        self._chat_map: Dict[str, AEChat] = {}
 
     @staticmethod
-    def _generate_ident(context_type: AEContextType, user: Optional[AEUserInfo], space: str = "") -> str:
-        user_info = user.user_key if user else ""
-
+    def _generate_ident(context_type: AEContextType, space: str = "") -> str:
         if context_type == AEContextType.workspace:
-            raw = f"{user_info}{space}"
-            return hashlib.md5(raw.encode()).hexdigest()
+            return hashlib.md5(space.encode()).hexdigest()
 
         if context_type == AEContextType.directory:
-            raw = f"{user_info}directory"
-            return hashlib.md5(raw.encode()).hexdigest()
+            return hashlib.md5(b"directory").hexdigest()
 
         if context_type == AEContextType.permission:
-            raw = f"{user_info}permission"
-            return hashlib.md5(raw.encode()).hexdigest()
+            return hashlib.md5(b"permission").hexdigest()
 
         return uuid.uuid4().hex
 
@@ -62,10 +58,10 @@ class AEBaseContext:
             raise ValueError("Context delegate is not set")
         self.delegate.send_response(response)
 
-    def send_llm_request(self, payload) -> str:
+    def send_llm_request(self, payload) -> None:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
-        return self.delegate.send_llm_request(payload)
+        self.delegate.send_llm_request(payload)
 
     def receive_llm_response(self, data: dict) -> None:
         """
@@ -78,36 +74,15 @@ class AEBaseContext:
         """
         logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
 
-    async def handle_request(self, request: AENetReq) -> None:
-        path = request.req.path if request.req else None
+    async def create_chat(self, question: AENetQues) -> None:
+        """接收 AENetQues，在内部创建 AEChat 并驱动其处理（含 LLM 往返）。
 
-        if path == AE_PATH_CONTEXT_CREATE:
-            self._handle_create(request)
-            return
-
-        if path == AE_PATH_CONTEXT_CHAT:
-            await self.on_chat(request)
-            return
-
-        await self.on_request(request)
-
-    def _handle_create(self, request: AENetReq) -> None:
-        """返回当前 Context 基础信息"""
-        response = AENetRsp(
-            code=AENetRspCode.success,
-            cont=AENetReqContext(
-                type=request.cont.type if request.cont else None,
-                ident=self.ident
-            ),
-            req=request.req,
-            user=request.user
-        )
-        self.send_response(response)
-
-    async def on_chat(self, request: AENetReq) -> None:
-        """子类重写此方法处理 Chat 消息"""
-        pass
-
-    async def on_request(self, request: AENetReq) -> None:
-        """子类重写此方法处理具体业务请求"""
-        pass
+        - 新建 AEChat，delegate 设为当前 context，按 chat.ident 存入 _chat_map
+        - receiveQuestion 内含同步阻塞的 LLM 往返，丢到线程池异步处理，避免阻塞 loop
+        """
+        chat = AEChat(ident=uuid.uuid4().hex)
+        chat.set_delegate(self)
+        self._chat_map[chat.ident] = chat
+        logger.info(f"AEChat created - chat_ident={chat.ident}, context={self.ident}")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, chat.receiveQuestion, question)
