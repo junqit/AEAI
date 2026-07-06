@@ -307,6 +307,6 @@ class AEFlow(AEFlowInfo):
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
         payload = AELLMPayload(
             messages=messages,
-            out_schema=self.output if isinstance(self.output, dict) else {},
+            out_schema=self.output.out_schema if self.output else {},
         )
         self.send_llm_payload(payload)
