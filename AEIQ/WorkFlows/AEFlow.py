@@ -19,13 +19,14 @@ from typing import Dict, Optional, TYPE_CHECKING
 from .AEFlowInfo import AEFlowInfo
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
+from Context.Context.AELLMPayload import AELLMPayload
+from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
-    from Context.Context.AELLMPayload import AELLMPayload
 
 
 class AEFlowStatus(str, Enum):
@@ -50,7 +51,6 @@ class AEFlow(AEFlowInfo):
         self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
-        self._current_index: int = 0                    # 当前执行的子 flow 序号
         # flow 执行状态，初始为 default
         self.status: AEFlowStatus = AEFlowStatus.default
 
@@ -129,10 +129,10 @@ class AEFlow(AEFlowInfo):
         """
         收到经 receiveLLMResult 路由到自身、已解析出的 out_schema 数据。
 
-        按 out_schema 内的 status 字段分发到对应处理方法（每个方法标识下一个状态并处理）：
-          - default    → flow_receive_default     （→ processing）
-          - processing → flow_receive_processing  （→ complete）
-          - complete   → flow_receive_complete    （已 complete 不应再收到数据，打印错误）
+        按 out_schema 内的 status 字段分发到对应处理方法（每个方法同步状态为该 status 并处理）：
+          - default    → flow_receive_default     （同步为 default）
+          - processing → flow_receive_processing  （同步为 processing）
+          - complete   → flow_receive_complete    （同步为 complete）
 
         out_schema 内无 status 字段、或 status 不匹配已知状态时，打印错误信息并忽略。
 
@@ -156,32 +156,23 @@ class AEFlow(AEFlowInfo):
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
-        status=default：收到的数据即 LLM 生成的输入数据，将 status 切换为 processing，
-        并通过 delegate.flow_complete 通知返回。子类覆写时调用 super 以保留状态切换与通知。
+        status=default：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
         """
-        logger.info("[AEFlow:%s][%s] 阶段=default → processing", self.ident, self.title)
-        self.status = AEFlowStatus.processing
-        if self.delegate is not None:
-            self.delegate.flow_complete(self.to_map(), self.status)
+        logger.info("[AEFlow:%s][%s] 阶段=default", self.ident, self.title)
 
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
         """
-        status=processing：接收数据时将 status 切换为 complete，并通过 delegate.flow_complete 通知返回。
-        子类覆写时调用 super 以保留状态切换与通知。
+        status=processing：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
         """
-        logger.info("[AEFlow:%s][%s] 阶段=processing → complete", self.ident, self.title)
-        self.status = AEFlowStatus.complete
-        if self.delegate is not None:
-            self.delegate.flow_complete(self.to_map(), self.status)
+        logger.info("[AEFlow:%s][%s] 阶段=processing", self.ident, self.title)
 
     def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
         """
-        status=complete：已 complete 不应再收到数据，打印错误。
+        status=complete：收到结果数据，并通过 delegate.flow_complete 通知返回。
         """
-        logger.error(
-            "[AEFlow:%s][%s] 阶段=complete，不应再收到数据: %r",
-            self.ident, self.title, out_schema,
-        )
+        logger.info("[AEFlow:%s][%s] 阶段=complete", self.ident, self.title)
+        if self.delegate is not None:
+            self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
 
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
@@ -262,55 +253,60 @@ class AEFlow(AEFlowInfo):
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
         """
-        Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
+        Flow 完成通知：仅处理 complete，按 result.ident 路由结果数据。
 
-        - 命中直接子 flow → 把数据交给该子 flow 处理（receiveLLMResult），不再做自身状态处理
-        - 未命中子 flow → 按自身 flowStatus 处理：
-            - processing → flow_complete_processing
-            - default    → flow_complete_default
-            - complete   → flow_complete_complete
-        无返回值。
+        - ident == self.ident → 本层接收（receive_flow_result）
+        - ident 命中 _flows 内子 flow → 转发给该子 flow（receive_flow_result）
+
+        非 complete 状态（default / processing）忽略并记录告警。
 
         Args:
-            result: 完成 flow 的元信息 map（含 ident / outResult）
+            result: 完成 flow 的结果数据（含 ident）
             flowStatus: 完成 flow 的状态
         """
-        ident = result.get("ident") if isinstance(result, dict) else None
-        flow = self._flows.get(ident) if ident else None
-        # 命中子 flow：把 result 内的 llm_out 交给子 flow 处理
-        if flow is not None:
-            self._current_index += 1
-            llm_out = result.get("llm_out") if isinstance(result, dict) else None
-            logger.info(
-                "[AEFlow:%s][%s] flow_complete 命中子 flow(%s)，传入 llm_out:\n%s",
-                self.ident, self.title, ident,
-                json.dumps(llm_out, ensure_ascii=False, indent=2) if llm_out is not None else repr(llm_out),
+        if flowStatus != AEFlowStatus.complete:
+            logger.warning(
+                "[AEFlow:%s][%s] flow_complete 仅处理 complete，当前 %s，忽略",
+                self.ident, self.title, flowStatus,
             )
-            flow.receiveLLMResult(llm_out)
             return
-        # 未命中子 flow：按自己的状态进行处理
-        if flowStatus == AEFlowStatus.processing:
-            self.flow_complete_processing(result)
-        elif flowStatus == AEFlowStatus.default:
-            self.flow_complete_default(result)
-        else:  # AEFlowStatus.complete
-            self.flow_complete_complete(result)
+        ident = result.get("ident") if isinstance(result, dict) else None
+        flow = self._flows.get(ident) if ident is not None else None
+        # ident 命中自身：本层接收
+        if ident == self.ident:
+            self.receive_flow_result(result.get("llm_out"))
+            return
+        # ident 命中子 flow：转发内层数据给该子 flow
+        if flow is not None:
+            flow.receive_flow_result(result.get("llm_out"))
+            return
 
-    def flow_complete_default(self, result: dict) -> None:
-        """status=default：未命中子 flow 的完成通知，非预期，记录告警。"""
-        logger.warning(
-            "[AEFlow:%s] flow_complete status=default，忽略: %r",
-            self.ident, result,
+    def receive_flow_result(self, out_schema: "Optional[dict]") -> None:
+        """
+        收到经 flow_complete 路由到自身的结果数据。
+
+        读取 out_schema.answer，拼装 AELLMPayload：
+          - role.system:  self.title
+          - role.system:  self.responsibility
+          - role.assistant: answer
+          - role.user:    根据自己的职责条理地整理结论
+        按本 flow 的 output 结构作为 out_schema 约束，发送交由 LLM 生成。
+
+        Args:
+            out_schema: 结果数据（含 answer 字段）
+        """
+        self.status = AEFlowStatus.complete
+        answer = out_schema.get("answer") if isinstance(out_schema, dict) else None
+        logger.info("[AEFlow:%s][%s] receive_flow_result 收到 answer=%r", self.ident, self.title, answer)
+        messages = []
+        if self.title:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
+        if self.responsibility:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
+        messages.append({"role": AERole.ASSISTANT.value, "content": answer or ""})
+        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+        payload = AELLMPayload(
+            messages=messages,
+            out_schema=self.output if isinstance(self.output, dict) else {},
         )
-
-    def flow_complete_processing(self, result: dict) -> None:
-        """status=processing：未命中子 flow 的完成通知，非预期，记录告警。"""
-        logger.warning(
-            "[AEFlow:%s] flow_complete status=processing，忽略: %r",
-            self.ident, result,
-        )
-
-    def flow_complete_complete(self, result: dict) -> None:
-        """status=complete：子 flow 已完成，向上委托通知。"""
-        if self.delegate is not None:
-            self.delegate.flow_complete(result, AEFlowStatus.complete)
+        self.send_llm_payload(payload)
