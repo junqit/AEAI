@@ -105,16 +105,16 @@ class AEFlow(AEFlowInfo):
             logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
             return
 
-        # 取 ident，通过 ident 获取子 flow
+        # 取 ident
         ident = data.get("ident")
-        flow = self._flows.get(ident) if ident is not None else None
 
-        # ident 命中自身：本层处理
+        # ident 命中自身：本层处理（传整个 data）
         if ident == self.ident:
-            self.flow_receive_llm(data.get("llm_out"))
+            self.flow_receive_llm(data)
             return
 
-        # ident 命中子 flow：转发内层 out_schema 给该子 flow
+        # ident 命中子 flow：转发内层 out_schema 给该子 flow（使用时再获取）
+        flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
             flow.receiveLLMResult(data.get("llm_out"))
             return
@@ -214,10 +214,11 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 将当前 status 注入内层 out_schema（作为内容字段，非路由信封字段）
+        # 将当前 ident / title / status 注入内层 out_schema（作为内容字段，非路由信封字段）
         if isinstance(payload.out_schema, dict):
+            payload.out_schema["ident"] = self.ident
+            payload.out_schema["title"] = self.title
             payload.out_schema["status"] = self.status.value
-            
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
@@ -271,12 +272,12 @@ class AEFlow(AEFlowInfo):
             )
             return
         ident = result.get("ident") if isinstance(result, dict) else None
-        flow = self._flows.get(ident) if ident is not None else None
         # ident 命中自身：本层接收
         if ident == self.ident:
             self.receive_flow_result(result.get("llm_out"))
             return
-        # ident 命中子 flow：转发内层数据给该子 flow
+        # ident 命中子 flow：转发内层数据给该子 flow（使用时再获取）
+        flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
             flow.receive_flow_result(result.get("llm_out"))
             return

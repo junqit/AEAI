@@ -1,9 +1,12 @@
 import json
+import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
 from Assistant.AERole import AERole
+
+logger = logging.getLogger(__name__)
 
 # out_schema 中标记「由 LLM 生成」的占位哨兵值：
 # 取该值的字段为待生成字段，其余字段视为已填好的固定值，LLM 须原样保留
@@ -56,9 +59,14 @@ class AELLMPayload:
         if not (0.0 <= self.temperature <= 1.0):
             raise ValueError(f"temperature 必须在 0.0 - 1.0 之间，当前值: {self.temperature}")
 
+    def schema_text(self) -> str:
+        """返回 out_schema 的结构化标注文本（哨兵字段标「待生成」，其余标「保持原值」）。"""
+        return _annotate_schema(self.out_schema)
+
     def to_dict(self) -> dict:
         # 按 out_schema 输出：注入 system 指令，标注「待生成 / 保持原值」字段，
         # 要求 LLM 仅生成「待生成」字段，其余原样保留，最终输出合法 JSON
+        logger.info("out_schema 结构:\n%s", self.schema_text())
         messages = list(self.messages)
         instruction = (
             "请按以下结构输出合法 JSON，仅生成标记为「待生成」的字段，"

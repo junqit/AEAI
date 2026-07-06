@@ -5,13 +5,17 @@ AERefiner - 问题精炼 Flow，继承 AEFlow。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow
+from WorkFlows.AEFlow import AEFlow, AEFlowStatus
+from WorkFlows.AEFlowInput import AEFlowInput
+from WorkFlows.AEFlowOutput import AEFlowOutput
+from Context.Context.AELLMPayload import AELLMPayload
+from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
 class AERefiner(AEFlow):
-    """问题精炼 Flow：改写用户问题，输出 question。"""
+    """问题精炼 Flow：改写用户问题，输出 answer。"""
 
     def __init__(self, ident: str):
         super().__init__(ident=ident)
@@ -29,12 +33,28 @@ class AERefiner(AEFlow):
             "如果问题已经清晰，则仅做轻微优化。"
         )
 
-    def flow_receive_default(self, out_schema) -> None:
-        """status=default：收到 LLM 生成的输入数据，交基类切换到 processing。"""
-        logger.info("[AERefiner:%s][%s] 阶段=default 收到输入数据", self.ident, self.title)
-        super().flow_receive_default(out_schema)
+    def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
+        """启动：交基类置 input/output 并切到 processing，拼装 AELLMPayload 发送。
 
-    def flow_receive_processing(self, out_schema) -> None:
-        """status=processing：收到转换后的输入数据，交基类切换到 complete。"""
-        logger.info("[AERefiner:%s][%s] 阶段=processing 收到输入数据", self.ident, self.title)
-        super().flow_receive_processing(out_schema)
+        - messages: system(title) / system(responsibility) / user(input.content)
+        - out_schema: 本 flow 的输出结构（含 answer 占位，由 LLM 生成精炼后的问题）
+
+        Args:
+            flowInput: flow 输入数据（content 即用户原始问题）
+            flowOutput: flow 输出结构
+        """
+        super().startFlow(flowInput, flowOutput)
+
+        messages = []
+        if self.title:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
+        if self.responsibility:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
+        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+        payload = AELLMPayload(
+            messages=messages,
+            out_schema=flowOutput.out_schema,
+        )
+        # 发送前置状态为 complete，注入 out_schema 后回包按 complete 处理
+        self.status = AEFlowStatus.complete
+        self.send_llm_payload(payload)

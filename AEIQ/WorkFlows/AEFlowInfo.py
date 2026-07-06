@@ -44,6 +44,14 @@ class AEFlowInfo:
         """flow 标识（只读）"""
         return self._ident
 
+    def flowOutput(self) -> AEFlowOutput:
+        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, answer:"llm_result"}。"""
+        return AEFlowOutput(schema={
+            "ident": self.ident,
+            "title": self.title,
+            "answer": "llm_result",
+        })
+
     def to_map(self) -> dict:
         """返回元信息的 map 形态（ident / title / responsibility / input / output）"""
         return {
