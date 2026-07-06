@@ -4,15 +4,17 @@ AEFlowInterface - Flow 接口协议
 所有 Flow 实现需遵循此协议。
   - ident:       flow 标识（属性）
   - status:      flow 执行状态（属性，AEFlowStatus）
-  - inputSchema(): 输入参数数据结构（方法），flow 在不同状态下可返回不同结构
   - delegate:     AEFlowDelegate，Flow 内部信息向外流转的出口
-  - receiveInputSchemaData(): 接收按 inputSchema 组织的输入数据
+  - startFlow(): 启动 flow，接收 input/output 并切换到 processing
+  - receiveInputSchemaData(): 接收输入数据
 """
 from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlow import AEFlowStatus
+    from .AEFlowInput import AEFlowInput
+    from .AEFlowOutput import AEFlowOutput
 
 
 @runtime_checkable
@@ -23,24 +25,14 @@ class AEFlowInterface(Protocol):
     status: 'AEFlowStatus'
     delegate: 'AEFlowDelegate'
 
-    def inputSchema(self) -> 'Optional[dict]':
+    def startFlow(self, flowInput: 'AEFlowInput', flowOutput: 'AEFlowOutput') -> None:
         """
-        返回当前 flow 的输入数据结构（input_schema，dict）。
-
-        同一 flow 在不同状态下可返回不同的输入数据结构。
-
-        Returns:
-            Optional[dict]: input_schema，未设置时为 None
-        """
-        ...
-
-    def autoConfigInputSchema(self, schema: 'Optional[dict]' = None) -> None:
-        """
-        设置 input_schema，并通过 AELLMPayload 发起 input_schema 请求
-        （以 input_schema 作为 out_schema 上送，回程按 ident 路由回本 flow）。
+        启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并将状态切换为 processing。
+        非 default 状态下调用将被忽略。
 
         Args:
-            schema: 输入数据结构（dict）；为 None 时沿用当前 input_schema
+            flowInput: flow 输入数据
+            flowOutput: flow 输出数据（Map 结构）
         """
         ...
 
@@ -55,10 +47,10 @@ class AEFlowInterface(Protocol):
 
     def receiveInputSchemaData(self, data: dict) -> None:
         """
-        接收输入数据（map），内部解析并按 inputSchema 校验。
+        接收输入数据（map），内部解析处理。
 
-        Flow 在执行前由外部注入输入数据 map，方法内部解析该 map（如按 inputSchema 校验
-        required 字段），供后续 build_prompt / 生成等使用。
+        Flow 在执行前由外部注入输入数据 map，方法内部解析该 map，
+        供后续 build_prompt / 生成等使用。
 
         Args:
             data: 输入数据 map

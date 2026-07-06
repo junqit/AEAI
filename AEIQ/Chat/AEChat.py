@@ -8,8 +8,9 @@ import logging
 from typing import Optional
 
 from WorkFlows.AEFlow import AEFlow, AEFlowStatus
+from WorkFlows.AEFlowInput import AEFlowInput
+from WorkFlows.AEFlowOutput import AEFlowOutput
 from Network.Core.AENetReq import AENetQues, AENetReqInfo
-from Context.Context.AELLMPayload import AELLMPayload
 from QuestionRefiner.AERefiner import AERefiner
 
 logger = logging.getLogger(__name__)
@@ -31,13 +32,7 @@ class AEChat(AEFlow):
 
     def receiveQuestion(self, question: AENetQues) -> None:
         """
-        接收 AENetQues 消息进行处理。
-
-        - 校验消息非空
-        - 切换状态为 processing
-        - 组装 AELLMPayload（role=user，content=question.content）
-        - 取首个子 flow，将其 input_schema 赋给 payload.out_schema
-        - 通过 delegate 发送 payload
+        接收 AENetQues 消息：校验非空，持有 question 与 input，并启动首个子 flow。
 
         Args:
             question: 网络问题消息体（type / ident / content）
@@ -45,15 +40,15 @@ class AEChat(AEFlow):
         if question is None:
             logger.error("[AEChat:%s] 收到的 AENetQues 为空", self.ident)
             return
-        # 收到消息即进入 inputSchemed
-        self.status = AEFlowStatus.inputSchemed
+        # 收到消息即进入 processing
+        self.status = AEFlowStatus.processing
         self.question = question
-        # 用 input 持有待转换的内容（question.content），后续由 flow_complete_input_schemed
-        # 作为 role=system 的 content，转换成 next_flow.inputSchema() 结构
-        self.input = question.content or ""
+        self.input = AEFlowInput(content=question.content or "")
         logger.info(
             "[AEChat:%s] 收到问题 type=%s ident=%s content=%r",
             self.ident, question.type, question.ident, question.content,
         )
-
-        self.nextFlow().autoConfigInputSchema()
+        # 取首个子 flow，以 input 启动（output 由子 flow 自身确定/填充）
+        next_flow = self.nextFlow()
+        if next_flow is not None:
+            next_flow.startFlow(self.input, AEFlowOutput())

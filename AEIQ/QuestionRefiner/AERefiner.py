@@ -30,8 +30,8 @@ class AERefiner(AEFlow):
         )
 
     def flow_receive_default(self, out_schema) -> None:
-        """status=default：收到 LLM 生成的 input_schema，交基类切换到 inputSchemed。"""
-        logger.info("[AERefiner:%s][%s] 阶段=default 收到 input_schema", self.ident, self.title)
+        """status=default：收到 LLM 生成的输入数据，交基类切换到 processing。"""
+        logger.info("[AERefiner:%s][%s] 阶段=default 收到输入数据", self.ident, self.title)
         super().flow_receive_default(out_schema)
 
     def flow_receive_processing(self, out_schema) -> None:
