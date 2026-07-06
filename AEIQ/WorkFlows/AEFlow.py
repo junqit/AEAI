@@ -3,12 +3,11 @@ AEFlow - Flow 基类，同时实现 AEFlowInterface 与 AEFlowDelegate 两个协
 
 AEFlowInterface 实现（flow 自身接口）：
   - ident / delegate（属性）
-  - receiveInputSchemaData()   接收输入数据
+  - receiveLLMResult()   接收输入数据
   - addFlow()                  添加子 flow
 
 AEFlowDelegate 实现（子 flow 通过本类向外流转）：
-  - next_flow_input_schema()   获取（下一个）子 flow 的输入数据结构
-  - flow_llm()                 发送 AELLMPayload 调用 LLM
+  - flow_llm_request()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，整理结果
 """
 import json
@@ -78,15 +77,16 @@ class AEFlow(AEFlowInfo):
         self.status = AEFlowStatus.processing
         logger.info("[AEFlow:%s][%s] startFlow → processing", self.ident, self.title)
 
-    def receiveInputSchemaData(self, data: dict) -> None:
+    def receiveLLMResult(self, data: dict) -> None:
         """
         接收输入数据（map），按其中的 ident 路由：
 
-          - 先通过 ident 在 _flows 内获取子 flow；命中 → 转发内层 out_schema 给该子 flow
-          - 不存在 ident（或未命中子 flow）→ 自己处理：交 flow_receive_llm
+          - ident == self.ident → 本层处理，交 flow_receive_llm
             （子类在 flow_receive_llm 中处理收到的数据）
+          - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receiveLLMResult）
+          - ident 既非自身、也未命中子 flow → 打印错误日志
 
-        data 约定为 flow_llm 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
+        data 约定为 flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
 
         Args:
@@ -95,46 +95,64 @@ class AEFlow(AEFlowInfo):
         # 先打印收到的数据
         if isinstance(data, dict):
             logger.info(
-                "[AEFlow:%s][%s] receiveInputSchemaData 收到:\n%s",
+                "[AEFlow:%s][%s] receiveLLMResult 收到:\n%s",
                 self.ident, self.title,
                 json.dumps(data, ensure_ascii=False, indent=2),
             )
         else:
-            logger.info("[AEFlow:%s][%s] receiveInputSchemaData 收到: %r", self.ident, self.title, data)
+            logger.info("[AEFlow:%s][%s] receiveLLMResult 收到: %r", self.ident, self.title, data)
         if not isinstance(data, dict):
             logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
             return
-        
+
+        # 取 ident，通过 ident 获取子 flow
         ident = data.get("ident")
-        # 先通过 ident 在 _flows 内获取子 flow；命中则转发内层 out_schema
         flow = self._flows.get(ident) if ident is not None else None
-        if flow is not None:
-            flow.receiveInputSchemaData(data.get("llm_out"))
+
+        # ident 命中自身：本层处理
+        if ident == self.ident:
+            self.flow_receive_llm(data.get("llm_out"))
             return
-        
-        # 不存在 ident（或未命中子 flow）：自己处理
-        self.flow_receive_llm(data.get("llm_out", data))
+
+        # ident 命中子 flow：转发内层 out_schema 给该子 flow
+        if flow is not None:
+            flow.receiveLLMResult(data.get("llm_out"))
+            return
+
+        # ident 既非自身、也未命中子 flow：打印错误日志
+        logger.error(
+            "[AEFlow:%s][%s] ident=%r 无法命中（既非自身也未匹配子 flow），忽略: %r",
+            self.ident, self.title, ident, data,
+        )
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """
-        收到经 receiveInputSchemaData 路由到自身、已解析出的 out_schema 数据。
+        收到经 receiveLLMResult 路由到自身、已解析出的 out_schema 数据。
 
-        按当前 status 分发到对应处理方法（每个方法标识下一个状态并处理）：
+        按 out_schema 内的 status 字段分发到对应处理方法（每个方法标识下一个状态并处理）：
           - default    → flow_receive_default     （→ processing）
           - processing → flow_receive_processing  （→ complete）
           - complete   → flow_receive_complete    （已 complete 不应再收到数据，打印错误）
 
+        out_schema 内无 status 字段、或 status 不匹配已知状态时，打印错误信息并忽略。
+
         子类覆写各状态方法以处理收到的数据，而非覆写本方法。
 
         Args:
-            out_schema: 从输入 map 中解析出的 out_schema 数据
+            out_schema: 从输入 map 中解析出的 out_schema 数据（含 status 字段）
         """
-        if self.status == AEFlowStatus.default:
+        status = out_schema.get("status") if isinstance(out_schema, dict) else None
+        if status == AEFlowStatus.default.value:
             self.flow_receive_default(out_schema)
-        elif self.status == AEFlowStatus.processing:
+        elif status == AEFlowStatus.processing.value:
             self.flow_receive_processing(out_schema)
-        else:  # AEFlowStatus.complete
+        elif status == AEFlowStatus.complete.value:
             self.flow_receive_complete(out_schema)
+        else:
+            logger.error(
+                "[AEFlow:%s][%s] out_schema 内 status=%r 无效或缺失，忽略: %r",
+                self.ident, self.title, status, out_schema,
+            )
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
@@ -194,8 +212,8 @@ class AEFlow(AEFlowInfo):
         """
         通过 delegate 发送 AELLMPayload（无返回值）。
 
-        校验 delegate 后，用当前 flow 的 ident / title 包装 payload.out_schema，再向上转发
-        （回程按 ident 路由回本 flow）。
+        校验 delegate 后，将当前 status 注入内层 out_schema，再用 ident / title 包装
+        payload.out_schema 向上转发（回程按 ident 路由回本 flow）。
 
         Args:
             payload: AELLMPayload 结构体
@@ -205,40 +223,20 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
+        # 将当前 status 注入内层 out_schema（作为内容字段，非路由信封字段）
+        if isinstance(payload.out_schema, dict):
+            payload.out_schema["status"] = self.status.value
+            
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
             "llm_out": payload.out_schema,
         }
-        self.delegate.flow_llm(payload)
+        self.delegate.flow_llm_request(payload)
 
     # ==================== AEFlowDelegate 实现 ====================
 
-    def next_flow_input_schema(self, info: "Optional[AEFlowInfo]" = None) -> "Optional[AEFlowInfo]":
-        """
-        获取子 flow 的元信息（AEFlowInfo）。
-
-        - info 非空：按 info.ident 返回该子 flow
-        - info 为空：返回本层下一个（current+1）子 flow；本层无下一个时向上委托外层 delegate
-
-        Args:
-            info: 指定 flow 的元信息（用其 ident 查找）；为 None 时取下一个
-
-        Returns:
-            AEFlowInfo: 子 flow 元信息（AEFlow 即 AEFlowInfo）；无可用时返回 None
-        """
-        if info is not None:
-            return self._flows.get(info.ident)
-        order = list(self._flows.keys())
-        nxt = self._current_index + 1
-        if 0 <= nxt < len(order):
-            return self._flows[order[nxt]]
-        # 本层无下一个子 flow：向上委托外层 delegate
-        if self.delegate is not None:
-            return self.delegate.next_flow_input_schema()
-        return None
-
-    def flow_llm(self, payload: "AELLMPayload") -> None:
+    def flow_llm_request(self, payload: "AELLMPayload") -> None:
         """
         发送 AELLMPayload 调用 LLM（无返回值）。
 
@@ -260,13 +258,13 @@ class AEFlow(AEFlowInfo):
             "title": self.title,
             "llm_out": payload.out_schema,
         }
-        self.delegate.flow_llm(payload)
+        self.delegate.flow_llm_request(payload)
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
         """
         Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
 
-        - 命中直接子 flow → 把数据交给该子 flow 处理（receiveInputSchemaData），不再做自身状态处理
+        - 命中直接子 flow → 把数据交给该子 flow 处理（receiveLLMResult），不再做自身状态处理
         - 未命中子 flow → 按自身 flowStatus 处理：
             - processing → flow_complete_processing
             - default    → flow_complete_default
@@ -288,7 +286,7 @@ class AEFlow(AEFlowInfo):
                 self.ident, self.title, ident,
                 json.dumps(llm_out, ensure_ascii=False, indent=2) if llm_out is not None else repr(llm_out),
             )
-            flow.receiveInputSchemaData(llm_out)
+            flow.receiveLLMResult(llm_out)
             return
         # 未命中子 flow：按自己的状态进行处理
         if flowStatus == AEFlowStatus.processing:

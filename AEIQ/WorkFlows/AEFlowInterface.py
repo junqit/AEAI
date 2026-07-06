@@ -6,7 +6,7 @@ AEFlowInterface - Flow 接口协议
   - status:      flow 执行状态（属性，AEFlowStatus）
   - delegate:     AEFlowDelegate，Flow 内部信息向外流转的出口
   - startFlow(): 启动 flow，接收 input/output 并切换到 processing
-  - receiveInputSchemaData(): 接收输入数据
+  - receiveLLMResult(): 接收输入数据
 """
 from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
@@ -45,7 +45,7 @@ class AEFlowInterface(Protocol):
         """
         ...
 
-    def receiveInputSchemaData(self, data: dict) -> None:
+    def receiveLLMResult(self, data: dict) -> None:
         """
         接收输入数据（map），内部解析处理。
 

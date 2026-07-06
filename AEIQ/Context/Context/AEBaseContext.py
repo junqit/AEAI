@@ -5,14 +5,19 @@ import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from Network.Core import AENetReq, AENetRsp
-from Network.Core.AENetReq import AENetQues, AENetReqInfo
+from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
+from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
+from WorkFlows.AEFlow import AEFlowStatus
+from WorkFlows.AEFlowInput import AEFlowInput
+from WorkFlows.AEFlowOutput import AEFlowOutput
 from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
+    from .AELLMPayload import AELLMPayload
 
 
 class AEBaseContext:
@@ -40,7 +45,11 @@ class AEBaseContext:
 
         return uuid.uuid4().hex
 
-    # ==================== 接口（外部调用 / 子类覆写） ====================
+    # ==================== 公开方法（外部调用 / 子类覆写） ====================
+
+    def set_delegate(self, delegate: 'AEContextDelegate') -> None:
+        """注入 delegate（AEContextDelegate）。"""
+        self.delegate = delegate
 
     def context_config(self) -> Dict[str, str]:
         return {
@@ -61,23 +70,67 @@ class AEBaseContext:
         logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
 
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
-        """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，把消息交给它处理（不等回，flow 内部异步流转）。
+        """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，构建 input 后交 startFlow 启动
+        （不等回，flow 内部异步流转）。
 
         - 新建 AEChat，delegate 设为当前 context，req 存入 chat，按 chat.ident 存入 _chat_map（添加持有）
-        - receiveQuestion 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
+        - output 预置为本 chat 的输出结构（含 reply 占位）
+        - 由 question 构建 AEFlowInput，startFlow 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
         """
+        if question is None:
+            logger.error("[Context:%s] 收到的 AENetQues 为空，忽略", self.ident)
+            return
         chat = AEChat(ident=uuid.uuid4().hex)
         chat.req = req
         chat.set_delegate(self)
+        chat.output = AEFlowOutput({"ident": chat.ident, "title": chat.title, "reply": "llm_result"})
         self._chat_map[chat.ident] = chat
-        logger.info(f"AEChat created - chat_ident={chat.ident}, context={self.ident}")
+        logger.info(
+            "AEChat created - chat_ident=%s, context=%s, question type=%s ident=%s content=%r",
+            chat.ident, self.ident, question.type, question.ident, question.content,
+        )
+        flow_input = AEFlowInput(content=question.content or "")
         loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, chat.receiveQuestion, question)
+        loop.run_in_executor(None, chat.startFlow, flow_input, chat.output or AEFlowOutput())
+
+    # ==================== AEFlowDelegate 实现（作为所属 chat 的 delegate） ====================
+
+    def flow_llm_request(self, payload: "AELLMPayload") -> None:
+        """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
+        用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
+        payload.out_schema = {"ident": self.ident, "type": self.context_type.value, "llm_out": payload.out_schema}
+        self.send_llm_request(payload)
+
+    def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
+        """AEFlowDelegate: flow 完成通知。status=complete 时组装 AENetRsp 经 delegate 发送给客户端。"""
+        flow_ident = result.get("ident") if isinstance(result, dict) else None
+        logger.info(
+            "Context %s 收到 flow_complete - flow_ident=%s, status=%s",
+            self.ident, flow_ident, flowStatus,
+        )
+        if flowStatus != AEFlowStatus.complete:
+            return
+        # complete：找到所属 chat，回填 req 组装 response 发送
+        chat = self._chat_map.get(flow_ident)
+        if chat is None:
+            logger.warning(
+                "[Context:%s] complete 但 _chat_map 未找到 chat(ident=%s)，无法发送 response",
+                self.ident, flow_ident,
+            )
+            return
+        rsp = AENetRsp(
+            code=AENetRspCode.success,
+            cont=AENetCont(
+                type=self.context_type.value,
+                ident=self.ident,
+                space=self.space,
+            ),
+            req=chat.req,
+            rsp=chat.output,
+        )
+        self.send_response(rsp)
 
     # ==================== delegate 转发 ====================
-
-    def set_delegate(self, delegate: 'AEContextDelegate') -> None:
-        self.delegate = delegate
 
     def send_request(self, request: AENetReq) -> None:
         if not self.delegate:

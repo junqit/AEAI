@@ -1,13 +1,8 @@
 import json
 import logging
-from typing import Optional, TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
-
-if TYPE_CHECKING:
-    from WorkFlows.AEFlowInfo import AEFlowInfo
-    from .AELLMPayload import AELLMPayload
 
 logger = logging.getLogger(__name__)
 
@@ -17,24 +12,6 @@ class AEWorkSpaceContext(AEBaseContext):
     def __init__(self, space: str = ""):
         super().__init__(context_type=AEContextType.workspace, space=space)
 
-    # ==================== AEFlowDelegate 实现 ====================
-
-    def flow_llm(self, payload: "AELLMPayload") -> None:
-        """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
-        用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        # 用当前 Context 的 ident 包装 out_schema
-        payload.out_schema = {"ident": self.ident, "llm_out": payload.out_schema}
-        self.send_llm_request(payload)
-
-    def next_flow_input_schema(self, info: "Optional[AEFlowInfo]" = None) -> "Optional[AEFlowInfo]":
-        """AEFlowDelegate: Context 非 flow 容器，不持有子 flow 序列，返回 None"""
-        return None
-
-    def flow_complete(self, result, flowStatus) -> None:
-        """AEFlowDelegate: flow 完成通知，记录日志"""
-        flow_ident = result.get("ident") if isinstance(result, dict) else None
-        logger.info(f"WorkSpaceContext {self.ident} 收到 flow_complete - flow_ident={flow_ident}, status={flowStatus}")
-
     def receive_llm_response(self, data: dict) -> None:
         """
         处理 LLM 回复（已被 AEUserContext 按第一层 ident 路由到本 Context）：
@@ -42,7 +19,7 @@ class AEWorkSpaceContext(AEBaseContext):
         - 判断第一层 ident 是否为本 Context 的 ident
         - 取内层 out_schema（含 chat.ident + 实际 schema）
         - 按 out_schema.ident 从 _chat_map 取到 AEChat
-        - 通过 AEChat.receiveInputSchemaData 再次取 out_schema 向下传递
+        - 通过 AEChat.receiveLLMResult 再次取 out_schema 向下传递
         """
         if not isinstance(data, dict):
             logger.error(f"[WorkSpace:{self.ident}] LLM 回复非 map: {data!r}")
@@ -71,4 +48,4 @@ class AEWorkSpaceContext(AEBaseContext):
         if not isinstance(out_schema, dict):
             logger.error(f"[WorkSpace:{self.ident}] chat 内层 out_schema 非 map: {out_schema!r}")
             return
-        chat.receiveInputSchemaData(out_schema)
+        chat.receiveLLMResult(out_schema)
