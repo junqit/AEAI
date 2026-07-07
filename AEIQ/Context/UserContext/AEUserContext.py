@@ -98,6 +98,13 @@ class AEUserContext:
     async def _do_llm(self, payload) -> None:
         """在 loop 上 await async LLM，回复到达后直接 dispatch 驱动 flow（与请求同在一个异步线程）。"""
         from ..Context.AELLMClient import send_llm_request
+        from ..Context.AEContextType import AEContextType
+
+        # 注入 directory context 的环境信息（系统 / 脚本语言 / 已装库）作为 system 消息
+        # 仅在 directory context 已存在时添加，不主动创建
+        directory = self._context_center.find_by_type(AEContextType.directory)
+        if directory is not None:
+            payload.messages.insert(0, directory.build_role_prompt())
 
         reply = await send_llm_request(payload)
         self._context_center.dispatch_llm_response(reply)

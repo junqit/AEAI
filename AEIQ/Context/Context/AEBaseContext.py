@@ -129,7 +129,7 @@ class AEBaseContext:
                 space=self.space,
             ),
             req=chat.req,
-            rsp=result if isinstance(result, dict) else None,
+            rsp={"reply": result.get("reply")} if isinstance(result, dict) else None,
         )
         self.send_response(rsp)
 
