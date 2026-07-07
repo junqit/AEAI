@@ -53,7 +53,7 @@ class AERefiner(AEFlow):
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
         payload = AELLMPayload(
             messages=messages,
-            out_schema=flowOutput.out_schema,
+            out_schema=flowOutput.schema,
         )
         # 发送前置状态为 complete，注入 out_schema 后回包按 complete 处理
         self.status = AEFlowStatus.complete

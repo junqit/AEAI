@@ -45,11 +45,13 @@ class AEFlowInfo:
         return self._ident
 
     def flowOutput(self) -> AEFlowOutput:
-        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, answer:"llm_result"}。"""
+        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, llm_out:{answer:"llm_result"}}。"""
         return AEFlowOutput(schema={
             "ident": self.ident,
             "title": self.title,
-            "answer": "llm_result",
+            "llm_out": {
+                "answer": "llm_result",
+            },
         })
 
     def to_map(self) -> dict:

@@ -75,7 +75,11 @@ class AEFlow(AEFlowInfo):
         self.input = flowInput
         self.output = flowOutput
         self.status = AEFlowStatus.processing
-        logger.info("[AEFlow:%s][%s] startFlow → processing", self.ident, self.title)
+        logger.info(
+            "[AEFlow:%s][%s] startFlow → processing, out_schema=%s",
+            self.ident, self.title,
+            flowOutput.schema if flowOutput is not None else None,
+        )
 
     def receiveLLMResult(self, data: dict) -> None:
         """
@@ -139,15 +143,17 @@ class AEFlow(AEFlowInfo):
         子类覆写各状态方法以处理收到的数据，而非覆写本方法。
 
         Args:
-            out_schema: 从输入 map 中解析出的 out_schema 数据（含 status 字段）
+            out_schema: 从输入 map 中解析出的 out_schema 数据（含 status / llm_out 字段）
         """
         status = out_schema.get("status") if isinstance(out_schema, dict) else None
+        # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, status, llm_out: <内容>}）
+        inner = out_schema.get("llm_out") if isinstance(out_schema, dict) else None
         if status == AEFlowStatus.default.value:
-            self.flow_receive_default(out_schema)
+            self.flow_receive_default(inner)
         elif status == AEFlowStatus.processing.value:
-            self.flow_receive_processing(out_schema)
+            self.flow_receive_processing(inner)
         elif status == AEFlowStatus.complete.value:
-            self.flow_receive_complete(out_schema)
+            self.flow_receive_complete(inner)
         else:
             logger.error(
                 "[AEFlow:%s][%s] out_schema 内 status=%r 无效或缺失，忽略: %r",
@@ -214,11 +220,17 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 将当前 ident / title / status 注入内层 out_schema（作为内容字段，非路由信封字段）
+        # 拼装前：先把 payload.out_schema 原数据再包装一层 llm_out
         if isinstance(payload.out_schema, dict):
+            payload.out_schema = {
+                "llm_out": payload.out_schema,
+            }
+            # 将当前 ident / title / status 注入内层 out_schema（作为内容字段，非路由信封字段）
             payload.out_schema["ident"] = self.ident
             payload.out_schema["title"] = self.title
             payload.out_schema["status"] = self.status.value
+
+        # 外层信封：ident / title 用于回程路由，llm_out 包装内层内容
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
