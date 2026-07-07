@@ -49,7 +49,12 @@ class AESocketWrapper:
         try:
             data = response.to_bytes()
             packet = AEPacket.create(AEDataType.RESPONSE, data)
-            self._server_socket.sendto(packet.to_bytes(), self._client_addr)
+            packet_bytes = packet.to_bytes()
+            logger.info(
+                "send_response to %s - data_size=%d bytes, packet_size=%d bytes",
+                self._client_addr, len(data), len(packet_bytes),
+            )
+            self._server_socket.sendto(packet_bytes, self._client_addr)
             return True
         except Exception as e:
             logger.error(f"Failed to send response to {self._client_addr}: {e}")

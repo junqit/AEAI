@@ -2,12 +2,18 @@
 网络数据包协议定义
 
 包结构：
-┌─────────────┬──────────┬──────────┬──────────┬──────────┐
-│ Magic Code  │ DataType │  Length  │ Checksum │   Data   │
-│   (2 bytes) │ (2 bytes)│ (4 bytes)│ (2 bytes)│ (N bytes)│
-└─────────────┴──────────┴──────────┴──────────┴──────────┘
+┌─────────────┬──────────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ Magic Code  │ DataType │ UniqueID  │ PacketSeq│  Length  │ Checksum │   Data   │
+│   (2 bytes) │ (1 byte) │ (2 bytes) │ (1 byte) │ (2 bytes)│ (2 bytes)│ (N bytes)│
+└─────────────┴──────────┴───────────┴──────────┴──────────┴──────────┴──────────┘
 
 总包头长度: 10 bytes
+- Magic Code (2 bytes)：魔数 0x1EAE
+- DataType   (1 byte) ：数据类型（AEDataType）
+- UniqueID   (2 bytes)：唯一标识，同一消息的多个分片共用
+- PacketSeq  (1 byte) ：包次（分片序号，从 0 开始）
+- Length     (2 bytes)：本包数据长度（分片后单个包的 Data 长度）
+- Checksum   (2 bytes)：本包 Data 的 CRC16 校验和
 """
 
 from enum import Enum
@@ -23,15 +29,38 @@ import zlib
 # 这个组合在正常的文本/JSON数据中不会出现
 MAGIC_CODE = 0x1EAE
 
+# 2 字节无符号最值
+MIN_UINT16 = 0x0000
+MAX_UINT16 = 0xFFFF
+
+# 单包 Data 最大长度：2 字节上限 0xFFFF 扣除 UDP 头(8) + AEPacket 包头(10)
+# 该值 0xFFED 的二进制第 4 位（0x10）为 0
+MAX_PACKET_DATA_LENGTH = MAX_UINT16 - 8 - 10
+LAST_PACKET_MASK = 0xFFFD
+
+# UniqueID 哨兵值：0 表示非分片单包（无唯一标识需求）
+UNIQUE_ID_SENTINEL = MIN_UINT16
+
 
 class AEDataType(Enum):
-    """数据类型枚举"""
-    REQUEST = 0x0001    # 请求数据 (AENetReq)
-    RESPONSE = 0x0002   # 响应数据 (AENetRsp)
-    HEARTBEAT = 0x0003  # 心跳包
-    PING = 0x0004       # Ping
-    PONG = 0x0005       # Pong
-    CUSTOM = 0x00FF     # 自定义数据
+    """数据类型枚举
+
+    DataType 字节低 4 位表示数据类型（取值 0x0~0xF），高 4 位保留（可用于标志位）。
+    解析时用 DATA_TYPE_MASK 取低 4 位再匹配枚举。
+    """
+    REQUEST = 0x01    # 请求数据 (AENetReq)
+    RESPONSE = 0x02   # 响应数据 (AENetRsp)
+    HEARTBEAT = 0x03  # 心跳包
+    PING = 0x04       # Ping
+    PONG = 0x05       # Pong
+    CUSTOM = 0x0F     # 自定义数据
+
+
+# DataType 字节低 4 位为数据类型，高 4 位为标志位
+DATA_TYPE_MASK = 0x0F
+# 末包标志：第 4 位（0x10）。将该位置 1、其余位不变，表示该分片已是最后一包
+# 用法：末包 data_type = 类型值 | FLAG_LAST_FRAGMENT（如 RESPONSE 末包 = 0x02 | 0x10 = 0x12）
+FLAG_LAST_FRAGMENT = 0x10
 
 
 class AEPacketHeader(BaseModel):
@@ -39,25 +68,30 @@ class AEPacketHeader(BaseModel):
     数据包头结构
 
     字段说明：
-    - magic_code: 魔数，固定为 0x1EAE，2字节
-    - data_type: 数据类型，2字节
-    - length: 数据长度（不包含包头），4字节
-    - checksum: 数据校验和（CRC16），2字节
+    - magic_code:  魔数，固定为 0x1EAE，2 字节
+    - data_type:   数据类型（AEDataType），1 字节
+    - unique_id:   唯一标识，同一消息的多个分片共用；0 (UNIQUE_ID_SENTINEL) 表示非分片单包，2 字节
+    - packet_seq:  包次（分片序号，从 0 开始），1 字节
+    - length:      本包数据长度（不包含包头），2 字节
+    - checksum:    数据校验和（CRC16），2 字节
     """
     magic_code: int = MAGIC_CODE
     data_type: int  # AEDataType
+    unique_id: int = UNIQUE_ID_SENTINEL
+    packet_seq: int = 0
     length: int
     checksum: int
 
-    HEADER_SIZE: ClassVar[int] = 10  # 2 + 2 + 4 + 2
-    HEADER_FORMAT: ClassVar[str] = '!HHIH'  # ! = 网络字节序(大端)
+    HEADER_SIZE: ClassVar[int] = 10  # 2 + 1 + 2 + 1 + 2 + 2
+    # ! = 网络字节序(大端)；H=2 B=1 H=2 B=1 H=2 H=2
+    HEADER_FORMAT: ClassVar[str] = '!HBHBHH'
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'AEPacketHeader':
         if len(data) < cls.HEADER_SIZE:
             raise ValueError(f"数据长度不足，需要至少 {cls.HEADER_SIZE} 字节")
 
-        magic_code, data_type, length, checksum = struct.unpack(
+        magic_code, data_type, unique_id, packet_seq, length, checksum = struct.unpack(
             cls.HEADER_FORMAT,
             data[:cls.HEADER_SIZE]
         )
@@ -68,6 +102,8 @@ class AEPacketHeader(BaseModel):
         return cls(
             magic_code=magic_code,
             data_type=data_type,
+            unique_id=unique_id,
+            packet_seq=packet_seq,
             length=length,
             checksum=checksum
         )
@@ -77,12 +113,19 @@ class AEPacketHeader(BaseModel):
             self.HEADER_FORMAT,
             self.magic_code,
             self.data_type,
+            self.unique_id,
+            self.packet_seq,
             self.length,
             self.checksum
         )
 
     def validate(self, data: bytes) -> bool:
         return self.checksum == calculate_crc16(data)
+
+    @property
+    def data_type_value(self) -> int:
+        """取 DataType 低 4 位（实际数据类型，高 4 位为保留标志位）。"""
+        return self.data_type & DATA_TYPE_MASK
 
 
 class AEPacket(BaseModel):
@@ -91,10 +134,18 @@ class AEPacket(BaseModel):
     data: bytes
 
     @classmethod
-    def create(cls, data_type: AEDataType, data: bytes) -> 'AEPacket':
+    def create(
+        cls,
+        data_type: AEDataType,
+        data: bytes,
+        unique_id: int = UNIQUE_ID_SENTINEL,
+        packet_seq: int = 0,
+    ) -> 'AEPacket':
         checksum = calculate_crc16(data)
         header = AEPacketHeader(
             data_type=data_type.value,
+            unique_id=unique_id,
+            packet_seq=packet_seq,
             length=len(data),
             checksum=checksum
         )
