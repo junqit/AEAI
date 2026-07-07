@@ -103,10 +103,12 @@ class AEBaseContext:
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
         """AEFlowDelegate: flow 完成通知。status=complete 时组装 AENetRsp 经 delegate 发送给客户端。"""
+        import json
         flow_ident = result.get("ident") if isinstance(result, dict) else None
         logger.info(
-            "Context %s 收到 flow_complete - flow_ident=%s, status=%s",
+            "Context %s 收到 flow_complete - flow_ident=%s, status=%s, result=\n%s",
             self.ident, flow_ident, flowStatus,
+            json.dumps(result, ensure_ascii=False, indent=2) if isinstance(result, dict) else repr(result),
         )
         if flowStatus != AEFlowStatus.complete:
             return
