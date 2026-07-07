@@ -33,7 +33,7 @@ class AELLMPayload:
             "请按以下结构输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
             + schema_json
             + "\n\n其中字符串值 \"llm_result\" 为占位符，需由你根据用户问题生成实际内容后替换；"
-            "其余字段（ident / title / status / type 等路由与元信息）保持原值不变，仅按原结构回填。"
+            "其余字段与元信息保持原值不变，仅按原结构回填。"
         )
         messages.insert(0, {"role": AERole.SYSTEM.value, "content": instruction})
         # llm_type 输出枚举值（如 "chatgpt"），level 输出成员名（如 "default"），
