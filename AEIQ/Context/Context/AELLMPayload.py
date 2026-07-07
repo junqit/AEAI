@@ -8,6 +8,10 @@ from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
+# LLM 生成占位符：out_schema 中需由 LLM 生成内容的字段值
+# 发送时作为模板占位，回包由 LLM 替换为实际生成内容
+llm_generate = "<|描述信息|>"
+
 
 @dataclass
 class AELLMPayload:
@@ -32,7 +36,7 @@ class AELLMPayload:
         instruction = (
             "请按以下结构输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
             + schema_json
-            + "\n\n其中字符串值 \"llm_result\" 为占位符，需由你根据用户问题生成实际内容后替换；"
+            + f"\n\n其中字符串值 \"{llm_generate}\" 为占位符，需由你根据用户问题生成实际内容后替换；"
             "其余字段与元信息保持原值不变，仅按原结构回填。"
         )
         messages.insert(0, {"role": AERole.SYSTEM.value, "content": instruction})

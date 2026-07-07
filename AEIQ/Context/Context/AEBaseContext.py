@@ -83,7 +83,8 @@ class AEBaseContext:
         chat = AEChat(ident=uuid.uuid4().hex)
         chat.req = req
         chat.set_delegate(self)
-        chat.output = AEFlowOutput({"ident": chat.ident, "title": chat.title, "reply": "llm_result"})
+        from .AELLMPayload import llm_generate
+        chat.output = AEFlowOutput({"ident": chat.ident, "title": chat.title, "reply": llm_generate})
         self._chat_map[chat.ident] = chat
         logger.info(
             "AEChat created - chat_ident=%s, context=%s, question type=%s ident=%s content=%r",
