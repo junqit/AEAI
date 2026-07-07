@@ -45,13 +45,13 @@ class AEFlowInfo:
         return self._ident
 
     def flowOutput(self) -> AEFlowOutput:
-        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, llm_out:{answer:llm_generate}}。"""
+        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, llm_out:{answer:llm_generate(...)}}。"""
         from Context.Context.AELLMPayload import llm_generate
         return AEFlowOutput(schema={
             "ident": self.ident,
             "title": self.title,
             "llm_out": {
-                "answer": llm_generate,
+                "answer": llm_generate("生成的答案"),
             },
         })
 

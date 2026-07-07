@@ -7,6 +7,7 @@ key 与接口访问参照 claude_provider：复用同一内部网关与同一 au
 """
 import requests
 import json
+import time
 import logging
 from typing import Optional, List, Dict, Any
 
@@ -129,21 +130,34 @@ class AEZhipuModel:
                 json.dumps(payload, ensure_ascii=False, indent=2),
             )
 
-            # 发送请求
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            # 失败一直重试（429 限流 / 5xx / 网络异常等），直到成功
+            backoff = 1.0
+            attempt = 0
+            while True:
+                attempt += 1
+                try:
+                    response = requests.post(url, headers=headers, json=payload, timeout=60)
+                    elapsed = (datetime.now() - start_time).total_seconds()
 
-            elapsed = (datetime.now() - start_time).total_seconds()
+                    if response.status_code == 200:
+                        result = response.json()
+                        logger.info(f"✅ Zhipu API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200, attempt={attempt}")
+                        logger.debug(f"📄 响应内容: {str(result)[:500]}...")
+                        return result
 
-            # 处理响应
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"✅ Zhipu API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200")
-                logger.debug(f"📄 响应内容: {str(result)[:500]}...")
-                return result
-            else:
-                error_msg = f"请求失败: {response.status_code}"
-                logger.error(f"❌ Zhipu API 调用失败 - elapsed={elapsed:.2f}s, status={response.status_code}, error={response.text[:200]}")
-                return error_msg
+                    logger.warning(
+                        "⚠️ Zhipu 调用失败将重试 - status=%s, attempt=%d, %.1fs 后重试, error=%s",
+                        response.status_code, attempt, backoff, response.text[:200],
+                    )
+                except requests.exceptions.Timeout as e:
+                    logger.warning("⚠️ Zhipu 请求超时将重试 - attempt=%d, %.1fs 后重试: %s", attempt, backoff, e)
+                except requests.exceptions.ConnectionError as e:
+                    logger.warning("⚠️ Zhipu 连接错误将重试 - attempt=%d, %.1fs 后重试: %s", attempt, backoff, e)
+                except Exception as e:
+                    logger.warning("⚠️ Zhipu 请求异常将重试 - attempt=%d, %.1fs 后重试: %s", attempt, backoff, e)
+
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
 
         except requests.exceptions.Timeout as e:
             elapsed = (datetime.now() - start_time).total_seconds()

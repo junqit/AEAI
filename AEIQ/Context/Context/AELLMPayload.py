@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any
@@ -8,9 +9,23 @@ from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
-# LLM 生成占位符：out_schema 中需由 LLM 生成内容的字段值
-# 发送时作为模板占位，回包由 LLM 替换为实际生成内容
-llm_generate = "<|描述信息|>"
+
+def llm_generate(description: str = "描述信息") -> str:
+    """LLM 生成占位符：<|描述|>。
+
+    <||> 之间的 description 用来说明该位置应填充什么内容，
+    发送时作为模板占位，回包由 LLM 根据 description 生成实际内容替换。
+    """
+    return f"<|{description}|>"
+
+
+# 占位符正则：<|...|> 形式的字符串均为 LLM 占位符
+LLM_PLACEHOLDER_RE = re.compile(r"^<\|(.+)\|>$")
+
+
+def is_llm_placeholder(value: Any) -> bool:
+    """判断 value 是否为 LLM 占位符（<|描述|> 形式）。"""
+    return isinstance(value, str) and bool(LLM_PLACEHOLDER_RE.match(value))
 
 
 @dataclass
@@ -36,7 +51,8 @@ class AELLMPayload:
         instruction = (
             "请按以下结构输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
             + schema_json
-            + f"\n\n其中字符串值 \"{llm_generate}\" 为占位符，需由你根据用户问题生成实际内容后替换；"
+            + "\n\n其中形如 \"<|描述|>\" 的字符串值为占位符，<||> 之间的描述说明了该位置应填充的内容；"
+            "请根据用户问题及占位符描述生成实际内容后替换该占位符；"
             "其余字段与元信息保持原值不变，仅按原结构回填。"
         )
         messages.insert(0, {"role": AERole.SYSTEM.value, "content": instruction})
