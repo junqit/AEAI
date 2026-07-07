@@ -35,11 +35,21 @@ class AESocketWrapper:
             logger.debug(f"Address updated: user={self._user.user_key}, {self._client_addr} -> {client_addr}")
             self._client_addr = client_addr
 
+    def _send_data(self, data_type: AEDataType, data: bytes) -> None:
+        """由 AEPacket.packets_from_data 生成 packet 列表，循环 sendto 发送。"""
+        packets = AEPacket.packets_from_data(data_type, data)
+        if len(packets) > 1:
+            logger.info(
+                "send %s 分片 - data_size=%d, fragments=%d",
+                self._client_addr, len(data), len(packets),
+            )
+        for packet in packets:
+            self._server_socket.sendto(packet.to_bytes(), self._client_addr)
+
     def send_request(self, request: AENetReq) -> bool:
         try:
             data = request.to_bytes()
-            packet = AEPacket.create(AEDataType.REQUEST, data)
-            self._server_socket.sendto(packet.to_bytes(), self._client_addr)
+            self._send_data(AEDataType.REQUEST, data)
             return True
         except Exception as e:
             logger.error(f"Failed to send request to {self._client_addr}: {e}")
@@ -48,13 +58,11 @@ class AESocketWrapper:
     def send_response(self, response: AENetRsp) -> bool:
         try:
             data = response.to_bytes()
-            packet = AEPacket.create(AEDataType.RESPONSE, data)
-            packet_bytes = packet.to_bytes()
             logger.info(
-                "send_response to %s - data_size=%d bytes, packet_size=%d bytes",
-                self._client_addr, len(data), len(packet_bytes),
+                "send_response to %s - data_size=%d bytes",
+                self._client_addr, len(data),
             )
-            self._server_socket.sendto(packet_bytes, self._client_addr)
+            self._send_data(AEDataType.RESPONSE, data)
             return True
         except Exception as e:
             logger.error(f"Failed to send response to {self._client_addr}: {e}")

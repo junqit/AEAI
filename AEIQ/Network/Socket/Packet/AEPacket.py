@@ -140,16 +140,70 @@ class AEPacket(BaseModel):
         data: bytes,
         unique_id: int = UNIQUE_ID_SENTINEL,
         packet_seq: int = 0,
+        is_last_fragment: bool = False,
     ) -> 'AEPacket':
+        # 末包：第 4 位置 1，其余位（类型位）不变
+        raw_data_type = (data_type.value | FLAG_LAST_FRAGMENT) if is_last_fragment else data_type.value
         checksum = calculate_crc16(data)
         header = AEPacketHeader(
-            data_type=data_type.value,
+            data_type=raw_data_type,
             unique_id=unique_id,
             packet_seq=packet_seq,
             length=len(data),
             checksum=checksum
         )
         return cls(header=header, data=data)
+
+    # 分片 UniqueID 自增序号（类级共享，跳过 0 哨兵值）
+    _unique_id_seq: int = 0
+
+    @classmethod
+    def _next_unique_id(cls) -> int:
+        """生成下一个分片 UniqueID（1..MAX_UINT16，跳过 0 哨兵值）。"""
+        cls._unique_id_seq = (cls._unique_id_seq + 1) % (MAX_UINT16 + 1)
+        if cls._unique_id_seq == UNIQUE_ID_SENTINEL:
+            cls._unique_id_seq = 1
+        return cls._unique_id_seq
+
+    @classmethod
+    def packets_from_data(
+        cls,
+        data_type: AEDataType,
+        data: bytes,
+    ) -> list:
+        """由 data 转换为 AEPacket 列表（单包或分片），内聚处理 UniqueID 与末包标志。
+
+        - data <= MAX_PACKET_DATA_LENGTH：单包，UniqueID 用哨兵值（接收侧直接分发，不进分片池）
+        - data >  MAX_PACKET_DATA_LENGTH：分片，共用一个非哨兵 UniqueID，packet_seq 从 0 递增，
+          末包 data_type 第 4 位置 1（FLAG_LAST_FRAGMENT）
+
+        Args:
+            data_type: 数据类型
+            data: 待发送的完整数据
+
+        Returns:
+            List[AEPacket]: packet 列表（按发送顺序）
+        """
+        packets = []
+
+        # 单包：无需分片，UniqueID 用哨兵值
+        if len(data) <= MAX_PACKET_DATA_LENGTH:
+            packets.append(cls.create(data_type, data))
+            return packets
+
+        # 分片：共用 UniqueID，末包打标志
+        unique_id = cls._next_unique_id()
+        total = (len(data) + MAX_PACKET_DATA_LENGTH - 1) // MAX_PACKET_DATA_LENGTH
+        for seq in range(total):
+            chunk = data[seq * MAX_PACKET_DATA_LENGTH:(seq + 1) * MAX_PACKET_DATA_LENGTH]
+            packets.append(cls.create(
+                data_type,
+                chunk,
+                unique_id=unique_id,
+                packet_seq=seq,
+                is_last_fragment=(seq == total - 1),
+            ))
+        return packets
 
     def to_bytes(self) -> bytes:
         return self.header.to_bytes() + self.data
