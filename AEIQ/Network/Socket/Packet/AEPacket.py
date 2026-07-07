@@ -35,7 +35,7 @@ MAX_UINT16 = 0xFFFF
 
 # 单包 Data 最大长度：2 字节上限 0xFFFF 扣除 UDP 头(8) + AEPacket 包头(10)
 # 该值 0xFFED 的二进制第 4 位（0x10）为 0
-MAX_PACKET_DATA_LENGTH = MAX_UINT16 - 8 - 10
+MAX_PACKET_DATA_LENGTH = 4 * 1024
 LAST_PACKET_MASK = 0xFFFD
 
 # UniqueID 哨兵值：0 表示非分片单包（无唯一标识需求）
@@ -155,7 +155,8 @@ class AEPacket(BaseModel):
         return cls(header=header, data=data)
 
     # 分片 UniqueID 自增序号（类级共享，跳过 0 哨兵值）
-    _unique_id_seq: int = 0
+    # 用 ClassVar 声明，避免被 Pydantic 当作 ModelPrivateAttr
+    _unique_id_seq: ClassVar[int] = 0
 
     @classmethod
     def _next_unique_id(cls) -> int:
