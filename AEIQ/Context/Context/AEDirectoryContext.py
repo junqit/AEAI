@@ -56,6 +56,8 @@ class AEDirectoryContext(AEBaseContext):
     def __init__(self, space: str = ""):
         super().__init__(context_type=AEContextType.directory, space=space)
         self._scripts_cache: list = None
+        # 环境参数信息缓存（env_param -> info），仅生成一次，refresh_scripts 时清空
+        self._env_param_info_cache: Dict[AEEnvParamType, str] = {}
 
     def _discover_scripts(self) -> list:
         """查找当前电脑内所有可用的脚本语言，结果缓存只执行一次"""
@@ -72,14 +74,23 @@ class AEDirectoryContext(AEBaseContext):
     def refresh_scripts(self):
         """外部触发重新扫描脚本信息"""
         self._scripts_cache = None
+        self._env_param_info_cache.clear()
         self._discover_scripts()
 
     def build_env_param_info(self, env_param: AEEnvParamType) -> str:
-        """构建指定环境参数类型对应的当前系统实际信息。
+        """构建指定环境参数类型对应的当前系统实际信息（结果缓存，仅生成一次）。
 
         - system：OS / 架构 / 节点信息
         - python / ruby / shell：从已探测脚本中取对应项的版本、路径与已装库
         """
+        if env_param in self._env_param_info_cache:
+            return self._env_param_info_cache[env_param]
+        info = self._generate_env_param_info(env_param)
+        self._env_param_info_cache[env_param] = info
+        return info
+
+    def _generate_env_param_info(self, env_param: AEEnvParamType) -> str:
+        """实际探测并拼接环境信息（每次调用都执行探测/拼接，由 build_env_param_info 缓存）。"""
         if env_param == AEEnvParamType.system:
             return (
                 f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
