@@ -12,6 +12,7 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
 """
 import logging
 import weakref
+from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus
@@ -25,6 +26,13 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
+
+
+class AEFlowFunctional(str, Enum):
+    """Flow 功能性能力类型（取值与 AEFlowStatus 保持一致）"""
+    default = "default"            # 初始状态
+    processing = "processing"      # 执行中
+    complete = "complete"          # 已完成
 
 
 class AEFlow(AEFlowInfo):
@@ -42,6 +50,16 @@ class AEFlow(AEFlowInfo):
         self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
+        # 状态处理脚本：key 为 AEFlowFunctional 的值，默认对应三个 flow_receive_* 方法；
+        # 子类可覆写 scripts 自定义各 functional 的处理（flow_receive_llm 内 exec 执行）
+        self.scripts: Dict[str, str] = {
+            AEFlowFunctional.default.value: "self.flow_receive_default(inner)",
+            AEFlowFunctional.processing.value: "self.flow_receive_processing(inner)",
+            AEFlowFunctional.complete.value: "self.flow_receive_complete(inner)",
+        }
+        # 默认 functional 列表（与 AEFlowFunctional 枚举一致）；
+        # 不在此列的 status 视为子类临时追加的方法，执行后需清除，避免残留
+        self.default_functionals = {item.value for item in AEFlowFunctional}
 
     # ==================== AEFlowInterface 实现 ====================
 
@@ -113,31 +131,38 @@ class AEFlow(AEFlowInfo):
         """
         收到经 receiveLLMResult 路由到自身、已解析出的 out_schema 数据。
 
-        按 out_schema 内的 status 字段分发到对应处理方法（每个方法同步状态为该 status 并处理）：
-          - default    → flow_receive_default     （同步为 default）
-          - processing → flow_receive_processing  （同步为 processing）
-          - complete   → flow_receive_complete    （同步为 complete）
+        按 out_schema 内的 status 字段从 self.scripts 取对应脚本并 exec 执行，
+        默认脚本调用三个 flow_receive_* 方法：
+          - default    → flow_receive_default
+          - processing → flow_receive_processing
+          - complete   → flow_receive_complete
 
-        out_schema 内无 status 字段、或 status 不匹配已知状态时，打印错误信息并忽略。
-
-        子类覆写各状态方法以处理收到的数据，而非覆写本方法。
+        out_schema 内无 status 字段、或 status 不在 scripts 内时，打印错误信息并忽略。
+        子类可覆写 scripts 自定义各 status 的处理，或覆写各 flow_receive_* 方法。
 
         Args:
             out_schema: 从输入 map 中解析出的 out_schema 数据（含 status / llm_out 字段）
         """
-        status = out_schema.get("status") if isinstance(out_schema, dict) else None
+        if not isinstance(out_schema, dict):
+            logger.error("[AEFlow:%s] out_schema 非 map，忽略: %r", self.ident, out_schema)
+            return
+        command = out_schema.get("status")
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, status, llm_out: <内容>}）
-        inner = out_schema.get("llm_out") if isinstance(out_schema, dict) else None
-        if status == AEFlowStatus.default.value:
-            self.flow_receive_default(inner)
-        elif status == AEFlowStatus.processing.value:
-            self.flow_receive_processing(inner)
-        elif status == AEFlowStatus.complete.value:
-            self.flow_receive_complete(inner)
-        else:
+        inner = out_schema.get("llm_out")
+        script = self.scripts.get(command)
+        if script is None:
             logger.error(
                 "[AEFlow:%s][%s] out_schema 内 status=%r 无效或缺失，忽略: %r",
-                self.ident, self.title, status, out_schema,
+                self.ident, self.title, command, out_schema,
+            )
+            return
+        exec(script, {"self": self, "inner": inner})
+        # 非默认 functional 视为子类临时追加的方法，执行后清除，避免残留
+        if command not in self.default_functionals:
+            self.scripts.pop(command, None)
+            logger.info(
+                "[AEFlow:%s][%s] 临时方法 status=%r 执行完毕已清除",
+                self.ident, self.title, command,
             )
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
