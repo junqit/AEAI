@@ -13,10 +13,9 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
 import json
 import logging
 import weakref
-from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
@@ -27,13 +26,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
-
-
-class AEFlowStatus(str, Enum):
-    """Flow 执行状态"""
-    default = "default"            # 初始状态
-    processing = "processing"      # 执行中
-    complete = "complete"          # 已完成
 
 
 class AEFlow(AEFlowInfo):
@@ -51,8 +43,6 @@ class AEFlow(AEFlowInfo):
         self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
-        # flow 执行状态，初始为 default
-        self.status: AEFlowStatus = AEFlowStatus.default
 
     # ==================== AEFlowInterface 实现 ====================
 
@@ -78,7 +68,7 @@ class AEFlow(AEFlowInfo):
         logger.info(
             "[AEFlow:%s][%s] startFlow → processing, out_schema=%s",
             self.ident, self.title,
-            flowOutput.schema if flowOutput is not None else None,
+            flowOutput.out_schema if flowOutput is not None else None,
         )
 
     def receiveLLMResult(self, data: dict) -> None:
@@ -209,8 +199,8 @@ class AEFlow(AEFlowInfo):
         """
         通过 delegate 发送 AELLMPayload（无返回值）。
 
-        校验 delegate 后，将当前 status 注入内层 out_schema，再用 ident / title 包装
-        payload.out_schema 向上转发（回程按 ident 路由回本 flow）。
+        校验 delegate 后，用 ident / title 包装 payload.out_schema 向上转发
+        （回程按 ident 路由回本 flow）。
 
         Args:
             payload: AELLMPayload 结构体
@@ -220,16 +210,6 @@ class AEFlow(AEFlowInfo):
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 拼装前：先把 payload.out_schema 原数据再包装一层 llm_out
-        if isinstance(payload.out_schema, dict):
-            payload.out_schema = {
-                "llm_out": payload.out_schema,
-            }
-            # 将当前 ident / title / status 注入内层 out_schema（作为内容字段，非路由信封字段）
-            payload.out_schema["ident"] = self.ident
-            payload.out_schema["title"] = self.title
-            payload.out_schema["status"] = self.status.value
-
         # 外层信封：ident / title 用于回程路由，llm_out 包装内层内容
         payload.out_schema = {
             "ident": self.ident,
@@ -311,6 +291,7 @@ class AEFlow(AEFlowInfo):
         self.status = AEFlowStatus.complete
         answer = out_schema.get("answer") if isinstance(out_schema, dict) else None
         logger.info("[AEFlow:%s][%s] receive_flow_result 收到 answer=%r", self.ident, self.title, answer)
+
         messages = []
         if self.title:
             messages.append({"role": AERole.SYSTEM.value, "content": self.title})
@@ -318,8 +299,15 @@ class AEFlow(AEFlowInfo):
             messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
         messages.append({"role": AERole.ASSISTANT.value, "content": answer or ""})
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+
+        self.status = AEFlowStatus.complete
+        logger.info("[AERefiner:%s] self.output.out_schema = %s", self.ident, self.output.out_schema)
+
+        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/status 重新打包
+        flow_out = self.flowOutput(llm_out=self.output.out_schema)
         payload = AELLMPayload(
             messages=messages,
-            out_schema=self.output.out_schema if self.output else {},
+            out_schema=flow_out.out_schema,
         )
+
         self.send_llm_payload(payload)

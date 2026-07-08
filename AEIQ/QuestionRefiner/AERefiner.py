@@ -45,16 +45,19 @@ class AERefiner(AEFlow):
         """
         super().startFlow(flowInput, flowOutput)
 
+        self.status = AEFlowStatus.complete
+
         messages = []
         if self.title:
             messages.append({"role": AERole.SYSTEM.value, "content": self.title})
         if self.responsibility:
             messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/status 重新打包
+        flow_out = self.flowOutput(llm_out=self.output.out_schema)
         payload = AELLMPayload(
             messages=messages,
-            out_schema=flowOutput.schema,
+            out_schema=flow_out.out_schema,
         )
         # 发送前置状态为 complete，注入 out_schema 后回包按 complete 处理
-        self.status = AEFlowStatus.complete
         self.send_llm_payload(payload)
