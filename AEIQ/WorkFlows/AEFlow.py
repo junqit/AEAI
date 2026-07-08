@@ -10,7 +10,6 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
   - flow_llm_request()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，整理结果
 """
-import json
 import logging
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
@@ -86,15 +85,6 @@ class AEFlow(AEFlowInfo):
         Args:
             data: 输入数据 map（含 ident / out_schema）
         """
-        # 先打印收到的数据
-        if isinstance(data, dict):
-            logger.info(
-                "[AEFlow:%s][%s] receiveLLMResult 收到:\n%s",
-                self.ident, self.title,
-                json.dumps(data, ensure_ascii=False, indent=2),
-            )
-        else:
-            logger.info("[AEFlow:%s][%s] receiveLLMResult 收到: %r", self.ident, self.title, data)
         if not isinstance(data, dict):
             logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
             return

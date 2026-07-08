@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -38,12 +37,6 @@ class AEWorkSpaceContext(AEBaseContext):
         if not isinstance(data, dict):
             logger.error(f"[WorkSpace:{self.ident}] LLM 回复非 map: {data!r}")
             return
-        # 打印 LLM 回复的 JSON 结构性数据
-        logger.info(
-            "[WorkSpace:%s] 收到 LLM 回复:\n%s",
-            self.ident,
-            json.dumps(data, ensure_ascii=False, indent=2),
-        )
         chat_ident = data.get("ident")
         chat = self._chat_map.get(chat_ident)
         if chat is None:
