@@ -12,8 +12,10 @@ import platform
 import logging
 from typing import Dict, Optional
 
+from Network.Core import AENetReq
 from Network.Core.AENetReq import AENetCont, AENetReqInfo
 from Network.Core.AENetRsp import AENetRsp, AENetRspCode
+from Assistant.AERole import AERole
 from ..Context.AEBaseContext import AEBaseContext
 from ..Context.AEContextDelegate import AEContextDelegate
 from ..Context.AEContextType import AEContextType
@@ -24,8 +26,12 @@ from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
 logger = logging.getLogger(__name__)
 
 
-class AEContextCenter:
-    """单用户内 Context 的命中/创建/存储/查找 + LLM 回复分发。"""
+class AEContextCenter(AEContextDelegate):
+    """单用户内 Context 的命中/创建/存储/查找 + LLM 回复分发。
+
+    实现 AEContextDelegate：作为各子 Context 的直接 delegate，
+    将 NetReq / NetRsp / LLM 请求转发给上层 delegate（AEUserContext）。
+    """
 
     _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
 
@@ -34,6 +40,31 @@ class AEContextCenter:
         self._delegate = delegate
         # context_ident -> AEBaseContext
         self._contexts: Dict[str, AEBaseContext] = {}
+
+    # ==================== AEContextDelegate 实现（转发给上层 AEUserContext） ====================
+
+    def send_request(self, request: AENetReq) -> None:
+        """转发 NetReq 给上层 delegate。"""
+        self._delegate.send_request(request)
+
+    def send_response(self, response: AENetRsp) -> None:
+        """转发 NetRsp 给上层 delegate。"""
+        self._delegate.send_response(response)
+
+    def send_llm_request(self, payload) -> None:
+        """转发 LLM 请求给上层 delegate；按 payload.env_params 注入 directory 环境提示为 system 消息。"""
+        # 按 payload.env_params 从 directory context 获取环境 prompt，作为 system 消息注入
+        env_params = getattr(payload, "env_params", None)
+        if env_params:
+            directory = self.find_by_type(AEContextType.directory)
+            if directory is not None:
+                # 逆序 insert(0)，保证 env_params 顺序在前
+                for env_param in reversed(env_params):
+                    payload.messages.insert(0, {
+                        "role": AERole.SYSTEM.value,
+                        "content": directory.build_env_param_prompt(env_param),
+                    })
+        self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
 
@@ -89,9 +120,9 @@ class AEContextCenter:
             AEContextType.workspace: AEWorkSpaceContext,
         }
 
-        # Context 回调设给 delegate（AEUserContext）
+        # Context 回调设给本 AEContextCenter（由其转发给上层 AEUserContext）
         context = context_map[context_type](space=space)
-        context.set_delegate(self._delegate)
+        context.set_delegate(self)
 
         self._contexts[context.ident] = context
         logger.info(

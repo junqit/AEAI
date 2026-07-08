@@ -1,13 +1,22 @@
 import json
 import re
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
 from Assistant.AERole import AERole
 
 logger = logging.getLogger(__name__)
+
+
+class AEEnvParamType(Enum):
+    """环境参数类型枚举"""
+    python = "python"
+    ruby = "ruby"
+    shell = "shell"
+    system = "system"
 
 
 def llm_generate(description: str = "描述信息") -> str:
@@ -38,6 +47,8 @@ class AELLMPayload:
     level: AEAiLevel = AEAiLevel.default
     # 采样温度，范围 0.0 - 1.0
     temperature: float = 0.7
+    # 环境参数配置（默认包含 system，表示默认携带系统信息）
+    env_params: List[AEEnvParamType] = field(default_factory=lambda: [AEEnvParamType.system])
 
     def __post_init__(self):
         if not (0.0 <= self.temperature <= 1.0):

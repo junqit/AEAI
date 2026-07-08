@@ -3,14 +3,43 @@ import shutil
 import subprocess
 import platform
 import logging
+from typing import Dict
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
+from .AELLMPayload import AEEnvParamType
 
 logger = logging.getLogger(__name__)
 
 class AEDirectoryContext(AEBaseContext):
 
     SCRIPT_LANGUAGES = ["ruby", "python", "zsh"]
+
+    # 各环境参数类型的描述文本（prompt 静态部分）
+    ENV_PARAM_DESC: Dict[AEEnvParamType, str] = {
+        AEEnvParamType.system: (
+            "【系统环境】当前主机的操作系统、硬件架构与系统级工具信息；"
+            "据此判断可用能力，所有操作须在当前工作目录内完成。"
+        ),
+        AEEnvParamType.python: (
+            "【Python 环境】可使用已安装的 Python 解释器及第三方库执行代码；"
+            "优先复用已安装库，缺失时按安装申请规则申请安装。"
+        ),
+        AEEnvParamType.ruby: (
+            "【Ruby 环境】可使用已安装的 Ruby 解释器及 gem 库执行代码；"
+            "优先复用已安装库，缺失时按安装申请规则申请安装。"
+        ),
+        AEEnvParamType.shell: (
+            "【Shell 环境】可使用当前系统 shell（如 zsh）执行命令行操作；"
+            "所有文件与目录修改须限定在当前工作目录内。"
+        ),
+    }
+
+    # 环境参数类型 -> 已探测脚本名称（system 无对应脚本，单独处理）
+    _ENV_SCRIPT_NAME: Dict[AEEnvParamType, str] = {
+        AEEnvParamType.python: "python",
+        AEEnvParamType.ruby: "ruby",
+        AEEnvParamType.shell: "zsh",
+    }
 
     PACKAGE_COMMANDS = {
         "python": ["pip", "list", "--format=freeze"],
@@ -44,6 +73,37 @@ class AEDirectoryContext(AEBaseContext):
         """外部触发重新扫描脚本信息"""
         self._scripts_cache = None
         self._discover_scripts()
+
+    def build_env_param_info(self, env_param: AEEnvParamType) -> str:
+        """构建指定环境参数类型对应的当前系统实际信息。
+
+        - system：OS / 架构 / 节点信息
+        - python / ruby / shell：从已探测脚本中取对应项的版本、路径与已装库
+        """
+        if env_param == AEEnvParamType.system:
+            return (
+                f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
+                f"Node: {platform.node()}"
+            )
+        name = self._ENV_SCRIPT_NAME.get(env_param)
+        if not name:
+            return ""
+        scripts = self._discover_scripts()
+        match = next((s for s in scripts if s["scriptname"] == name), None)
+        if not match:
+            return f"{name}: 未安装"
+        parts = [f"{match['scriptname']} {match['version']} ({match['which']})"]
+        if match["packages"]:
+            parts.append(f"已安装库: {', '.join(match['packages'])}")
+        return "\n".join(parts)
+
+    def build_env_param_prompt(self, env_param: AEEnvParamType) -> str:
+        """构建指定环境参数类型的完整 prompt：描述文本 + 当前系统实际信息拼接。"""
+        desc = self.ENV_PARAM_DESC.get(env_param, "")
+        info = self.build_env_param_info(env_param)
+        if not info:
+            return desc
+        return f"{desc}\n{info}"
 
     @staticmethod
     def _subprocess_env() -> dict:

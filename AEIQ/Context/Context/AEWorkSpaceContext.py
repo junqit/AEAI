@@ -1,8 +1,13 @@
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
+from Assistant.AERole import AERole
+
+if TYPE_CHECKING:
+    from .AELLMPayload import AELLMPayload
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +16,17 @@ class AEWorkSpaceContext(AEBaseContext):
 
     def __init__(self, space: str = ""):
         super().__init__(context_type=AEContextType.workspace, space=space)
+
+    def flow_llm_request(self, payload: "AELLMPayload") -> None:
+        """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
+        用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
+        # 注入工作目录约束（首条 system 消息）：所有修改只能在此目录下，不可操作其他目录内容
+        payload.messages.insert(0, {
+            "role": AERole.SYSTEM.value,
+            "content": f"当前工作目录：{self.space}。所有修改只能在此目录下进行，不可操作其他目录的内容。",
+        })
+        # env_param prompt 注入 + 包装 out_schema + 上送，交基类处理
+        super().flow_llm_request(payload)
 
     def receive_llm_response(self, data: dict) -> None:
         """
