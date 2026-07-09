@@ -20,6 +20,7 @@ from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
 from Assistant.AERole import AERole
+from Excutor import AERuntimeExcutor
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +51,24 @@ class AEFlow(AEFlowInfo):
         self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
-        # 状态处理脚本：key 为 AEFlowFunctional 的值，默认对应三个 flow_receive_* 方法；
-        # 子类可覆写 scripts 自定义各 functional 的处理（flow_receive_llm 内 exec 执行）
-        self.scripts: Dict[str, str] = {
-            AEFlowFunctional.default.value: "self.flow_receive_default(inner)",
-            AEFlowFunctional.processing.value: "self.flow_receive_processing(inner)",
-            AEFlowFunctional.complete.value: "self.flow_receive_complete(inner)",
-        }
-        # 默认 functional 列表（与 AEFlowFunctional 枚举一致）；
-        # 不在此列的 status 视为子类临时追加的方法，执行后需清除，避免残留
-        self.default_functionals = {item.value for item in AEFlowFunctional}
+        # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
+        # 默认注册三个 flow_receive_* 方法，子类可 add_temporary 追加临时方法（执行后自动清除）
+        self.excutor = AERuntimeExcutor()
+        self.excutor.add_default(
+            AEFlowFunctional.default.value,
+            AERuntimeExcutor.method_call("flow_receive_default"),
+            self,
+        )
+        self.excutor.add_default(
+            AEFlowFunctional.processing.value,
+            AERuntimeExcutor.method_call("flow_receive_processing"),
+            self,
+        )
+        self.excutor.add_default(
+            AEFlowFunctional.complete.value,
+            AERuntimeExcutor.method_call("flow_receive_complete"),
+            self,
+        )
 
     # ==================== AEFlowInterface 实现 ====================
 
@@ -131,14 +140,15 @@ class AEFlow(AEFlowInfo):
         """
         收到经 receiveLLMResult 路由到自身、已解析出的 out_schema 数据。
 
-        按 out_schema 内的 status 字段从 self.scripts 取对应脚本并 exec 执行，
-        默认脚本调用三个 flow_receive_* 方法：
+        按 out_schema 内的 status 字段从 self.excutor 取对应脚本并执行，
+        默认注册调用三个 flow_receive_* 方法：
           - default    → flow_receive_default
           - processing → flow_receive_processing
           - complete   → flow_receive_complete
 
-        out_schema 内无 status 字段、或 status 不在 scripts 内时，打印错误信息并忽略。
-        子类可覆写 scripts 自定义各 status 的处理，或覆写各 flow_receive_* 方法。
+        out_schema 内无 status 字段、或 status 未在 excutor 内注册时，打印错误信息并忽略。
+        子类可经 excutor.add_default / add_temporary 自定义各 status 的处理，或覆写各 flow_receive_* 方法；
+        temporary 注册执行后由 excutor 自动清除。
 
         Args:
             out_schema: 从输入 map 中解析出的 out_schema 数据（含 status / llm_out 字段）
@@ -149,21 +159,14 @@ class AEFlow(AEFlowInfo):
         command = out_schema.get("status")
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, status, llm_out: <内容>}）
         inner = out_schema.get("llm_out")
-        script = self.scripts.get(command)
-        if script is None:
+        if not self.excutor.contains(command):
             logger.error(
                 "[AEFlow:%s][%s] out_schema 内 status=%r 无效或缺失，忽略: %r",
                 self.ident, self.title, command, out_schema,
             )
             return
-        exec(script, {"self": self, "inner": inner})
-        # 非默认 functional 视为子类临时追加的方法，执行后清除，避免残留
-        if command not in self.default_functionals:
-            self.scripts.pop(command, None)
-            logger.info(
-                "[AEFlow:%s][%s] 临时方法 status=%r 执行完毕已清除",
-                self.ident, self.title, command,
-            )
+        # inner 直接传入；target 在注册时已绑定为 self，temporary 执行后由 excutor 自动清除
+        self.excutor.exec(command, inner)
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
