@@ -3,6 +3,7 @@ AEFlowOutput - Flow 输出数据（普通类）。
 
 持有 out_schema（输出数据 map）与 schema（输出结构定义 map）。
 """
+from typing import Any
 
 
 class AEFlowOutput:
@@ -12,6 +13,18 @@ class AEFlowOutput:
         
         # out_schema：输出数据（map）
         self.out_schema: dict = out_schema or {}
+
+    def add_param(self, key: str, value: Any) -> None:
+        """向 out_schema 首层直接添加一个参数：key -> value。
+
+        与 add_llm_out（写入 llm_out 嵌套层）对应，本方法写入 out_schema 首层；
+        同名 key 覆盖。
+
+        Args:
+            key: out_schema 首层的字段名
+            value: 该字段的值（任意类型）
+        """
+        self.out_schema[key] = value
 
     def add_llm_out(self, key: str, description: str) -> None:
         """向 llm_out 直接添加一个占位参数：key -> llm_generate(description)。

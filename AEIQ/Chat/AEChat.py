@@ -7,7 +7,7 @@ import uuid
 import logging
 from typing import Optional
 
-from WorkFlows.AEFlow import AEFlow
+from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Network.Core.AENetReq import AENetReqInfo
@@ -38,6 +38,6 @@ class AEChat(AEFlow):
         super().startFlow(flowInput, flowOutput)
         next_flow = self.nextFlow()
         if next_flow is not None:
-            next_flow.startFlow(flowInput, self.flowOutput())
+            next_flow.startFlow(flowInput, self.flowOutput(AEFlowFunctional.flow_receive_processing))
 
 

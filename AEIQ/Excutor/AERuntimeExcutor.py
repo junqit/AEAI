@@ -47,9 +47,15 @@ class AERuntimeExcutor:
         """
         self._default[funcident] = _Entry(script, target)
 
-    def add_temporary(self, funcident: str, script: str, target) -> None:
-        """临时方式注册：优先于 default，exec 执行后自动清除。"""
-        self._temporary[funcident] = _Entry(script, target)
+    def add_temporary(self, funcident: str, method: str, target) -> None:
+        """临时方式注册：优先于 default，exec 执行后自动清除。
+
+        Args:
+            funcident: 方法标识
+            method: 方法名，经 method_call 拼成 self.<method>(inner) 脚本
+            target: 方法的 self，执行时作为 AE_SELF 注入 namespace
+        """
+        self._temporary[funcident] = _Entry(self.method_call(method), target)
 
     def remove_default(self, funcident: str) -> None:
         """移除默认注册。"""

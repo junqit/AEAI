@@ -15,6 +15,9 @@ from .AEFlowOutput import AEFlowOutput
 # llm_out 内默认 answer 字段名
 AE_ANSWER = "answer"
 
+# out_schema 内功能性调用唯一标识字段名（每次 flowOutput 随机生成）
+AE_funcationkey = "funcationkey"
+
 
 class AEFlowStatus(str, Enum):
     """Flow 执行状态"""
@@ -58,25 +61,49 @@ class AEFlowInfo:
         """flow 标识（只读）"""
         return self._ident
 
-    def flowOutput(self, llm_out: Optional[Dict[str, Any]] = None) -> AEFlowOutput:
-        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, status, llm_out:{字段:llm_generate(...)}}。
+    def flowOutput(self, functional: str) -> AEFlowOutput:
+        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, funcationkey, llm_out}。
 
         Args:
-            llm_out: llm_out 字段配置（完整 dict），value 为 llm_generate(...) 占位符，
-                     形如 {AE_ANSWER: llm_generate("生成的答案")}。
-                     默认 {AE_ANSWER: llm_generate("生成的答案")}（llm_generate 必含）。
+            functional: AEFlowFunctional 方法名（flow_receive_default/processing/complete），
+                        直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
+                        路由到对应方法。
+
+        llm_out 复用本 flow 的 output.out_schema；output 未设置时用默认占位
+        {AE_ANSWER: llm_generate("生成的答案")}（llm_generate 必含）。
         """
         from Context.Context.AELLMPayload import llm_generate
 
-        if llm_out is None:
+        if self.output is not None:
+            llm_out = self.output.out_schema
+        else:
             llm_out = {AE_ANSWER: llm_generate("生成的答案")}
-            
+
+        # functional 即方法名（flow_receive_*），直接注册；funcident 作为 AE_funcationkey 供回包路由
+        funcationkey = self.registerFunctional(functional)
+
         return AEFlowOutput(out_schema={
             "ident": self.ident,
             "title": self.title,
-            "status": self.status.value,
+            AE_funcationkey: funcationkey,
             "llm_out": llm_out,
         })
+
+    def registerFunctional(self, method: str) -> str:
+        """注册临时功能性方法，funcident 用随机创建的唯一标识。
+
+        funcident 随机生成（uuid hex），与 out_schema 的 AE_funcationkey 对应，
+        回包据此路由到 method 指定的 flow_receive_* 方法；temporary 执行后自动清除。
+
+        Args:
+            method: 方法名（flow_receive_*），经 excutor.method_call 拼成 self.<method>(inner)
+
+        Returns:
+            随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段
+        """
+        funcident = uuid.uuid4().hex
+        self.excutor.add_temporary(funcident, method, self)
+        return funcident
 
     def to_map(self) -> dict:
         """返回元信息的 map 形态（ident / title / responsibility / input / output）"""

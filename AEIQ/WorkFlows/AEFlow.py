@@ -15,7 +15,7 @@ import weakref
 from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER, AE_funcationkey
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
@@ -30,13 +30,6 @@ if TYPE_CHECKING:
 
 
 class AEFlowFunctional(str, Enum):
-    """Flow 功能性能力类型（取值与 AEFlowStatus 保持一致）"""
-    default = "default"            # 初始状态
-    processing = "processing"      # 执行中
-    complete = "complete"          # 已完成
-
-
-class AEFlowFunctionName(str, Enum):
     """Flow 功能性方法名（flow_receive_*），供 method_call 拼接，避免手写字符串。"""
     flow_receive_default = "flow_receive_default"
     flow_receive_processing = "flow_receive_processing"
@@ -132,28 +125,25 @@ class AEFlow(AEFlowInfo):
         """
         收到经 receive_llm_response 路由到自身、已解析出的 out_schema 数据。
 
-        按 out_schema 内的 status 字段从 self.excutor 取对应脚本并执行，
-        默认注册调用三个 flow_receive_* 方法：
-          - default    → flow_receive_default
-          - processing → flow_receive_processing
-          - complete   → flow_receive_complete
+        按 out_schema 内的 AE_funcationkey 字段从 self.excutor 取对应脚本并执行；
+        该 key 由发送方 flowOutput 注册时随机生成，对应一个 flow_receive_* 方法。
 
-        out_schema 内无 status 字段、或 status 未在 excutor 内注册时，打印错误信息并忽略。
-        子类可经 excutor.add_default / add_temporary 自定义各 status 的处理，或覆写各 flow_receive_* 方法；
+        out_schema 内无 AE_funcationkey 字段、或其值未在 excutor 内注册时，打印错误信息并忽略。
+        子类可经 excutor.add_default / add_temporary 自定义处理，或覆写各 flow_receive_* 方法；
         temporary 注册执行后由 excutor 自动清除。
 
         Args:
-            out_schema: 从输入 map 中解析出的 out_schema 数据（含 status / llm_out 字段）
+            out_schema: 从输入 map 中解析出的 out_schema 数据（含 AE_funcationkey / llm_out 字段）
         """
         if not isinstance(out_schema, dict):
             logger.error("[AEFlow:%s] out_schema 非 map，忽略: %r", self.ident, out_schema)
             return
-        command = out_schema.get("status")
-        # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, status, llm_out: <内容>}）
+        command = out_schema.get(AE_funcationkey)
+        # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
         inner = out_schema.get("llm_out")
         if not self.excutor.contains(command):
             logger.error(
-                "[AEFlow:%s][%s] out_schema 内 status=%r 无效或缺失，忽略: %r",
+                "[AEFlow:%s][%s] out_schema 内 funcationkey=%r 无效或缺失，忽略: %r",
                 self.ident, self.title, command, out_schema,
             )
             return
@@ -313,8 +303,8 @@ class AEFlow(AEFlowInfo):
         self.status = AEFlowStatus.complete
         logger.info("[AERefiner:%s] self.output.out_schema = %s", self.ident, self.output.out_schema)
 
-        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/status 重新打包
-        flow_out = self.flowOutput(llm_out=self.output.out_schema)
+        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包
+        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
         payload = AELLMPayload(
             messages=messages,
             out_schema=flow_out.out_schema,
