@@ -32,7 +32,7 @@ class AEWorkSpaceContext(AEBaseContext):
         处理 LLM 回复（dispatch 已按 context.ident 路由并剥掉本层，data 为 chat.ident 层）：
 
         - 按 data.ident 从 _chat_map 取到 AEChat
-        - 剥掉 chat.ident 层，把内层 llm_out 传给 AEChat.receiveLLMResult 继续向下传递
+        - 剥掉 chat.ident 层，把内层 llm_out 传给 AEChat.receive_llm_response 继续向下传递
         """
         if not isinstance(data, dict):
             logger.error(f"[WorkSpace:{self.ident}] LLM 回复非 map: {data!r}")
@@ -47,4 +47,4 @@ class AEWorkSpaceContext(AEBaseContext):
         if not isinstance(out_schema, dict):
             logger.error(f"[WorkSpace:{self.ident}] chat 内层 out_schema 非 map: {out_schema!r}")
             return
-        chat.receiveLLMResult(out_schema)
+        chat.receive_llm_response(out_schema)

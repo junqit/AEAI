@@ -12,6 +12,9 @@ from typing import Any, Dict, Optional
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
 
+# llm_out 内默认 answer 字段名
+AE_ANSWER = "answer"
+
 
 class AEFlowStatus(str, Enum):
     """Flow 执行状态"""
@@ -60,13 +63,13 @@ class AEFlowInfo:
 
         Args:
             llm_out: llm_out 字段配置（完整 dict），value 为 llm_generate(...) 占位符，
-                     形如 {"answer": llm_generate("生成的答案")}。
-                     默认 {"answer": llm_generate("生成的答案")}（llm_generate 必含）。
+                     形如 {AE_ANSWER: llm_generate("生成的答案")}。
+                     默认 {AE_ANSWER: llm_generate("生成的答案")}（llm_generate 必含）。
         """
         from Context.Context.AELLMPayload import llm_generate
-        
+
         if llm_out is None:
-            llm_out = {"answer": llm_generate("生成的答案")}
+            llm_out = {AE_ANSWER: llm_generate("生成的答案")}
             
         return AEFlowOutput(out_schema={
             "ident": self.ident,

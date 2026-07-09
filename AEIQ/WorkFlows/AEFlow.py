@@ -3,7 +3,7 @@ AEFlow - Flow 基类，同时实现 AEFlowInterface 与 AEFlowDelegate 两个协
 
 AEFlowInterface 实现（flow 自身接口）：
   - ident / delegate（属性）
-  - receiveLLMResult()   接收输入数据
+  - receive_llm_response()   接收输入数据
   - addFlow()                  添加子 flow
 
 AEFlowDelegate 实现（子 flow 通过本类向外流转）：
@@ -15,7 +15,7 @@ import weakref
 from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AEFlowStatus
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
@@ -34,6 +34,13 @@ class AEFlowFunctional(str, Enum):
     default = "default"            # 初始状态
     processing = "processing"      # 执行中
     complete = "complete"          # 已完成
+
+
+class AEFlowFunctionName(str, Enum):
+    """Flow 功能性方法名（flow_receive_*），供 method_call 拼接，避免手写字符串。"""
+    flow_receive_default = "flow_receive_default"
+    flow_receive_processing = "flow_receive_processing"
+    flow_receive_complete = "flow_receive_complete"
 
 
 class AEFlow(AEFlowInfo):
@@ -56,17 +63,17 @@ class AEFlow(AEFlowInfo):
         self.excutor = AERuntimeExcutor()
         self.excutor.add_default(
             AEFlowFunctional.default.value,
-            AERuntimeExcutor.method_call("flow_receive_default"),
+            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_default),
             self,
         )
         self.excutor.add_default(
             AEFlowFunctional.processing.value,
-            AERuntimeExcutor.method_call("flow_receive_processing"),
+            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_processing),
             self,
         )
         self.excutor.add_default(
             AEFlowFunctional.complete.value,
-            AERuntimeExcutor.method_call("flow_receive_complete"),
+            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_complete),
             self,
         )
 
@@ -97,13 +104,13 @@ class AEFlow(AEFlowInfo):
             flowOutput.out_schema if flowOutput is not None else None,
         )
 
-    def receiveLLMResult(self, data: dict) -> None:
+    def receive_llm_response(self, data: dict) -> None:
         """
         接收输入数据（map），按其中的 ident 路由：
 
           - ident == self.ident → 本层处理，交 flow_receive_llm
             （子类在 flow_receive_llm 中处理收到的数据）
-          - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receiveLLMResult）
+          - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receive_llm_response）
           - ident 既非自身、也未命中子 flow → 打印错误日志
 
         data 约定为 flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
@@ -127,7 +134,7 @@ class AEFlow(AEFlowInfo):
         # ident 命中子 flow：转发内层 out_schema 给该子 flow（使用时再获取）
         flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
-            flow.receiveLLMResult(data.get("llm_out"))
+            flow.receive_llm_response(data.get("llm_out"))
             return
 
         # ident 既非自身、也未命中子 flow：打印错误日志
@@ -138,7 +145,7 @@ class AEFlow(AEFlowInfo):
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """
-        收到经 receiveLLMResult 路由到自身、已解析出的 out_schema 数据。
+        收到经 receive_llm_response 路由到自身、已解析出的 out_schema 数据。
 
         按 out_schema 内的 status 字段从 self.excutor 取对应脚本并执行，
         默认注册调用三个 flow_receive_* 方法：
@@ -307,7 +314,7 @@ class AEFlow(AEFlowInfo):
             out_schema: 结果数据（含 answer 字段）
         """
         self.status = AEFlowStatus.complete
-        answer = out_schema.get("answer") if isinstance(out_schema, dict) else None
+        answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
         logger.info("[AEFlow:%s][%s] receive_flow_result 收到 answer=%r", self.ident, self.title, answer)
 
         messages = []
