@@ -59,23 +59,8 @@ class AEFlow(AEFlowInfo):
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
         # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
-        # 默认注册三个 flow_receive_* 方法，子类可 add_temporary 追加临时方法（执行后自动清除）
+        # 默认不注册任何方法，由业务子类自行 add_default / add_temporary 添加
         self.excutor = AERuntimeExcutor()
-        self.excutor.add_default(
-            AEFlowFunctional.default.value,
-            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_default),
-            self,
-        )
-        self.excutor.add_default(
-            AEFlowFunctional.processing.value,
-            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_processing),
-            self,
-        )
-        self.excutor.add_default(
-            AEFlowFunctional.complete.value,
-            AERuntimeExcutor.method_call(AEFlowFunctionName.flow_receive_complete),
-            self,
-        )
 
     # ==================== AEFlowInterface 实现 ====================
 
