@@ -47,14 +47,28 @@ class AELLMPayload:
     level: AEAiLevel = AEAiLevel.default
     # 采样温度，范围 0.0 - 1.0
     temperature: float = 0.7
-    # 环境参数配置（默认包含 system，表示默认携带系统信息）
-    env_params: List[AEEnvParamType] = field(default_factory=lambda: [AEEnvParamType.system])
+    # 环境参数配置（私有，默认包含 system，表示默认携带系统信息）；外部经 add/remove_env_param 管理
+    _env_params: List[AEEnvParamType] = field(
+        default_factory=lambda: [AEEnvParamType.system], init=False, repr=False,
+    )
 
     def __post_init__(self):
         if not (0.0 <= self.temperature <= 1.0):
             raise ValueError(f"temperature 必须在 0.0 - 1.0 之间，当前值: {self.temperature}")
 
-    def to_dict(self) -> dict:
+    # ==================== env_params 管理（私有字段，外部仅经以下方法访问） ====================
+
+    def add_env_param(self, param: AEEnvParamType) -> None:
+        """添加环境参数；已存在则跳过。"""
+        if param not in self._env_params:
+            self._env_params.append(param)
+
+    def remove_env_param(self, param: AEEnvParamType) -> None:
+        """移除环境参数；不存在则跳过。"""
+        if param in self._env_params:
+            self._env_params.remove(param)
+
+    def to_llm_request_dic(self) -> dict:
         # 按 out_schema 输出：注入 system 指令，要求按该结构输出合法 JSON
         schema_json = json.dumps(self.out_schema, ensure_ascii=False, indent=2)
         logger.info("out_schema 结构:\n%s", schema_json)

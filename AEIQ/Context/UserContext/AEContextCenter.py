@@ -15,7 +15,6 @@ from typing import Dict, Optional
 from Network.Core import AENetReq
 from Network.Core.AENetReq import AENetCont, AENetReqInfo
 from Network.Core.AENetRsp import AENetRsp, AENetRspCode
-from Assistant.AERole import AERole
 from ..Context.AEBaseContext import AEBaseContext
 from ..Context.AEContextDelegate import AEContextDelegate
 from ..Context.AEContextType import AEContextType
@@ -52,18 +51,7 @@ class AEContextCenter(AEContextDelegate):
         self._delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:
-        """转发 LLM 请求给上层 delegate；按 payload.env_params 注入 directory 环境提示为 system 消息。"""
-        # 按 payload.env_params 从 directory context 获取环境 prompt，作为 system 消息注入
-        env_params = getattr(payload, "env_params", None)
-        if env_params:
-            directory = self.find_by_type(AEContextType.directory)
-            if directory is not None:
-                # 逆序 insert(0)，保证 env_params 顺序在前
-                for env_param in reversed(env_params):
-                    payload.messages.insert(0, {
-                        "role": AERole.SYSTEM.value,
-                        "content": directory.build_env_param_prompt(env_param),
-                    })
+        """转发 LLM 请求给上层 delegate。"""
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
