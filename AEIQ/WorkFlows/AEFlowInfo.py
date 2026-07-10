@@ -11,9 +11,10 @@ from typing import Any, Dict, Optional
 
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput
+from Excutor.AERuntimeExcutor import AEFunctional
 
 # llm_out 内默认 answer 字段名
-AE_ANSWER = "answer"
+AE_ANSWER = "reply"
 
 # out_schema 内功能性调用唯一标识字段名（每次 flowOutput 随机生成）
 AE_funcationkey = "funcationkey"
@@ -61,11 +62,11 @@ class AEFlowInfo:
         """flow 标识（只读）"""
         return self._ident
 
-    def flowOutput(self, functional: str) -> AEFlowOutput:
+    def flowOutput(self, functional: AEFunctional) -> AEFlowOutput:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, funcationkey, llm_out}。
 
         Args:
-            functional: AEFlowFunctional 方法名（flow_receive_default/processing/complete），
+            functional: AEFunctional 方法名成员（flow_receive_default/processing/complete），
                         直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 
@@ -89,14 +90,11 @@ class AEFlowInfo:
             "llm_out": llm_out,
         })
 
-    def registerFunctional(self, method: str) -> str:
-        """注册临时功能性方法，funcident 用随机创建的唯一标识。
-
-        funcident 随机生成（uuid hex），与 out_schema 的 AE_funcationkey 对应，
-        回包据此路由到 method 指定的 flow_receive_* 方法；temporary 执行后自动清除。
+    def registerFunctional(self, method: AEFunctional) -> str:
+        """注册临时功能性方法。funcident 为随机字符串键，method 为 AEFunctional 成员。
 
         Args:
-            method: 方法名（flow_receive_*），经 excutor.method_call 拼成 self.<method>(inner)
+            method: AEFunctional 方法名成员（flow_receive_*），executor 内部按 .value 拼 script
 
         Returns:
             随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段

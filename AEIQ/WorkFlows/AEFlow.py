@@ -10,9 +10,9 @@ AEFlowDelegate 实现（子 flow 通过本类向外流转）：
   - flow_llm_request()                 发送 AELLMPayload 调用 LLM
   - flow_complete()            Flow 完成，整理结果
 """
+import json
 import logging
 import weakref
-from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER, AE_funcationkey
@@ -21,6 +21,7 @@ from .AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
 from Assistant.AERole import AERole
 from Excutor import AERuntimeExcutor
+from Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ if TYPE_CHECKING:
     from .AEFlowInterface import AEFlowInterface
 
 
-class AEFlowFunctional(str, Enum):
-    """Flow 功能性方法名（flow_receive_*），供 method_call 拼接，避免手写字符串。"""
+class AEFlowFunctional(AEFunctional):
+    """Flow 功能性方法名（flow_receive_*），继承 AEFunctional，供 method_call 拼接。"""
     flow_receive_default = "flow_receive_default"
     flow_receive_processing = "flow_receive_processing"
     flow_receive_complete = "flow_receive_complete"
@@ -76,11 +77,6 @@ class AEFlow(AEFlowInfo):
         self.input = flowInput
         self.output = flowOutput
         self.status = AEFlowStatus.processing
-        logger.info(
-            "[AEFlow:%s][%s] startFlow → processing, out_schema=%s",
-            self.ident, self.title,
-            flowOutput.out_schema if flowOutput is not None else None,
-        )
 
     def receive_llm_response(self, data: dict) -> None:
         """
@@ -103,6 +99,10 @@ class AEFlow(AEFlowInfo):
 
         # 取 ident
         ident = data.get("ident")
+        logger.info(
+            "[recv][AEFlow:%s][%s] receive_llm_response ident=%r, data:\n%s",
+            self.ident, self.title, ident, json.dumps(data, ensure_ascii=False, indent=2, default=str),
+        )
 
         # ident 命中自身：本层处理（传整个 data）
         if ident == self.ident:
@@ -139,6 +139,10 @@ class AEFlow(AEFlowInfo):
             logger.error("[AEFlow:%s] out_schema 非 map，忽略: %r", self.ident, out_schema)
             return
         command = out_schema.get(AE_funcationkey)
+        logger.info(
+            "[recv][AEFlow:%s][%s] flow_receive_llm funcationkey=%r, out_schema:\n%s",
+            self.ident, self.title, command, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
+        )
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
         inner = out_schema.get("llm_out")
         if not self.excutor.contains(command):
@@ -154,19 +158,20 @@ class AEFlow(AEFlowInfo):
         """
         status=default：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
         """
-        logger.info("[AEFlow:%s][%s] 阶段=default", self.ident, self.title)
 
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
         """
         status=processing：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
         """
-        logger.info("[AEFlow:%s][%s] 阶段=processing", self.ident, self.title)
 
     def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
         """
         status=complete：收到结果数据，并通过 delegate.flow_complete 通知返回。
         """
-        logger.info("[AEFlow:%s][%s] 阶段=complete", self.ident, self.title)
+        logger.info(
+            "[recv][AEFlow:%s][%s] flow_receive_complete out_schema:\n%s",
+            self.ident, self.title, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
+        )
         if self.delegate is not None:
             self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
 
@@ -264,6 +269,10 @@ class AEFlow(AEFlowInfo):
             )
             return
         ident = result.get("ident") if isinstance(result, dict) else None
+        logger.info(
+            "[recv][AEFlow:%s][%s] flow_complete ident=%r, result:\n%s",
+            self.ident, self.title, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
+        )
         # ident 命中自身：本层接收
         if ident == self.ident:
             self.receive_flow_result(result.get("llm_out"))
@@ -290,7 +299,10 @@ class AEFlow(AEFlowInfo):
         """
         self.status = AEFlowStatus.complete
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
-        logger.info("[AEFlow:%s][%s] receive_flow_result 收到 answer=%r", self.ident, self.title, answer)
+        logger.info(
+            "[recv][AEFlow:%s][%s] receive_flow_result answer=%r, out_schema:\n%s",
+            self.ident, self.title, answer, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
+        )
 
         messages = []
         if self.title:
@@ -301,7 +313,6 @@ class AEFlow(AEFlowInfo):
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
 
         self.status = AEFlowStatus.complete
-        logger.info("[AERefiner:%s] self.output.out_schema = %s", self.ident, self.output.out_schema)
 
         # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包
         flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
