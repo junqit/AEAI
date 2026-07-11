@@ -17,7 +17,7 @@ from Excutor.AERuntimeExcutor import AEFunctional
 AE_ANSWER = "reply"
 
 # out_schema 内功能性调用唯一标识字段名（每次 flowOutput 随机生成）
-AE_funcationkey = "funcationkey"
+AE_funcationkey = "excutor"
 
 
 class AEFlowStatus(str, Enum):

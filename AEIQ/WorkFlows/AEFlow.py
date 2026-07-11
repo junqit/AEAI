@@ -58,10 +58,10 @@ class AEFlow(AEFlowInfo):
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
     def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
-        """启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并切换到 processing。
+        """启动 flow：仅在 default 状态下接收 flowInput / flowOutput。
 
         - 非 default 状态下调用将被忽略（仅 default 可接收）
-        - 接收后置 input / output，状态切换为 processing
+        - 接收后置 input / output；状态由 flow_receive_* 系列方法维护，此处不变更
         """
         if self.status != AEFlowStatus.default:
             logger.warning(
@@ -71,7 +71,6 @@ class AEFlow(AEFlowInfo):
             return
         self.input = flowInput
         self.output = flowOutput
-        self.status = AEFlowStatus.processing
 
     def receive_llm_response(self, data: dict) -> None:
         """
@@ -174,6 +173,23 @@ class AEFlow(AEFlowInfo):
         if self.delegate is not None:
             self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
 
+    @property
+    def outResult_summary(self) -> str:
+        """从 outResult 中提取总结内容（AE_ANSWER 字段值，递归查找嵌套结构）。"""
+        return self._extract_answer(self.outResult) or ""
+
+    @staticmethod
+    def _extract_answer(obj) -> Optional[str]:
+        """递归查找 obj 内首个 AE_ANSWER 键的值。"""
+        if isinstance(obj, dict):
+            if AE_ANSWER in obj:
+                return obj[AE_ANSWER]
+            for v in obj.values():
+                r = AEFlow._extract_answer(v)
+                if r is not None:
+                    return r
+        return None
+
     def addFlow(self, flow: "AEFlowInterface") -> None:
         """
         添加子 flow。
@@ -252,7 +268,7 @@ class AEFlow(AEFlowInfo):
         """
         Flow 完成通知：仅处理 complete，按 result.ident 路由结果数据。
 
-        - ident == self.ident → 本层接收（receive_flow_result）
+        - ident == self.ident → 确认是本 flow 需处理的内容，交 receive_flow_result
         - ident 命中 _flows 内子 flow → 转发给该子 flow（receive_flow_result）
 
         非 complete 状态（default / processing）忽略并记录告警。
@@ -272,7 +288,7 @@ class AEFlow(AEFlowInfo):
             "[recv][AEFlow:%s][%s] flow_complete ident=%r, result:\n%s",
             self.ident, self.title, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
         )
-        # ident 命中自身：本层接收
+        # 确认是本 flow 需处理的内容：ident 命中自身 → 交 receive_flow_result
         if ident == self.ident:
             self.receive_flow_result(result.get("llm_out"))
             return
@@ -281,43 +297,68 @@ class AEFlow(AEFlowInfo):
         if flow is not None:
             flow.receive_flow_result(result.get("llm_out"))
             return
+        logger.warning(
+            "[AEFlow:%s][%s] ident=%r 既非自身也未命中子 flow，忽略: %r",
+            self.ident, self.title, ident, result,
+        )
 
     def receive_flow_result(self, out_schema: "Optional[dict]") -> None:
         """
-        收到经 flow_complete 路由到自身的结果数据。
+        收到经 flow_complete 路由到自身、确认由本 flow 处理的结果数据。
 
-        读取 out_schema.answer，拼装 AELLMPayload：
-          - role.system:  self.title
-          - role.system:  self.responsibility
-          - role.assistant: answer
-          - role.user:    根据自己的职责条理地整理结论
-        按本 flow 的 output 结构作为 out_schema 约束，发送交由 LLM 生成。
+        判断所有子 flow 是否全部 complete：
+        - 未全部 complete：把 AE_ANSWER 内容组装成 flowInput，交给首个 default 状态子 flow startFlow
+        - 全部 complete：汇总所有子 flow 的 outResult 交 LLM 生成最终答案
 
         Args:
-            out_schema: 结果数据（含 answer 字段）
+            out_schema: 结果数据（含 AE_ANSWER 字段）
         """
-        self.status = AEFlowStatus.complete
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
         logger.info(
             "[recv][AEFlow:%s][%s] receive_flow_result answer=%r, out_schema:\n%s",
             self.ident, self.title, answer, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
         )
 
-        messages = []
-        if self.title:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
-        if self.responsibility:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
-        messages.append({"role": AERole.ASSISTANT.value, "content": answer or ""})
-        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+        # 判断所有子 flow 是否全部 complete
+        all_complete = all(f.status == AEFlowStatus.complete for f in self._flows.values())
+        if not all_complete:
+            self._advance_next_flow(answer)
+            return
+        self._summarize_to_llm()
 
-        self.status = AEFlowStatus.complete
+    def _advance_next_flow(self, answer: Optional[str]) -> None:
+        """未全部 complete：把 answer 组装成 flowInput，交给首个 default 状态子 flow startFlow。"""
+        flow_input = AEFlowInput(content=answer or "")
+        next_flow = self.nextFlow()
+        if next_flow is not None:
+            next_flow.startFlow(flow_input, self.flowOutput(AEFunctional.flow_receive_complete))
+        else:
+            logger.warning(
+                "[AEFlow:%s][%s] 未全部 complete 但无 default 状态子 flow，无法继续",
+                self.ident, self.title,
+            )
 
-        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包
+    def _summarize_to_llm(self) -> None:
+        """全部 complete：汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。
+
+        问题已由上游（如 AERefiner）具象化，此处不再带原始 input.content。
+        """
         flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
-        payload = AELLMPayload(
-            messages=messages,
-            out_schema=flow_out.out_schema,
-        )
-
+        messages = []
+        if len(self.title) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
+        if len(self.responsibility) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
+        # 把所有子 flow 的 outResult 总结内容放入 messages（作为 user 轮：即具象化后的问题/上下文）
+        for f in self._flows.values():
+            if f.outResult is not None:
+                messages.append({
+                    "role": AERole.SYSTEM.value,
+                    "content": f"{f.title or f.ident}: {f.outResult_summary}",
+                })
+        messages.append({
+            "role": AERole.USER.value,
+            "content": "请基于以上提供的内容，仔细思考后，输出结论",
+        })
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

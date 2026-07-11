@@ -145,3 +145,4 @@ class AERuntimeExcutor:
         # temporary 执行后清除，避免残留
         if is_temporary:
             self._temporary.pop(funcident, None)
+            logger.info("[exec] 临时方法 funcident=%r 执行完毕已清除", funcident)

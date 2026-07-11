@@ -35,7 +35,7 @@ class AERefiner(AEFlow):
         )
 
     def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
-        """启动：交基类置 input/output 并切到 processing，拼装 AELLMPayload 发送。
+        """启动：交基类置 input/output，拼装 AELLMPayload 发送。
 
         - messages: system(title) / system(responsibility) / user(input.content)
         - out_schema: 本 flow 的输出结构（含 answer 占位，由 LLM 生成精炼后的问题）
@@ -45,8 +45,6 @@ class AERefiner(AEFlow):
             flowOutput: flow 输出结构
         """
         super().startFlow(flowInput, flowOutput)
-
-        self.status = AEFlowStatus.complete
 
         messages = []
         if self.title:
