@@ -12,7 +12,7 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,23 @@ AE_INNER = "inner"  # exec 传入的数据
 
 
 class AEFunctional(str, Enum):
-    """功能性方法名基类，由 AEFlowFunctional 继承并定义具体方法名（flow_receive_*）。"""
+    """功能性方法名：每个成员携带 输入数据格式(input_format) 与 方法 prompt。
+
+    成员可定义为纯字符串（input_format/prompt 取默认 None/""），或元组
+    (value, input_format, prompt) 以显式指定。调用方直接使用成员即可。
+    """
+
+    def __new__(cls, value: str, input_format: Any = None, prompt: str = ""):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.input_format = input_format
+        obj.prompt = prompt
+        return obj
+
+    # TODO: 填入各 functional 的 input_format（输入数据格式）与 prompt
+    flow_receive_default = "flow_receive_default"
+    flow_receive_processing = "flow_receive_processing"
+    flow_receive_complete = "flow_receive_complete"
 
 
 @dataclass

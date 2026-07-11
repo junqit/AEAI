@@ -5,11 +5,12 @@ AERefiner - 问题精炼 Flow，继承 AEFlow。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowStatus, AEFlowFunctional
+from WorkFlows.AEFlow import AEFlow, AEFlowStatus
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
 from Assistant.AERole import AERole
+from Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class AERefiner(AEFlow):
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
         # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包；
         # flowOutput 内部按 complete 注册 flow_receive_complete（funcident 随机，回包据此路由）
-        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
+        flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
         payload = AELLMPayload(
             messages=messages,
             out_schema=flow_out.out_schema,

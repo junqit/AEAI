@@ -30,13 +30,6 @@ if TYPE_CHECKING:
     from .AEFlowInterface import AEFlowInterface
 
 
-class AEFlowFunctional(AEFunctional):
-    """Flow 功能性方法名（flow_receive_*），继承 AEFunctional，供 method_call 拼接。"""
-    flow_receive_default = "flow_receive_default"
-    flow_receive_processing = "flow_receive_processing"
-    flow_receive_complete = "flow_receive_complete"
-
-
 class AEFlow(AEFlowInfo):
     """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
@@ -156,18 +149,21 @@ class AEFlow(AEFlowInfo):
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
         """
-        status=default：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
+        status=default：收到结果数据，置本 flow 状态为 default。子类可覆写做业务处理。
         """
+        self.status = AEFlowStatus.default
 
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
         """
-        status=processing：收到结果数据。状态由子类（业务侧）自行处理，基类默认不变更 status。
+        status=processing：收到结果数据，置本 flow 状态为 processing。子类可覆写做业务处理。
         """
+        self.status = AEFlowStatus.processing
 
     def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
         """
-        status=complete：收到结果数据，并通过 delegate.flow_complete 通知返回。
+        status=complete：收到结果数据，置本 flow 状态为 complete，并通过 delegate.flow_complete 通知返回。
         """
+        self.status = AEFlowStatus.complete
         logger.info(
             "[recv][AEFlow:%s][%s] flow_receive_complete out_schema:\n%s",
             self.ident, self.title, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
@@ -315,7 +311,7 @@ class AEFlow(AEFlowInfo):
         self.status = AEFlowStatus.complete
 
         # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包
-        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
+        flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
         payload = AELLMPayload(
             messages=messages,
             out_schema=flow_out.out_schema,
