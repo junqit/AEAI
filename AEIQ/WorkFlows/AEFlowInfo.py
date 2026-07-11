@@ -70,15 +70,16 @@ class AEFlowInfo:
                         直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 
-        llm_out 复用本 flow 的 output.out_schema；output 未设置时用默认占位
-        {AE_ANSWER: llm_generate("生成的答案")}（llm_generate 必含）。
+        llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；
+        其余阶段用默认占位 {AE_ANSWER: llm_generate("生成的答案")}。
         """
         from Context.Context.AELLMPayload import llm_generate
 
-        if self.output is not None:
+        # complete 阶段 llm_out 必为 self.output.out_schema；其余阶段用默认占位
+        if functional == AEFunctional.flow_receive_complete and self.output is not None:
             llm_out = self.output.out_schema
         else:
-            llm_out = {AE_ANSWER: llm_generate("生成的答案")}
+            llm_out = {AE_ANSWER: llm_generate("根据职业与能力，给出最准确的答案，不可随意！！")}
 
         # functional 即方法名（flow_receive_*），直接注册；funcident 作为 AE_funcationkey 供回包路由
         funcationkey = self.registerFunctional(functional)

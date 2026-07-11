@@ -45,6 +45,8 @@ class AEFlow(AEFlowInfo):
         self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
+        # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
+        self.outResult: Optional[dict] = None
         # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
         # 默认不注册任何方法，由业务子类自行 add_default / add_temporary 添加
         self.excutor = AERuntimeExcutor()
@@ -161,9 +163,10 @@ class AEFlow(AEFlowInfo):
 
     def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
         """
-        status=complete：收到结果数据，置本 flow 状态为 complete，并通过 delegate.flow_complete 通知返回。
+        status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.flow_complete 通知返回。
         """
         self.status = AEFlowStatus.complete
+        self.outResult = out_schema
         logger.info(
             "[recv][AEFlow:%s][%s] flow_receive_complete out_schema:\n%s",
             self.ident, self.title, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
