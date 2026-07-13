@@ -35,6 +35,11 @@ class AEChat(AEFlow):
         self.addFlow(self.refiner)
         self.refiner.set_delegate(self)
 
+    @property
+    def role_brief(self) -> str:
+        """覆写：Chat 不向 LLM 声明身份与能力，返回空字符串。"""
+        return ""
+
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动 chat flow：交基类置 input 并切到 processing，随后启动首个子 flow。
 

@@ -53,10 +53,9 @@ class AERefiner(AEFlow):
             return
 
         messages = []
-        if self.title:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
-        if self.responsibility:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
         # 用本 flow 的 output.out_schema 作 llm_out，由 flowOutput 按 complete 打包成路由信封
         # （ident/title/funcationkey + llm_out）；flow_receive_complete 随机 funcident，回包据此路由

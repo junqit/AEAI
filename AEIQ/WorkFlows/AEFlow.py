@@ -344,10 +344,9 @@ class AEFlow(AEFlowInfo):
         """
         flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
         messages = []
-        if len(self.title) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.title})
-        if len(self.responsibility) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
         # 把所有子 flow 的 outResult 总结内容放入 messages
         for f in self._flows.values():
             if f.outResult is not None:
