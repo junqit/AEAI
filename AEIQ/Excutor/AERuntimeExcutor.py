@@ -12,7 +12,7 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +22,8 @@ AE_INNER = "inner"  # exec 传入的数据
 
 
 class AEFunctional(str, Enum):
-    """功能性方法名：每个成员携带 输入数据格式(input_format) 与 方法 prompt。
+    """功能性方法名：flow_receive_default / flow_receive_processing / flow_receive_complete。"""
 
-    成员可定义为纯字符串（input_format/prompt 取默认 None/""），或元组
-    (value, input_format, prompt) 以显式指定。调用方直接使用成员即可。
-    """
-
-    def __new__(cls, value: str, input_format: Any = None, prompt: str = ""):
-        obj = str.__new__(cls, value)
-        obj._value_ = value
-        obj.input_format = input_format
-        obj.prompt = prompt
-        return obj
-
-    # TODO: 填入各 functional 的 input_format（输入数据格式）与 prompt
     flow_receive_default = "flow_receive_default"
     flow_receive_processing = "flow_receive_processing"
     flow_receive_complete = "flow_receive_complete"
@@ -136,13 +124,7 @@ class AERuntimeExcutor:
         if entry is None:
             raise KeyError(f"未注册的 funcident: {funcident!r}")
         namespace = {AE_SELF: entry.target, AE_INNER: inner}
-        logger.info(
-            "[exec] funcident=%r, temporary=%s, script=%r, target=%r, inner:\n%s",
-            funcident, is_temporary, entry.script, entry.target,
-            json.dumps(inner, ensure_ascii=False, indent=2, default=str),
-        )
         exec(entry.script, namespace)
         # temporary 执行后清除，避免残留
         if is_temporary:
             self._temporary.pop(funcident, None)
-            logger.info("[exec] 临时方法 funcident=%r 执行完毕已清除", funcident)

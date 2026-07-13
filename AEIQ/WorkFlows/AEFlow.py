@@ -92,10 +92,6 @@ class AEFlow(AEFlowInfo):
 
         # 取 ident
         ident = data.get("ident")
-        logger.info(
-            "[recv][AEFlow:%s][%s] receive_llm_response ident=%r, data:\n%s",
-            self.ident, self.title, ident, json.dumps(data, ensure_ascii=False, indent=2, default=str),
-        )
 
         # ident 命中自身：本层处理（传整个 data）
         if ident == self.ident:
@@ -132,10 +128,6 @@ class AEFlow(AEFlowInfo):
             logger.error("[AEFlow:%s] out_schema 非 map，忽略: %r", self.ident, out_schema)
             return
         command = out_schema.get(AE_funcationkey)
-        logger.info(
-            "[recv][AEFlow:%s][%s] flow_receive_llm funcationkey=%r, out_schema:\n%s",
-            self.ident, self.title, command, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
-        )
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
         inner = out_schema.get("llm_out")
         if not self.excutor.contains(command):
@@ -165,10 +157,6 @@ class AEFlow(AEFlowInfo):
         """
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
-        logger.info(
-            "[recv][AEFlow:%s][%s] flow_receive_complete out_schema:\n%s",
-            self.ident, self.title, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
-        )
         if self.delegate is not None:
             self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
 

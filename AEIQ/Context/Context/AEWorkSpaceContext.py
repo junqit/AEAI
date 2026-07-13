@@ -36,7 +36,7 @@ class AEWorkSpaceContext(AEBaseContext):
         - 剥掉 chat.ident 层，把内层 llm_out 传给 AEChat.receive_llm_response 继续向下传递
         """
         logger.info(
-            "[recv][WorkSpace:%s] 收到 data:\n%s",
+            "[recv][WorkSpace:%s] 收到 LLM 回复（整体）:\n%s",
             self.ident, json.dumps(data, ensure_ascii=False, indent=2, default=str),
         )
         if not isinstance(data, dict):
