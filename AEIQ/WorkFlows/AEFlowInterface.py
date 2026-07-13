@@ -5,7 +5,7 @@ AEFlowInterface - Flow 接口协议
   - ident:       flow 标识（属性）
   - status:      flow 执行状态（属性，AEFlowStatus）
   - delegate:     AEFlowDelegate，Flow 内部信息向外流转的出口
-  - startFlow(): 启动 flow，接收 input/output 并切换到 processing
+  - startFlow(): 启动 flow，接收 input 并切换到 processing（output 在构造时设置）
   - receive_llm_response(): 接收输入数据
   - receive_flow_result(): 接收 flow 结果数据
 """
@@ -26,17 +26,16 @@ class AEFlowInterface(Protocol):
     status: 'AEFlowStatus'
     delegate: 'AEFlowDelegate'
 
-    def startFlow(self, flowInput: 'AEFlowInput', flowOutput: 'AEFlowOutput') -> bool:
+    def startFlow(self, flowInput: 'AEFlowInput') -> bool:
         """
-        启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并将状态切换为 processing。
+        启动 flow：仅在 default 状态下接收 flowInput，并将状态切换为 processing。
 
         - 非 default 状态下调用将被忽略，返回 False
-        - 接收后置 input / output、切换到 processing，返回 True
+        - 接收后置 input、切换到 processing，返回 True（output 已在构造时设置）
         - 子类调用 super().startFlow(...) 仅在返回 True 时才进行自己的业务处理
 
         Args:
             flowInput: flow 输入数据
-            flowOutput: flow 输出数据（Map 结构）
 
         Returns:
             bool: True 表示已成功启动（状态由 default 切到 processing）；False 表示非 default 状态被忽略

@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class AERefiner(AEFlow):
     """问题精炼 Flow：改写用户问题，输出 answer。"""
 
-    def __init__(self, ident: str):
-        super().__init__(ident=ident)
+    def __init__(self, ident: str, flowOutput: AEFlowOutput):
+        super().__init__(ident=ident, flowOutput=flowOutput)
         # 职称 / 职责要求
         self.title = "Question Refiner"
         self.responsibility = (
@@ -34,17 +34,22 @@ class AERefiner(AEFlow):
             "如果问题已经清晰，则仅做轻微优化。"
         )
 
-    def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
-        """启动：交基类置 input/output，拼装 AELLMPayload 发送。
+    @property
+    def outResult_summary(self) -> str:
+        """覆写：以「当前用户的问题是：」前缀返回精炼后的问题。"""
+        answer = self._extract_answer(self.outResult) or ""
+        return f"当前用户的问题是：{answer}"
+
+    def startFlow(self, flowInput: AEFlowInput) -> None:
+        """启动：交基类置 input，拼装 AELLMPayload 发送。
 
         - messages: system(title) / system(responsibility) / user(input.content)
-        - out_schema: 本 flow 的输出结构（含 answer 占位，由 LLM 生成精炼后的问题）
+        - out_schema: 本 flow 的输出结构（output 已在构造时设置，含 reply 占位，由 LLM 生成精炼后的问题）
 
         Args:
             flowInput: flow 输入数据（content 即用户原始问题）
-            flowOutput: flow 输出结构
         """
-        if not super().startFlow(flowInput, flowOutput):
+        if not super().startFlow(flowInput):
             return
 
         messages = []
@@ -53,8 +58,8 @@ class AERefiner(AEFlow):
         if self.responsibility:
             messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
         messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
-        # 复用上游传入 output 中的 llm_out 配置，用本 flow 的 ident/title/funcationkey 重新打包；
-        # flowOutput 内部按 complete 注册 flow_receive_complete（funcident 随机，回包据此路由）
+        # 用本 flow 的 output.out_schema 作 llm_out，由 flowOutput 按 complete 打包成路由信封
+        # （ident/title/funcationkey + llm_out）；flow_receive_complete 随机 funcident，回包据此路由
         flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
         payload = AELLMPayload(
             messages=messages,

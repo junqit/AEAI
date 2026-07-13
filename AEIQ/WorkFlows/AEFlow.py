@@ -33,16 +33,13 @@ if TYPE_CHECKING:
 class AEFlow(AEFlowInfo):
     """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
-    def __init__(self, ident: str):
+    def __init__(self, ident: str, flowOutput: AEFlowOutput):
         # ----- AEFlowInfo 属性 -----
         # ident 创建时必填（不可为空）；外部只读；
-        # input_schema / out_schema / outResult 不在初始化阶段配置，后续按需设置
-        super().__init__(ident=ident)
+        # output（本 flow 输出结构）创建时必传；input / outResult 不在初始化阶段配置
+        super().__init__(ident=ident, flowOutput=flowOutput)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
-        # ----- 角色信息 -----
-        self.title: str = ""           # 职称
-        self.responsibility: str = ""  # 职责要求
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
         # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
@@ -57,11 +54,11 @@ class AEFlow(AEFlowInfo):
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
-    def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> bool:
-        """启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并切换到 processing。
+    def startFlow(self, flowInput: AEFlowInput) -> bool:
+        """启动 flow：仅在 default 状态下接收 flowInput，并切换到 processing。
 
         - 非 default 状态下调用将被忽略，返回 False
-        - 接收后置 input / output、切换到 processing，返回 True
+        - 接收后置 input、切换到 processing，返回 True（output 已在构造时设置，不再注入）
         - 子类调用 super().startFlow(...) 仅在返回 True 时才进行自己的业务处理
         """
         if self.status != AEFlowStatus.default:
@@ -71,7 +68,6 @@ class AEFlow(AEFlowInfo):
             )
             return False
         self.input = flowInput
-        self.output = flowOutput
         self.status = AEFlowStatus.processing
         return True
 
@@ -334,7 +330,7 @@ class AEFlow(AEFlowInfo):
         flow_input = AEFlowInput(content=answer or "")
         next_flow = self.nextFlow()
         if next_flow is not None:
-            next_flow.startFlow(flow_input, self.flowOutput(AEFunctional.flow_receive_complete))
+            next_flow.startFlow(flow_input)
         else:
             logger.warning(
                 "[AEFlow:%s][%s] 未全部 complete 但无 default 状态子 flow，无法继续",
@@ -352,16 +348,16 @@ class AEFlow(AEFlowInfo):
             messages.append({"role": AERole.SYSTEM.value, "content": self.title})
         if len(self.responsibility) > 0:
             messages.append({"role": AERole.SYSTEM.value, "content": self.responsibility})
-        # 把所有子 flow 的 outResult 总结内容放入 messages（作为 user 轮：即具象化后的问题/上下文）
+        # 把所有子 flow 的 outResult 总结内容放入 messages
         for f in self._flows.values():
             if f.outResult is not None:
                 messages.append({
                     "role": AERole.SYSTEM.value,
-                    "content": f"{f.title or f.ident}: {f.outResult_summary}",
+                    "content": f.outResult_summary,
                 })
         messages.append({
             "role": AERole.USER.value,
-            "content": "请基于以上提供的内容，仔细思考后，输出结论",
+            "content": "以上内容中，「当前用户的问题是：」所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

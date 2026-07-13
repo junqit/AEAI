@@ -73,18 +73,22 @@ class AEBaseContext:
         """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，构建 input 后交 startFlow 启动
         （不等回，flow 内部异步流转）。
 
-        - 新建 AEChat，delegate 设为当前 context，req 存入 chat，按 chat.ident 存入 _chat_map（添加持有）
-        - output 预置为本 chat 的输出结构（含 reply 占位）
+        - 新建 AEChat（构造时传入本 chat 输出结构 {ident, reply}），delegate 设为当前 context，
+          req 存入 chat，按 chat.ident 存入 _chat_map（添加持有）
         - 由 question 构建 AEFlowInput，startFlow 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
         """
         if question is None:
             logger.error("[Context:%s] 收到的 AENetQues 为空，忽略", self.ident)
             return
-        chat = AEChat(ident=uuid.uuid4().hex)
+        # chat 的 output：规范结构 {ident: chat.ident, reply}，ident 用于 complete 回程路由回本 chat
+        from .AELLMPayload import llm_generate
+        chat_ident = uuid.uuid4().hex
+        chat = AEChat(
+            ident=chat_ident,
+            flowOutput=AEFlowOutput({"ident": chat_ident, "reply": llm_generate("对用户的回复")}),
+        )
         chat.req = req
         chat.set_delegate(self)
-        from .AELLMPayload import llm_generate
-        chat.output = AEFlowOutput({"ident": chat.ident, "title": chat.title, "reply": llm_generate("对用户的回复")})
         self._chat_map[chat.ident] = chat
         logger.info(
             "AEChat created - chat_ident=%s, context=%s, question type=%s ident=%s content=%r",
@@ -92,7 +96,7 @@ class AEBaseContext:
         )
         flow_input = AEFlowInput(content=question.content or "")
         loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, chat.startFlow, flow_input, chat.output or AEFlowOutput())
+        loop.run_in_executor(None, chat.startFlow, flow_input)
 
     # ==================== AEFlowDelegate 实现（作为所属 chat 的 delegate） ====================
 
@@ -121,6 +125,8 @@ class AEBaseContext:
                 self.ident, flow_ident,
             )
             return
+        # 拿到 chat 即表示会话已结束，立即从 _chat_map 移除释放持有，避免后续重复回包
+        self._chat_map.pop(flow_ident, None)
         rsp = AENetRsp(
             code=AENetRspCode.success,
             cont=AENetCont(

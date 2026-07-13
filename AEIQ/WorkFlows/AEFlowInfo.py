@@ -2,8 +2,9 @@
 AEFlowInfo - Flow 元信息基类，持有 ident / title / responsibility / input / output / status。
 AEFlow 继承本类以获得这些元信息属性。
 
-创建所需数据结构见 CREATE_SCHEMA：当前仅需 ident（创建时必填，不可为空）；
-input / output 不在创建时配置，后续按需设置。
+创建所需数据结构见 CREATE_SCHEMA：ident 创建时必填（不可为空）；
+output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
+{"ident": <父flow.ident>, "reply": <llm 占位>}。input 不在创建时配置，由 startFlow 设置。
 """
 import uuid
 from enum import Enum
@@ -39,7 +40,15 @@ class AEFlowInfo:
         }
     }
 
-    def __init__(self, ident: str):
+    def __init__(self, ident: str, flowOutput: AEFlowOutput):
+        """Flow 元信息初始化。
+
+        Args:
+            ident: flow 标识；为空时内部生成 uuid
+            flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
+                        flowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
+                        规范结构：{"ident": <父flow.ident>, "reply": <llm 占位>}。
+        """
         # ident 长度为 0 时内部生成
         if not ident:
             ident = uuid.uuid4().hex
@@ -50,9 +59,11 @@ class AEFlowInfo:
         self.title: str = ""           # 职称
         self.responsibility: str = ""  # 职责要求
 
-        # input / output 不在初始化阶段配置，后续可设置
+        # output：本 flow 输出结构，创建时必传（不再经 startFlow 注入）
+        self.output: AEFlowOutput = flowOutput
+
+        # input 不在初始化阶段配置，由 startFlow 设置
         self.input: Optional[AEFlowInput] = None
-        self.output: Optional[AEFlowOutput] = None
 
         # ----- 执行状态 -----
         self.status: AEFlowStatus = AEFlowStatus.default
