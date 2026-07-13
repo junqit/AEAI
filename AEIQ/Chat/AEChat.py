@@ -34,9 +34,10 @@ class AEChat(AEFlow):
     def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
         """启动 chat flow：交基类置 input/output 并切到 processing，随后启动首个子 flow。
 
-        - 取首个子 flow（问题精炼），以 flowInput 与 self.flowOutput() 启动
+        - 仅当基类 startFlow 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
         """
-        super().startFlow(flowInput, flowOutput)
+        if not super().startFlow(flowInput, flowOutput):
+            return
         next_flow = self.nextFlow()
         if next_flow is not None:
             next_flow.startFlow(flowInput, self.flowOutput(AEFunctional.flow_receive_processing))

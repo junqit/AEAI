@@ -44,7 +44,8 @@ class AERefiner(AEFlow):
             flowInput: flow 输入数据（content 即用户原始问题）
             flowOutput: flow 输出结构
         """
-        super().startFlow(flowInput, flowOutput)
+        if not super().startFlow(flowInput, flowOutput):
+            return
 
         messages = []
         if self.title:

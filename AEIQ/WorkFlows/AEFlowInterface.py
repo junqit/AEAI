@@ -26,14 +26,20 @@ class AEFlowInterface(Protocol):
     status: 'AEFlowStatus'
     delegate: 'AEFlowDelegate'
 
-    def startFlow(self, flowInput: 'AEFlowInput', flowOutput: 'AEFlowOutput') -> None:
+    def startFlow(self, flowInput: 'AEFlowInput', flowOutput: 'AEFlowOutput') -> bool:
         """
         启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并将状态切换为 processing。
-        非 default 状态下调用将被忽略。
+
+        - 非 default 状态下调用将被忽略，返回 False
+        - 接收后置 input / output、切换到 processing，返回 True
+        - 子类调用 super().startFlow(...) 仅在返回 True 时才进行自己的业务处理
 
         Args:
             flowInput: flow 输入数据
             flowOutput: flow 输出数据（Map 结构）
+
+        Returns:
+            bool: True 表示已成功启动（状态由 default 切到 processing）；False 表示非 default 状态被忽略
         """
         ...
 

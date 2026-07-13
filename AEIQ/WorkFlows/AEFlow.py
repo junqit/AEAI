@@ -57,20 +57,23 @@ class AEFlow(AEFlowInfo):
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
-    def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> None:
-        """启动 flow：仅在 default 状态下接收 flowInput / flowOutput。
+    def startFlow(self, flowInput: AEFlowInput, flowOutput: AEFlowOutput) -> bool:
+        """启动 flow：仅在 default 状态下接收 flowInput / flowOutput，并切换到 processing。
 
-        - 非 default 状态下调用将被忽略（仅 default 可接收）
-        - 接收后置 input / output；状态由 flow_receive_* 系列方法维护，此处不变更
+        - 非 default 状态下调用将被忽略，返回 False
+        - 接收后置 input / output、切换到 processing，返回 True
+        - 子类调用 super().startFlow(...) 仅在返回 True 时才进行自己的业务处理
         """
         if self.status != AEFlowStatus.default:
             logger.warning(
                 "[AEFlow:%s][%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
                 self.ident, self.title, self.status,
             )
-            return
+            return False
         self.input = flowInput
         self.output = flowOutput
+        self.status = AEFlowStatus.processing
+        return True
 
     def receive_llm_response(self, data: dict) -> None:
         """
