@@ -1,73 +1,87 @@
+"""
+AEAssistant - 助理生成 Flow，继承 AEFlow。
+
+根据传入的 map（领域 / 用户问题等信息）驱动「专家助理」的生成，
+最终输出助理定义 map（名称、领域、职责、能力、评价规则等），供后续流程加载使用。
+"""
+import logging
+
+from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
+from WorkFlows.AEFlowInput import AEFlowInput
+from WorkFlows.AEFlowOutput import AEFlowOutput
+from Context.Context.AELLMPayload import AELLMPayload, llm_generate
+from Assistant.AERole import AERole
+from Excutor.AERuntimeExcutor import AEFunctional
+
+logger = logging.getLogger(__name__)
 
 
+class AEAssistantFunction(AEFunctional):
+    """助理生成功能性方法名（继承 AEFunctional 基类）。
+
+    每个方法接收一个 map（步骤输入 / 输出数据），由 executor 按名调用。
+    """
+    updateAssisstantInfo = "updateAssisstantInfo"  # 更新助理信息，传入 map
 
 
-class AEAssistant:
+class AEAssistant(AEFlow):
+    """助理生成 Flow：根据传入 map 生成专家助理定义。"""
 
-    def __init__(self):
+    # updateAssisstantInfo 接收的 map 整体结构：llm_generate 占位说明各字段应填充内容
+    updateAssisstantInfo_input = {
+        "title": llm_generate("助理职称，体现专业领域与定位"),
+        "responsibility": llm_generate("助理职责要求，明确能力范围与禁止事项"),
+    }
 
-        self.role = "Domain Evaluator"
-        self.workflow = [
-            "理解问题",
-            "识别领域",
-            "生成评价维度",
-            "生成证据需求",
-            "收集证据",
-            "分析证据",
-            "输出裁决",
-        ]
+    def __init__(self, flowOutput: AEFlowOutput):
+        super().__init__(flowOutput=flowOutput)
+        self.title = "Assistant Generator"
+        self.responsibility = (
+            "根据传入的领域信息与用户问题，动态生成一个「专家助理」定义（map）。\n"
+            "要求：\n"
+            "1. 仅生成助理的定义（名称、领域、职责、能力、评价规则等），不直接执行任务。\n"
+            "2. 输出为结构化 map，供后续流程加载使用。\n"
+            "3. 字段需贴合问题领域，不可随意编造。"
+        )
 
-        self.template = """你是一名 AI 组织设计专家。
+    def updateAssisstantInfo(self, data: dict) -> "AEAssistant":
+        """更新助理的身份与职责（覆盖默认 title / responsibility）。
 
-请根据输入的领域信息，创建一个专业的「专家助理（Expert Assistant）」。
+        Args:
+            data: 助理配置 map，结构见 updateAssisstantInfo_input：
+                  {"title": <助理职称>, "responsibility": <助理职责要求>}
 
-专家助理不是执行者，而是领域专家、评审专家和裁决专家。
+        Returns:
+            self（便于链式调用）
+        """
+        import json
+        logger.info("[AEAssistant:%s] updateAssisstantInfo 收到数据:\n%s",
+                    self.ident, json.dumps(data, ensure_ascii=False, indent=2, default=str) if isinstance(data, dict) else repr(data))
+        if not isinstance(data, dict):
+            data = {}
+        self.title = data.get("title", "") or ""
+        self.responsibility = data.get("responsibility", "") or ""
+        return self
 
-其职责是：
+    def startFlow(self, flowInput: AEFlowInput) -> None:
+        """启动：交基类置 input，拼装 AELLMPayload 发送。
 
-1. 理解用户问题
-2. 分析问题所属领域
-3. 动态构建评价框架
-4. 动态生成证据需求
-5. 判断证据是否充分
-6. 对证据进行专业分析
-7. 发现问题与风险
-8. 输出裁决结果
-9. 生成修复建议或补充证据需求
-10. 在证据不足或结果不达标时发起重新评估
+        - messages: system(role_brief) / user(input.content)
+        - out_schema: 本 flow 的输出结构（output 已在构造时设置，含助理定义 map 占位，由 LLM 填充）
 
-禁止：
-
-- 不直接执行任务
-- 不直接修改代码
-- 不直接收集数据
-- 不直接调用工具
-- 不代替员工完成工作
-
-专家助理只负责：
-
-- 定义标准
-- 定义评价维度
-- 定义证据需求
-- 分析证据
-- 专业判断
-- 最终裁决
-
-请输出以下结构。"""
-
-        self.initlization = """{
-  "name": "",
-  "domain": "",
-  "role": "",
-  "expertise": [],
-  "responsibilities": [],
-  "evaluation_principles": [],
-  "evaluation_workflow": [],
-  "evidence_requirements_generation_rules": [],
-  "judgment_rules": [],
-  "risk_assessment_rules": [],
-  "output_formats": [],
-  "rework_strategy": [],
-  "escalation_strategy": [],
-  "success_definition": ""
-}"""
+        Args:
+            flowInput: flow 输入数据（content 即用户问题 / 领域描述）
+        """
+        if not super().startFlow(flowInput):
+            return
+        messages = []
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
+        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+        flow_out = self.flowOutput(AEAssistantFunction.updateAssisstantInfo)
+        # flow_out 默认 llm_out 为占位，此处替换为 updateAssisstantInfo 需要的参数结构
+        # （title / responsibility 占位），由 LLM 填充后回包交 updateAssisstantInfo(inner) 处理
+        flow_out.set_llm_out(dict(self.updateAssisstantInfo_input))
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)

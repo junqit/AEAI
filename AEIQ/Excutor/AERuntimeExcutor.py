@@ -11,7 +11,6 @@ exec(funcident, inner)：按 funcident 取注册项，以绑定的 target 作 's
 import json
 import logging
 from dataclasses import dataclass
-from enum import Enum
 from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -21,12 +20,15 @@ AE_SELF = "self"    # 注册时绑定的 target（方法的 self）
 AE_INNER = "inner"  # exec 传入的数据
 
 
-class AEFunctional(str, Enum):
-    """功能性方法名：flow_receive_default / flow_receive_processing / flow_receive_complete。"""
+class AEFunctional:
+    """功能性方法名基类（普通类，定义方法名常量），供子类继承扩展。
 
-    flow_receive_default = "flow_receive_default"
-    flow_receive_processing = "flow_receive_processing"
-    flow_receive_complete = "flow_receive_complete"
+    子类（AEFlowFunctional / AEAssistantFunction）可直接访问下列常量，
+    也可追加各自的方法名常量。值为字符串方法名，由 executor 经 method_call 拼成脚本调用。
+    """
+    flow_receive_default = "flow_receive_default"        # 回包置 default
+    flow_receive_processing = "flow_receive_processing"  # 回包置 processing
+    flow_receive_complete = "flow_receive_complete"      # 回包置 complete 并赋值最终结果
 
 
 @dataclass
@@ -47,25 +49,25 @@ class AERuntimeExcutor:
 
     # ==================== 注册 ====================
 
-    def add_default(self, funcident: str, script: AEFunctional, target) -> None:
+    def add_default(self, funcident: str, script: str, target) -> None:
         """默认方式注册：持久映射，不会被 exec 自动清除。
 
         Args:
             funcident: 方法标识（字符串键）
-            script: 功能性方法名（AEFunctional），内部按 .value 经 method_call 拼成脚本
+            script: 功能性方法名（字符串），内部经 method_call 拼成脚本
             target: 方法的 self，执行时作为 AE_SELF 注入 namespace
         """
-        self._default[funcident] = _Entry(self.method_call(script.value), target)
+        self._default[funcident] = _Entry(self.method_call(script), target)
 
-    def add_temporary(self, funcident: str, method: AEFunctional, target) -> None:
+    def add_temporary(self, funcident: str, method: str, target) -> None:
         """临时方式注册：优先于 default，exec 执行后自动清除。
 
         Args:
             funcident: 方法标识（字符串键）
-            method: 功能性方法名（AEFunctional），内部按 .value 经 method_call 拼成脚本
+            method: 功能性方法名（字符串），内部经 method_call 拼成脚本
             target: 方法的 self，执行时作为 AE_SELF 注入 namespace
         """
-        self._temporary[funcident] = _Entry(self.method_call(method.value), target)
+        self._temporary[funcident] = _Entry(self.method_call(method), target)
 
     def remove_default(self, funcident: str) -> None:
         """移除默认注册。"""

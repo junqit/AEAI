@@ -17,7 +17,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER, AE_funcationkey
 from .AEFlowInput import AEFlowInput
-from .AEFlowOutput import AEFlowOutput
+from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
 from Assistant.AERole import AERole
 from Excutor import AERuntimeExcutor
@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
     from .AEFlowInterface import AEFlowInterface
+
+
+class AEFlowFunctional(AEFunctional):
+    """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
 
 
 class AEFlow(AEFlowInfo):
@@ -101,7 +105,7 @@ class AEFlow(AEFlowInfo):
         # ident 命中子 flow：转发内层 out_schema 给该子 flow（使用时再获取）
         flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
-            flow.receive_llm_response(data.get("llm_out"))
+            flow.receive_llm_response(data.get(AE_LLM_OUT))
             return
 
         # ident 既非自身、也未命中子 flow：打印错误日志
@@ -129,7 +133,7 @@ class AEFlow(AEFlowInfo):
             return
         command = out_schema.get(AE_funcationkey)
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
-        inner = out_schema.get("llm_out")
+        inner = out_schema.get(AE_LLM_OUT)
         if not self.excutor.contains(command):
             logger.error(
                 "[AEFlow:%s][%s] out_schema 内 funcationkey=%r 无效或缺失，忽略: %r",
@@ -221,7 +225,7 @@ class AEFlow(AEFlowInfo):
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
-            "llm_out": payload.out_schema,
+            AE_LLM_OUT: payload.out_schema,
         }
         self.delegate.flow_llm_request(payload)
 
@@ -247,7 +251,7 @@ class AEFlow(AEFlowInfo):
         payload.out_schema = {
             "ident": self.ident,
             "title": self.title,
-            "llm_out": payload.out_schema,
+            AE_LLM_OUT: payload.out_schema,
         }
         self.delegate.flow_llm_request(payload)
 
@@ -277,12 +281,12 @@ class AEFlow(AEFlowInfo):
         )
         # 确认是本 flow 需处理的内容：ident 命中自身 → 交 receive_flow_result
         if ident == self.ident:
-            self.receive_flow_result(result.get("llm_out"))
+            self.receive_flow_result(result.get(AE_LLM_OUT))
             return
         # ident 命中子 flow：转发内层数据给该子 flow（使用时再获取）
         flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
-            flow.receive_flow_result(result.get("llm_out"))
+            flow.receive_flow_result(result.get(AE_LLM_OUT))
             return
         logger.warning(
             "[AEFlow:%s][%s] ident=%r 既非自身也未命中子 flow，忽略: %r",
@@ -330,7 +334,7 @@ class AEFlow(AEFlowInfo):
 
         问题已由上游（如 AERefiner）具象化，此处不再带原始 input.content。
         """
-        flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
+        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:

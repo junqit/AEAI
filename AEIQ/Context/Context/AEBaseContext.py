@@ -10,7 +10,7 @@ from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
 from WorkFlows.AEFlow import AEFlowStatus
 from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput
+from WorkFlows.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class AEBaseContext:
     def flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        payload.out_schema = {"ident": self.ident, "type": self.context_type.value, "llm_out": payload.out_schema}
+        payload.out_schema = {"ident": self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:

@@ -21,6 +21,7 @@ from ..Context.AEContextType import AEContextType
 from ..Context.AEPermissionContext import AEPermissionContext
 from ..Context.AEDirectoryContext import AEDirectoryContext
 from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
+from WorkFlows.AEFlowOutput import AE_LLM_OUT
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,7 @@ class AEContextCenter(AEContextDelegate):
             logger.error(f"未找到 ident={ident!r} 的 Context，丢弃 LLM 回复")
             return
         # 剥掉第一层（context.ident），把内层 llm_out 传给 context，由各层逐层解析本层数据
-        context.receive_llm_response(data.get("llm_out"))
+        context.receive_llm_response(data.get(AE_LLM_OUT))
 
     @staticmethod
     def _strip_code_fence(text: str) -> str:

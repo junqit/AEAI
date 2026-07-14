@@ -5,12 +5,15 @@ AEFlowOutput - Flow 输出数据（普通类）。
 """
 from typing import Any
 
+# out_schema 内 LLM 输出嵌套层的字段名
+AE_LLM_OUT = "llm_out"
+
 
 class AEFlowOutput:
     """Flow 输出数据"""
 
     def __init__(self, out_schema: dict = None, schema: dict = None):
-        
+
         # out_schema：输出数据（map）
         self.out_schema: dict = out_schema or {}
 
@@ -36,5 +39,15 @@ class AEFlowOutput:
             description: 该字段的 LLM 生成描述，经 llm_generate 包成 <|description|> 占位符
         """
         from Context.Context.AELLMPayload import llm_generate
-        llm_out = self.out_schema.setdefault("llm_out", {})
+        llm_out = self.out_schema.setdefault(AE_LLM_OUT, {})
         llm_out[key] = llm_generate(description)
+
+    def set_llm_out(self, llm_out: dict) -> None:
+        """直接替换 out_schema 内的 llm_out 字段（整体覆盖，原 llm_out 不再保留）。
+
+        与 add_llm_out（向 llm_out 内追加单个占位字段）对应，本方法用传入 dict 整体替换 llm_out。
+
+        Args:
+            llm_out: 新的 llm_out（map），整体写入 out_schema[AE_LLM_OUT]
+        """
+        self.out_schema[AE_LLM_OUT] = llm_out

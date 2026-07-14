@@ -11,6 +11,7 @@ from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Network.Core.AENetReq import AENetReqInfo
 from QuestionRefiner.AERefiner import AERefiner
+from Assistant.AEAssistant import AEAssistant
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,13 @@ class AEChat(AEFlow):
         )
         self.addFlow(self.refiner)
         self.refiner.set_delegate(self)
+        # 添加子 flow：助理生成（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
+        # assistant 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
+        self.assistant = AEAssistant(
+            flowOutput=AEFlowOutput({"ident": self.ident, "reply": llm_generate("助理定义")}),
+        )
+        self.addFlow(self.assistant)
+        self.assistant.set_delegate(self)
 
     @property
     def role_brief(self) -> str:

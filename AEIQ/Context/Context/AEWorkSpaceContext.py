@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from Assistant.AERole import AERole
+from WorkFlows.AEFlowOutput import AE_LLM_OUT
 
 if TYPE_CHECKING:
     from .AELLMPayload import AELLMPayload
@@ -48,7 +49,7 @@ class AEWorkSpaceContext(AEBaseContext):
             logger.error(f"[WorkSpace:{self.ident}] _chat_map 内未找到 chat_ident={chat_ident!r}")
             return
         # 剥掉 chat.ident 层，传给 AEChat 继续路由到子 flow
-        out_schema = data.get("llm_out")
+        out_schema = data.get(AE_LLM_OUT)
         if not isinstance(out_schema, dict):
             logger.error(f"[WorkSpace:{self.ident}] chat 内层 out_schema 非 map: {out_schema!r}")
             return

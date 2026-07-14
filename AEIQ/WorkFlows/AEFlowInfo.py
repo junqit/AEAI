@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from .AEFlowInput import AEFlowInput
-from .AEFlowOutput import AEFlowOutput
+from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Excutor.AERuntimeExcutor import AEFunctional
 
 # llm_out 内默认 answer 字段名
@@ -84,11 +84,11 @@ class AEFlowInfo:
             return ""
         return "".join(parts)
 
-    def flowOutput(self, functional: AEFunctional) -> AEFlowOutput:
+    def flowOutput(self, functional: str) -> AEFlowOutput:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, funcationkey, llm_out}。
 
         Args:
-            functional: AEFunctional 方法名成员（flow_receive_default/processing/complete），
+            functional: 功能性方法名（字符串，如 AEFunctional.flow_receive_complete），
                         直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 
@@ -110,14 +110,14 @@ class AEFlowInfo:
             "ident": self.ident,
             "title": self.title,
             AE_funcationkey: funcationkey,
-            "llm_out": llm_out,
+            AE_LLM_OUT: llm_out,
         })
 
-    def registerFunctional(self, method: AEFunctional) -> str:
-        """注册临时功能性方法。funcident 为随机字符串键，method 为 AEFunctional 成员。
+    def registerFunctional(self, method: str) -> str:
+        """注册临时功能性方法。funcident 为随机字符串键，method 为方法名字符串。
 
         Args:
-            method: AEFunctional 方法名成员（flow_receive_*），executor 内部按 .value 拼 script
+            method: 方法名字符串（如 AEFunctional.flow_receive_*），executor 内部经 method_call 拼 script
 
         Returns:
             随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段
