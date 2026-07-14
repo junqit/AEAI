@@ -80,12 +80,10 @@ class AEBaseContext:
         if question is None:
             logger.error("[Context:%s] 收到的 AENetQues 为空，忽略", self.ident)
             return
-        # chat 的 output：规范结构 {ident: chat.ident, reply}，ident 用于 complete 回程路由回本 chat
+        # chat 的 output：ident 留空由内部回填为 chat.ident，用于 complete 回程路由回本 chat
         from .AELLMPayload import llm_generate
-        chat_ident = uuid.uuid4().hex
         chat = AEChat(
-            ident=chat_ident,
-            flowOutput=AEFlowOutput({"ident": chat_ident, "reply": llm_generate("对用户的回复")}),
+            flowOutput=AEFlowOutput({"reply": llm_generate("对用户的回复")}),
         )
         chat.req = req
         chat.set_delegate(self)

@@ -3,7 +3,6 @@ AEChat - 聊天 Flow，继承 AEFlow。
 
 接收 AENetQues 网络消息并处理（构建 LLM 请求、驱动子 flow 等）。
 """
-import uuid
 import logging
 from typing import Optional
 
@@ -19,8 +18,8 @@ logger = logging.getLogger(__name__)
 class AEChat(AEFlow):
     """聊天 Flow：由 context 构建 input 后交 startFlow 启动"""
 
-    def __init__(self, ident: str, flowOutput: AEFlowOutput):
-        super().__init__(ident=ident, flowOutput=flowOutput)
+    def __init__(self, flowOutput: AEFlowOutput):
+        super().__init__(flowOutput=flowOutput)
         # 职称
         self.title = "Chat"
         # 触发本 chat 的请求信息（回响应时回填 req，供客户端按 path 路由）
@@ -29,7 +28,6 @@ class AEChat(AEFlow):
         # refiner 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
         from Context.Context.AELLMPayload import llm_generate
         self.refiner = AERefiner(
-            ident=uuid.uuid4().hex,
             flowOutput=AEFlowOutput({"ident": self.ident, "reply": llm_generate("精炼后的问题")}),
         )
         self.addFlow(self.refiner)

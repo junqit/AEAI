@@ -33,11 +33,11 @@ if TYPE_CHECKING:
 class AEFlow(AEFlowInfo):
     """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
-    def __init__(self, ident: str, flowOutput: AEFlowOutput):
+    def __init__(self, flowOutput: AEFlowOutput):
         # ----- AEFlowInfo 属性 -----
-        # ident 创建时必填（不可为空）；外部只读；
+        # ident 由内部生成（外部只读）；
         # output（本 flow 输出结构）创建时必传；input / outResult 不在初始化阶段配置
-        super().__init__(ident=ident, flowOutput=flowOutput)
+        super().__init__(flowOutput=flowOutput)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
         # ----- 内部状态 -----

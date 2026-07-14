@@ -2,9 +2,10 @@
 AEFlowInfo - Flow 元信息基类，持有 ident / title / responsibility / input / output / status。
 AEFlow 继承本类以获得这些元信息属性。
 
-创建所需数据结构见 CREATE_SCHEMA：ident 创建时必填（不可为空）；
+ident 由内部生成（uuid），创建时无需传入；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
-{"ident": <父flow.ident>, "reply": <llm 占位>}。input 不在创建时配置，由 startFlow 设置。
+{"ident": <回程路由目标 ident>, "reply": <llm 占位>}：子 flow 填父 flow.ident（路由回父 flow），
+根 flow 留空则内部回填为自身 ident。input 不在创建时配置，由 startFlow 设置。
 """
 import uuid
 from enum import Enum
@@ -31,29 +32,20 @@ class AEFlowStatus(str, Enum):
 class AEFlowInfo:
     """Flow 元信息：标识、角色信息与输入/输出数据"""
 
-    # 创建所需的数据结构说明：当前仅需 ident
-    CREATE_SCHEMA: Dict[str, Any] = {
-        "ident": {
-            "type": "string",
-            "required": True,
-            "description": "flow 标识；创建时必填，不可为空",
-        }
-    }
+    # 创建所需的数据结构说明：ident 由内部生成，无需传入
+    CREATE_SCHEMA: Dict[str, Any] = {}
 
-    def __init__(self, ident: str, flowOutput: AEFlowOutput):
+    def __init__(self, flowOutput: AEFlowOutput):
         """Flow 元信息初始化。
 
         Args:
-            ident: flow 标识；为空时内部生成 uuid
             flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
                         flowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
-                        规范结构：{"ident": <父flow.ident>, "reply": <llm 占位>}。
+                        out_schema.ident 缺省或为空时内部回填为自身 ident（根 flow 场景）；
+                        子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
         """
-        # ident 长度为 0 时内部生成
-        if not ident:
-            ident = uuid.uuid4().hex
-
-        self._ident: str = ident
+        # ident 内部生成
+        self._ident: str = uuid.uuid4().hex
 
         # ----- 角色信息 -----
         self.title: str = ""           # 职称
@@ -61,6 +53,10 @@ class AEFlowInfo:
 
         # output：本 flow 输出结构，创建时必传（不再经 startFlow 注入）
         self.output: AEFlowOutput = flowOutput
+        # out_schema.ident 缺省或为空时回填为自身 ident，保证 complete 回程能路由到本 flow
+        if isinstance(self.output.out_schema, dict):
+            if not self.output.out_schema.get("ident"):
+                self.output.out_schema["ident"] = self._ident
 
         # input 不在初始化阶段配置，由 startFlow 设置
         self.input: Optional[AEFlowInput] = None
@@ -84,6 +80,8 @@ class AEFlowInfo:
             parts.append(f"你的身份是：{self.title}")
         if len(self.responsibility) > 0:
             parts.append(f"你的能力范围是：{self.responsibility}")
+        if len(parts) == 0:
+            return ""
         return "".join(parts)
 
     def flowOutput(self, functional: AEFunctional) -> AEFlowOutput:

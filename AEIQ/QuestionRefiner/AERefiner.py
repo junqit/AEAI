@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class AERefiner(AEFlow):
     """问题精炼 Flow：改写用户问题，输出 answer。"""
 
-    def __init__(self, ident: str, flowOutput: AEFlowOutput):
-        super().__init__(ident=ident, flowOutput=flowOutput)
+    def __init__(self, flowOutput: AEFlowOutput):
+        super().__init__(flowOutput=flowOutput)
         # 职称 / 职责要求
         self.title = "Question Refiner"
         self.responsibility = (
