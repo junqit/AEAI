@@ -15,6 +15,9 @@ from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Excutor.AERuntimeExcutor import AEFunctional
 
+# out_schema / 路由信封内 ident 字段名
+AE_IDENT = "ident"
+
 # llm_out 内默认 answer 字段名
 AE_ANSWER = "reply"
 
@@ -53,11 +56,7 @@ class AEFlowInfo:
 
         # output：本 flow 输出结构，创建时必传（不再经 startFlow 注入）
         self.output: AEFlowOutput = flowOutput
-        # out_schema.ident 缺省或为空时回填为自身 ident，保证 complete 回程能路由到本 flow
-        if isinstance(self.output.out_schema, dict):
-            if not self.output.out_schema.get("ident"):
-                self.output.out_schema["ident"] = self._ident
-
+     
         # input 不在初始化阶段配置，由 startFlow 设置
         self.input: Optional[AEFlowInput] = None
 
@@ -107,7 +106,7 @@ class AEFlowInfo:
         funcationkey = self.registerFunctional(functional)
 
         return AEFlowOutput(out_schema={
-            "ident": self.ident,
+            AE_IDENT: self.ident,
             "title": self.title,
             AE_funcationkey: funcationkey,
             AE_LLM_OUT: llm_out,
@@ -129,7 +128,7 @@ class AEFlowInfo:
     def to_map(self) -> dict:
         """返回元信息的 map 形态（ident / title / responsibility / input / output）"""
         return {
-            "ident": self.ident,
+            AE_IDENT: self.ident,
             "title": self.title,
             "responsibility": self.responsibility,
             "input": self.input,

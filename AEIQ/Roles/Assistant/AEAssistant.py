@@ -6,11 +6,12 @@ AEAssistant - 助理生成 Flow，继承 AEFlow。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
+from WorkFlows.AEFlow import AEFlow, AEFlowFunctional, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX
+from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.WorkGroup.AEWorkGroup import AEWorkGroup
 from Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
@@ -67,20 +68,41 @@ class AEAssistant(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
+            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({
-            "role": AERole.SYSTEM.value,
-            "content": f"{AE_USER_QUESTION_PREFIX}{self.input.content if self.input else ''}",
+            AE_ROLE: AERole.SYSTEM.value,
+            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.content if self.input else ''}",
         })
         # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
         messages.append({
-            "role": AERole.USER.value,
-            "content": f"根据「{AE_USER_QUESTION_PREFIX}」列举不同维度的目标，每个目录需要有独立性，可以交给单独的工作组可以完成目录。",
+            AE_ROLE: AERole.USER.value,
+            AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务可独立完成、无耦合。",
         })
         # 走 flow_receive_complete：回包后置 complete、赋 outResult 并经 delegate.flow_complete 通知 chat
         flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
+        return self
+
+    def addWorkGroups(self, tasks: list) -> "AEAssistant":
+        """根据任务内容列表添加并启动工作组子 flow。
+
+        每个任务由一个独立工作组（AEWorkGroup）完成，互不耦合；工作组的 output.ident
+        填本 assistant.ident，使其完成时路由回本 assistant 的 receive_flow_result。
+
+        Args:
+            tasks: 任务内容列表，每项为一个工作组可独立完成的任务内容（字符串）
+
+        Returns:
+            self（便于链式调用）
+        """
+        for task in tasks:
+            content = task if isinstance(task, str) else str(task or "")
+            wg = AEWorkGroup(
+                flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("工作组结论")}),
+            )
+            self.addFlow(wg)
+            wg.startFlow(AEFlowInput(content=content))
         return self
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
@@ -97,8 +119,8 @@ class AEAssistant(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
-        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
+        messages.append({AE_ROLE: AERole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
         flow_out = self.flowOutput(AEAssistantFunction.updateAssisstantInfo)
         # flow_out 默认 llm_out 为占位，此处替换为 updateAssisstantInfo 需要的参数结构
         # （title / responsibility 占位），由 LLM 填充后回包交 updateAssisstantInfo(inner) 处理

@@ -22,6 +22,7 @@ from ..Context.AEPermissionContext import AEPermissionContext
 from ..Context.AEDirectoryContext import AEDirectoryContext
 from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
+from WorkFlows.AEFlow import AE_IDENT
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,7 @@ class AEContextCenter(AEContextDelegate):
         chats = []
         if isinstance(context, AEWorkSpaceContext):
             chats = [
-                {"ident": c.ident, "title": c.title, "status": c.status.value}
+                {AE_IDENT: c.ident, "title": c.title, "status": c.status.value}
                 for c in context._chat_map.values()
             ]
         response = AENetRsp(
@@ -237,7 +238,7 @@ class AEContextCenter(AEContextDelegate):
             "收到 LLM 回复（整体）:\n%s",
             json.dumps(data, ensure_ascii=False, indent=2),
         )
-        ident = data.get("ident")
+        ident = data.get(AE_IDENT)
         if not ident:
             logger.error(f"LLM 回复缺少 ident: {data!r}")
             return

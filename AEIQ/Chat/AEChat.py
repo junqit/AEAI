@@ -6,7 +6,7 @@ AEChat - 聊天 Flow，继承 AEFlow。
 import logging
 from typing import Optional
 
-from WorkFlows.AEFlow import AEFlow
+from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Network.Core.AENetReq import AENetReqInfo
@@ -29,14 +29,14 @@ class AEChat(AEFlow):
         # refiner 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
         from Context.Context.AELLMPayload import llm_generate
         self.refiner = AERefiner(
-            flowOutput=AEFlowOutput({"ident": self.ident, "reply": llm_generate("精炼后的问题")}),
+            flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")}),
         )
         self.addFlow(self.refiner)
         self.refiner.set_delegate(self)
         # 添加子 flow：助理生成（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
         # assistant 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
         self.assistant = AEAssistant(
-            flowOutput=AEFlowOutput({"ident": self.ident, "reply": llm_generate("助理定义")}),
+            flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("助理定义")}),
         )
         self.addFlow(self.assistant)
         self.assistant.set_delegate(self)

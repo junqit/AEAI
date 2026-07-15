@@ -10,7 +10,7 @@ from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AERole
+from Roles.AERole import AERole, AE_ROLE, AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ class AEWorkGroup(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
-        messages.append({"role": AERole.USER.value, "content": self.input.content if self.input else ""})
+            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
+        messages.append({AE_ROLE: AERole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
         flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

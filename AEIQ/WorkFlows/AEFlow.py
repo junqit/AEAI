@@ -15,11 +15,11 @@ import logging
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER, AE_funcationkey
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_ANSWER, AE_funcationkey
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX
+from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 from Excutor import AERuntimeExcutor
 from Excutor.AERuntimeExcutor import AEFunctional
 
@@ -95,7 +95,7 @@ class AEFlow(AEFlowInfo):
             return
 
         # 取 ident
-        ident = data.get("ident")
+        ident = data.get(AE_IDENT)
 
         # ident 命中自身：本层处理（传整个 data）
         if ident == self.ident:
@@ -223,7 +223,7 @@ class AEFlow(AEFlowInfo):
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         # 外层信封：ident / title 用于回程路由，llm_out 包装内层内容
         payload.out_schema = {
-            "ident": self.ident,
+            AE_IDENT: self.ident,
             "title": self.title,
             AE_LLM_OUT: payload.out_schema,
         }
@@ -249,7 +249,7 @@ class AEFlow(AEFlowInfo):
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         # 用当前 flow 的 ident / title 包装 payload.out_schema
         payload.out_schema = {
-            "ident": self.ident,
+            AE_IDENT: self.ident,
             "title": self.title,
             AE_LLM_OUT: payload.out_schema,
         }
@@ -274,7 +274,7 @@ class AEFlow(AEFlowInfo):
                 self.ident, self.title, flowStatus,
             )
             return
-        ident = result.get("ident") if isinstance(result, dict) else None
+        ident = result.get(AE_IDENT) if isinstance(result, dict) else None
         logger.info(
             "[recv][AEFlow:%s][%s] flow_complete ident=%r, result:\n%s",
             self.ident, self.title, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
@@ -338,17 +338,17 @@ class AEFlow(AEFlowInfo):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
+            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
         # 把所有子 flow 的 outResult 总结内容放入 messages
         for f in self._flows.values():
             if f.outResult is not None:
                 messages.append({
-                    "role": AERole.SYSTEM.value,
-                    "content": f.outResult_summary,
+                    AE_ROLE: AERole.SYSTEM.value,
+                    AE_CONTENT: f.outResult_summary,
                 })
         messages.append({
-            "role": AERole.USER.value,
-            "content": f"以上内容中，「{AE_USER_QUESTION_PREFIX}」所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
+            AE_ROLE: AERole.USER.value,
+            AE_CONTENT: f"以上内容中，{AE_USER_QUESTION_PREFIX}所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

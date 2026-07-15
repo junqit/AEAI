@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
-from Roles.AERole import AERole
+from Roles.AERole import AERole, AE_ROLE, AE_CONTENT
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
+from WorkFlows.AEFlow import AE_IDENT
 
 if TYPE_CHECKING:
     from .AELLMPayload import AELLMPayload
@@ -23,8 +24,8 @@ class AEWorkSpaceContext(AEBaseContext):
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
         # 注入工作目录约束（首条 system 消息）：所有修改只能在此目录下，不可操作其他目录内容
         payload.messages.insert(0, {
-            "role": AERole.SYSTEM.value,
-            "content": f"当前工作目录：{self.space}。所有修改只能在此目录下进行，不可操作其他目录的内容。",
+            AE_ROLE: AERole.SYSTEM.value,
+            AE_CONTENT: f"当前工作目录：{self.space}。所有修改只能在此目录下进行，不可操作其他目录的内容。",
         })
         # env_param prompt 注入 + 包装 out_schema + 上送，交基类处理
         super().flow_llm_request(payload)
@@ -43,7 +44,7 @@ class AEWorkSpaceContext(AEBaseContext):
         if not isinstance(data, dict):
             logger.error(f"[WorkSpace:{self.ident}] LLM 回复非 map: {data!r}")
             return
-        chat_ident = data.get("ident")
+        chat_ident = data.get(AE_IDENT)
         chat = self._chat_map.get(chat_ident)
         if chat is None:
             logger.error(f"[WorkSpace:{self.ident}] _chat_map 内未找到 chat_ident={chat_ident!r}")

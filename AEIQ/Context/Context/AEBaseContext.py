@@ -8,7 +8,7 @@ from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
-from WorkFlows.AEFlow import AEFlowStatus
+from WorkFlows.AEFlow import AEFlowStatus, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
@@ -53,7 +53,7 @@ class AEBaseContext:
 
     def context_config(self) -> Dict[str, str]:
         return {
-            "ident": self.ident,
+            AE_IDENT: self.ident,
             "space": self.space,
             "type": self.context_type.value,
         }
@@ -83,7 +83,7 @@ class AEBaseContext:
         # chat 的 output：ident 留空由内部回填为 chat.ident，用于 complete 回程路由回本 chat
         from .AELLMPayload import llm_generate
         chat = AEChat(
-            flowOutput=AEFlowOutput({"reply": llm_generate("对用户的回复")}),
+            flowOutput=AEFlowOutput({AE_ANSWER: llm_generate("对用户的回复")}),
         )
         chat.req = req
         chat.set_delegate(self)
@@ -101,12 +101,12 @@ class AEBaseContext:
     def flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        payload.out_schema = {"ident": self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
+        payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 
     def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
         """AEFlowDelegate: flow 完成通知。status=complete 时组装 AENetRsp 经 delegate 发送给客户端。"""
-        flow_ident = result.get("ident") if isinstance(result, dict) else None
+        flow_ident = result.get(AE_IDENT) if isinstance(result, dict) else None
         if flowStatus != AEFlowStatus.complete:
             return
         # complete：找到所属 chat，回填 req 组装 response 发送
@@ -127,7 +127,7 @@ class AEBaseContext:
                 space=self.space,
             ),
             req=chat.req,
-            rsp={"reply": result.get("reply")} if isinstance(result, dict) else None,
+            rsp={AE_ANSWER: result.get(AE_ANSWER)} if isinstance(result, dict) else None,
         )
         self.send_response(rsp)
 
