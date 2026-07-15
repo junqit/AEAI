@@ -37,11 +37,11 @@ class AEFlowFunctional(AEFunctional):
 class AEFlow(AEFlowInfo):
     """Flow 基类，继承 AEFlowInfo，实现 AEFlowInterface 与 AEFlowDelegate 协议"""
 
-    def __init__(self, flowOutput: AEFlowOutput):
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         # ----- AEFlowInfo 属性 -----
-        # ident 由内部生成（外部只读）；
+        # ident 可传入（默认空，为空则内部生成）；外部只读；
         # output（本 flow 输出结构）创建时必传；input / outResult 不在初始化阶段配置
-        super().__init__(flowOutput=flowOutput)
+        super().__init__(flowOutput=flowOutput, ident=ident)
         # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
         # ----- 内部状态 -----

@@ -34,8 +34,8 @@ class AEAssistant(AEFlow):
         "responsibility": llm_generate("专家职责要求，明确能力范围与禁止事项"),
     }
 
-    def __init__(self, flowOutput: AEFlowOutput):
-        super().__init__(flowOutput=flowOutput)
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
+        super().__init__(flowOutput=flowOutput, ident=ident)
         self.title = "Assistant Generator"
         self.responsibility = (
             "根据传入的领域信息与用户问题，动态生成一个「专家」定义。\n"

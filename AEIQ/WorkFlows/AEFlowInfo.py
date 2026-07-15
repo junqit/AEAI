@@ -2,7 +2,7 @@
 AEFlowInfo - Flow 元信息基类，持有 ident / title / responsibility / input / output / status。
 AEFlow 继承本类以获得这些元信息属性。
 
-ident 由内部生成（uuid），创建时无需传入；
+ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
 {"ident": <回程路由目标 ident>, "reply": <llm 占位>}：子 flow 填父 flow.ident（路由回父 flow），
 根 flow 留空则内部回填为自身 ident。input 不在创建时配置，由 startFlow 设置。
@@ -38,17 +38,20 @@ class AEFlowInfo:
     # 创建所需的数据结构说明：ident 由内部生成，无需传入
     CREATE_SCHEMA: Dict[str, Any] = {}
 
-    def __init__(self, flowOutput: AEFlowOutput):
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         """Flow 元信息初始化。
 
         Args:
             flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
                         flowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
-                        out_schema.ident 缺省或为空时内部回填为自身 ident（根 flow 场景）；
+            ident: flow 标识；默认空字符串，为空时内部生成 uuid。外部可显式传入以便与
+                   flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
                         子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
         """
-        # ident 内部生成
-        self._ident: str = uuid.uuid4().hex
+        # ident 为空时内部生成
+        if not ident:
+            ident = uuid.uuid4().hex
+        self._ident: str = ident
 
         # ----- 角色信息 -----
         self.title: str = ""           # 职称
@@ -56,7 +59,7 @@ class AEFlowInfo:
 
         # output：本 flow 输出结构，创建时必传（不再经 startFlow 注入）
         self.output: AEFlowOutput = flowOutput
-     
+
         # input 不在初始化阶段配置，由 startFlow 设置
         self.input: Optional[AEFlowInput] = None
 

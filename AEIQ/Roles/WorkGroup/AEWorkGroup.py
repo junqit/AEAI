@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class AEWorkGroup(AEFlow):
     """工作组 Flow：完成单一维度 / 目录的目标。"""
 
-    def __init__(self, flowOutput: AEFlowOutput):
-        super().__init__(flowOutput=flowOutput)
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
+        super().__init__(flowOutput=flowOutput, ident=ident)
         self.title = "Work Group"
         self.responsibility = (
             "负责完成分配给本工作组的一个维度 / 目录目标。\n"

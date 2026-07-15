@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class AEChat(AEFlow):
     """聊天 Flow：由 context 构建 input 后交 startFlow 启动"""
 
-    def __init__(self, flowOutput: AEFlowOutput):
-        super().__init__(flowOutput=flowOutput)
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
+        super().__init__(flowOutput=flowOutput, ident=ident)
         # 职称
         self.title = "Chat"
         # 触发本 chat 的请求信息（回响应时回填 req，供客户端按 path 路由）
