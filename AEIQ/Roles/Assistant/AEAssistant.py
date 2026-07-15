@@ -10,7 +10,7 @@ from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Assistant.AERole import AERole
+from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX
 from Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
@@ -29,15 +29,15 @@ class AEAssistant(AEFlow):
 
     # updateAssisstantInfo 接收的 map 整体结构：llm_generate 占位说明各字段应填充内容
     updateAssisstantInfo_input = {
-        "title": llm_generate("助理职称，体现专业领域与定位"),
-        "responsibility": llm_generate("助理职责要求，明确能力范围与禁止事项"),
+        "title": llm_generate("专家职称，体现专业领域与定位"),
+        "responsibility": llm_generate("专家职责要求，明确能力范围与禁止事项"),
     }
 
     def __init__(self, flowOutput: AEFlowOutput):
         super().__init__(flowOutput=flowOutput)
         self.title = "Assistant Generator"
         self.responsibility = (
-            "根据传入的领域信息与用户问题，动态生成一个「专家助理」定义（map）。\n"
+            "根据传入的领域信息与用户问题，动态生成一个「专家」定义。\n"
             "要求：\n"
             "1. 仅生成助理的定义（名称、领域、职责、能力、评价规则等），不直接执行任务。\n"
             "2. 输出为结构化 map，供后续流程加载使用。\n"
@@ -61,6 +61,26 @@ class AEAssistant(AEFlow):
             data = {}
         self.title = data.get("title", "") or ""
         self.responsibility = data.get("responsibility", "") or ""
+
+        # 收到 title/responsibility 后，发起第二步：维度目标生成
+        # 用户问题以统一前缀（AE_USER_QUESTION_PREFIX）标识，作为 system 消息
+        messages = []
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({"role": AERole.SYSTEM.value, "content": role_brief})
+        messages.append({
+            "role": AERole.SYSTEM.value,
+            "content": f"{AE_USER_QUESTION_PREFIX}{self.input.content if self.input else ''}",
+        })
+        # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
+        messages.append({
+            "role": AERole.USER.value,
+            "content": f"根据「{AE_USER_QUESTION_PREFIX}」列举不同维度的目标，每个目录需要有独立性，可以交给单独的工作组可以完成目录。",
+        })
+        # 走 flow_receive_complete：回包后置 complete、赋 outResult 并经 delegate.flow_complete 通知 chat
+        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
         return self
 
     def startFlow(self, flowInput: AEFlowInput) -> None:

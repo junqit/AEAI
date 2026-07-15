@@ -9,7 +9,7 @@ from WorkFlows.AEFlow import AEFlow, AEFlowStatus, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
-from Assistant.AERole import AERole
+from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class AERefiner(AEFlow):
 
     @property
     def outResult_summary(self) -> str:
-        """覆写：以「当前用户的问题是：」前缀返回精炼后的问题。"""
+        """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回精炼后的问题。"""
         answer = self._extract_answer(self.outResult) or ""
-        return f"当前用户的问题是：{answer}"
+        return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，拼装 AELLMPayload 发送。

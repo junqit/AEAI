@@ -10,8 +10,8 @@ from WorkFlows.AEFlow import AEFlow
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Network.Core.AENetReq import AENetReqInfo
-from QuestionRefiner.AERefiner import AERefiner
-from Assistant.AEAssistant import AEAssistant
+from Roles.QuestionRefiner.AERefiner import AERefiner
+from Roles.Assistant.AEAssistant import AEAssistant
 
 logger = logging.getLogger(__name__)
 

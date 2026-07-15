@@ -208,5 +208,5 @@ class AEDirectoryContext(AEBaseContext):
         """组装完整的 role prompt，返回 {role: content} 结构"""
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
-        from Assistant.AERole import AERole
+        from Roles.AERole import AERole
         return {"role": AERole.SYSTEM.value, "content": prompt}

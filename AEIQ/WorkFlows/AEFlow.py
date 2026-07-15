@@ -19,7 +19,7 @@ from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_ANSWER, AE_funcationkey
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
-from Assistant.AERole import AERole
+from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX
 from Excutor import AERuntimeExcutor
 from Excutor.AERuntimeExcutor import AEFunctional
 
@@ -281,9 +281,9 @@ class AEFlow(AEFlowInfo):
         )
         # 确认是本 flow 需处理的内容：ident 命中自身 → 交 receive_flow_result
         if ident == self.ident:
-            self.receive_flow_result(result.get(AE_LLM_OUT))
+            self.receive_flow_result(result)
             return
-        # ident 命中子 flow：转发内层数据给该子 flow（使用时再获取）
+        # ident 命中子 flow：转发结果数据给该子 flow
         flow = self._flows.get(ident) if ident is not None else None
         if flow is not None:
             flow.receive_flow_result(result.get(AE_LLM_OUT))
@@ -348,7 +348,7 @@ class AEFlow(AEFlowInfo):
                 })
         messages.append({
             "role": AERole.USER.value,
-            "content": "以上内容中，「当前用户的问题是：」所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
+            "content": f"以上内容中，「{AE_USER_QUESTION_PREFIX}」所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

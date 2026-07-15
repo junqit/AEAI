@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
-from Assistant.AERole import AERole
+from Roles.AERole import AERole
 
 logger = logging.getLogger(__name__)
 

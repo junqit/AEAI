@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
-from Assistant.AERole import AERole
+from Roles.AERole import AERole
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
 
 if TYPE_CHECKING:
