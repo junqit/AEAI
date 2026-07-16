@@ -305,11 +305,6 @@ class AEFlow(AEFlowInfo):
             out_schema: 结果数据（含 AE_ANSWER 字段）
         """
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
-        logger.info(
-            "[recv][AEFlow:%s][%s] receive_flow_result answer=%r, out_schema:\n%s",
-            self.ident, self.title, answer, json.dumps(out_schema, ensure_ascii=False, indent=2, default=str),
-        )
-
         # 判断所有子 flow 是否全部 complete
         all_complete = all(f.status == AEFlowStatus.complete for f in self._flows.values())
         if not all_complete:

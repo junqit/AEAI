@@ -6,7 +6,7 @@ AEAssistant - 助理生成 Flow，继承 AEFlow。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowFunctional, AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
@@ -23,6 +23,7 @@ class AEAssistantFunction(AEFunctional):
     每个方法接收一个 map（步骤输入 / 输出数据），由 executor 按名调用。
     """
     updateAssisstantInfo = "updateAssisstantInfo"  # 更新助理信息，传入 map
+    addWorkGroups = "addWorkGroups"                # 添加工作组，传入任务内容列表
 
 
 class AEAssistant(AEFlow):
@@ -33,6 +34,11 @@ class AEAssistant(AEFlow):
         "title": llm_generate("专家职称，体现专业领域与定位"),
         "responsibility": llm_generate("专家职责要求，明确能力范围与禁止事项"),
     }
+
+    # addWorkGroups 接收的参数格式：任务内容列表，每项为一个工作组可独立完成的任务内容
+    addWorkGroups_input = [
+        llm_generate("工作组可独立完成的任务内容"),
+    ]
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         super().__init__(flowOutput=flowOutput, ident=ident)
@@ -78,8 +84,10 @@ class AEAssistant(AEFlow):
             AE_ROLE: AERole.USER.value,
             AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务可独立完成、无耦合。",
         })
-        # 走 flow_receive_complete：回包后置 complete、赋 outResult 并经 delegate.flow_complete 通知 chat
-        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
+        # 走 addWorkGroups：回包交 self.addWorkGroups(任务列表) 创建并启动各工作组
+        flow_out = self.flowOutput(AEAssistantFunction.addWorkGroups)
+        # llm_out 设为 addWorkGroups_input（任务内容列表格式），由 LLM 填充后回包作 inner 传入 addWorkGroups
+        flow_out.set_llm_out(list(self.addWorkGroups_input))
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
         return self
@@ -91,7 +99,8 @@ class AEAssistant(AEFlow):
         填本 assistant.ident，使其完成时路由回本 assistant 的 receive_flow_result。
 
         Args:
-            tasks: 任务内容列表，每项为一个工作组可独立完成的任务内容（字符串）
+            tasks: 任务内容列表，结构见 addWorkGroups_input：
+                   [<工作组可独立完成的任务内容>, ...]，每项为字符串
 
         Returns:
             self（便于链式调用）
