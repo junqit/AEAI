@@ -18,10 +18,13 @@ from typing import Dict, Optional, TYPE_CHECKING
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_ANSWER, AE_funcationkey
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
-from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Context.Context.AELLMPayload import AELLMPayload, llm_generate
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 from Excutor import AERuntimeExcutor
 from Excutor.AERuntimeExcutor import AEFunctional
+
+# 分隔线标识：用于在话术/日志中分隔角色上下文与指令/内容
+SEPARATOR_LINE = "─" * 28
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,8 @@ if TYPE_CHECKING:
 
 class AEFlowFunctional(AEFunctional):
     """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
+    receiveQuestionTemplate = "receiveQuestionTemplate"  # 接收 LLM 生成的问问题模板话术，传入 map
+    receiveRole = "receiveRole"                            # 接收 LLM 生成的自身工作名称与能力范围，传入 map
 
 
 class AEFlow(AEFlowInfo):
@@ -46,8 +51,6 @@ class AEFlow(AEFlowInfo):
         self.delegate: "Optional[AEFlowDelegate]" = None
         # ----- 内部状态 -----
         self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
-        # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
-        self.outResult: Optional[dict] = None
         # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
         # 默认不注册任何方法，由业务子类自行 add_default / add_temporary 添加
         self.excutor = AERuntimeExcutor()
@@ -175,6 +178,85 @@ class AEFlow(AEFlowInfo):
         if len(self.title) > 0 or len(self.responsibility) > 0:
             return f"我是一名{self.title}，{self.responsibility}。我的回答：{answer}"
         return f"我的回答：{answer}"
+
+    def requestQuestionTemplate(self) -> None:
+        """组装并发送 LLM 请求：带上自身名称(title)与能力(responsibility)，
+        让 LLM 据此生成问问题的模板话术。
+
+        - messages: system(role_brief + 分隔线，含身份与能力) / user(生成提问模板的指令)
+        - out_schema: {AE_ANSWER: 问问题的模板话术 占位}，由 LLM 填充
+        - 走 receiveQuestionTemplate：回包后赋值 questionTemplateResult（不完成 flow）
+        """
+        messages = []
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            # 以分隔线标识收尾，将角色上下文与后续指令视觉分隔
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{role_brief}\n{SEPARATOR_LINE}"})
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: "请根据你的标题与能力，生成一个用于向用户提问的模板话术；话术需体现你的专业角色与能力范围，便于引导用户提出更精准的问题。",
+        })
+        flow_out = self.flowOutput(AEFlowFunctional.receiveQuestionTemplate)
+        flow_out.set_llm_out({AE_ANSWER: llm_generate("问问题的模板话术")})
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
+
+    def receiveQuestionTemplate(self, data: dict) -> None:
+        """接收 LLM 生成的问问题模板话术（不完成 flow，仅存储供后续使用）。
+
+        Args:
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的模板话术>}
+        """
+        template = self._extract_answer(data) if isinstance(data, dict) else None
+        if template is None and isinstance(data, str):
+            template = data
+        self.questionTemplateResult = template or ""
+        # 以分隔线标识包裹模板，便于在日志中辨识边界
+        logger.info(
+            "[AEFlow:%s][%s] 收到问问题模板话术:\n%s\n%s\n%s",
+            self.ident, self.title, SEPARATOR_LINE, self.questionTemplateResult, SEPARATOR_LINE,
+        )
+
+    def requestRole(self) -> None:
+        """根据问题内容(input.content)请求 LLM 生成自身工作名称(title)与能力范围(responsibility)。
+
+        - messages: system(role_brief + 分隔线，含已有身份与能力，可为空) / user(问题内容 + 生成角色指令)
+        - out_schema: {title, responsibility 占位}，由 LLM 填充
+        - 走 receiveRole：回包后写入 self.title / self.responsibility（不完成 flow）
+        """
+        messages = []
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{role_brief}\n{SEPARATOR_LINE}"})
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: (
+                "请根据以下问题内容，生成你的工作名称与能力范围；工作名称需体现专业领域与定位，"
+                f"能力范围需明确职责边界与禁止事项。\n{SEPARATOR_LINE}\n问题内容：{self.input.content if self.input else ''}"
+            ),
+        })
+        flow_out = self.flowOutput(AEFlowFunctional.receiveRole)
+        flow_out.set_llm_out({
+            "title": llm_generate("工作名称，体现专业领域与定位"),
+            "responsibility": llm_generate("能力范围，明确职责边界与禁止事项"),
+        })
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
+
+    def receiveRole(self, data: dict) -> None:
+        """接收 LLM 生成的自身工作名称与能力范围，写入 title / responsibility（不完成 flow）。
+
+        Args:
+            data: 回包内层 llm_out，形如 {"title": <工作名称>, "responsibility": <能力范围>}
+        """
+        if not isinstance(data, dict):
+            data = {}
+        self.title = data.get("title", "") or ""
+        self.responsibility = data.get("responsibility", "") or ""
+        logger.info(
+            "[AEFlow:%s] 收到角色信息:\n%s\ntitle=%r\nresponsibility=%r\n%s",
+            self.ident, SEPARATOR_LINE, self.title, self.responsibility, SEPARATOR_LINE,
+        )
 
     @staticmethod
     def _extract_answer(obj) -> Optional[str]:
@@ -341,16 +423,16 @@ class AEFlow(AEFlowInfo):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 把所有子 flow 的 outResult 总结内容放入 messages
         for f in self._flows.values():
             if f.outResult is not None:
                 messages.append({
-                    AE_ROLE: AERole.SYSTEM.value,
+                    AE_ROLE: AEConentRole.SYSTEM.value,
                     AE_CONTENT: f.outResult_summary,
                 })
         messages.append({
-            AE_ROLE: AERole.USER.value,
+            AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: f"以上内容中，{AE_USER_QUESTION_PREFIX}为用户问题；请基于所有提供的回答仔细思考，针对该用户问题输出结论",
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

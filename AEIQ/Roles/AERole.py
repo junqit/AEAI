@@ -8,8 +8,16 @@ AE_CONTENT = "content"
 AE_USER_QUESTION_PREFIX = "「当前用户的问题是：」"
 
 
-class AERole(Enum):
+class AEConentRole(Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
     CONTEXT = "context"
+
+
+class AEFlowRole(Enum):
+    """Flow 角色类型：专家 / 工作组 / 员工 / 评审者"""
+    expert = "expert"        # 专家
+    workgroup = "workgroup"  # 工作组
+    employee = "employee"    # 员工
+    reviewer = "reviewer"    # 评审者

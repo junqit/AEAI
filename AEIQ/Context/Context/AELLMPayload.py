@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
-from Roles.AERole import AERole, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class AELLMPayload:
             "请根据用户问题及占位符描述生成实际内容后替换该占位符；"
             "其余字段与元信息保持原值不变，仅按原结构回填。"
         )
-        messages.insert(0, {AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: instruction})
+        messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
         # llm_type 输出枚举值（如 "chatgpt"），level 输出成员名（如 "default"），
         # 与下游 llms 服务约定的字符串协议保持一致，避免硬编码字符串
         return {

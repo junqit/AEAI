@@ -9,7 +9,7 @@ from WorkFlows.AEFlow import AEFlow, AEFlowStatus, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ class AERefiner(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AERole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
         # 用本 flow 的 output.out_schema 作 llm_out，由 flowOutput 按 complete 打包成路由信封
         # （ident/title/funcationkey + llm_out）；flow_receive_complete 随机 funcident，回包据此路由
         flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)

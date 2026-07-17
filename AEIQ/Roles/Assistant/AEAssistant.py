@@ -10,7 +10,7 @@ from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AERole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 from Roles.WorkGroup.AEWorkGroup import AEWorkGroup
 from Excutor.AERuntimeExcutor import AEFunctional
 
@@ -74,14 +74,14 @@ class AEAssistant(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({
-            AE_ROLE: AERole.SYSTEM.value,
+            AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.content if self.input else ''}",
         })
         # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
         messages.append({
-            AE_ROLE: AERole.USER.value,
+            AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务可独立完成、无耦合。",
         })
         # 走 addWorkGroups：回包交 self.addWorkGroups(任务列表) 创建并启动各工作组
@@ -128,8 +128,8 @@ class AEAssistant(AEFlow):
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({AE_ROLE: AERole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AERole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
         flow_out = self.flowOutput(AEAssistantFunction.updateAssisstantInfo)
         # flow_out 默认 llm_out 为占位，此处替换为 updateAssisstantInfo 需要的参数结构
         # （title / responsibility 占位），由 LLM 填充后回包交 updateAssisstantInfo(inner) 处理

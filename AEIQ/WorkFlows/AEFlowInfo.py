@@ -24,7 +24,6 @@ AE_ANSWER = "reply"
 # out_schema 内功能性调用唯一标识字段名（每次 flowOutput 随机生成）
 AE_funcationkey = "excutor"
 
-
 class AEFlowStatus(str, Enum):
     """Flow 执行状态"""
     default = "default"            # 初始状态
@@ -62,6 +61,12 @@ class AEFlowInfo:
 
         # input 不在初始化阶段配置，由 startFlow 设置
         self.input: Optional[AEFlowInput] = None
+
+        # LLM 生成的问问题模板话术：由 receiveQuestionTemplate 赋值
+        self.questionTemplateResult: str = ""
+
+        # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
+        self.outResult: Optional[dict] = None
 
         # ----- 执行状态 -----
         self.status: AEFlowStatus = AEFlowStatus.default
