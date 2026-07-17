@@ -233,11 +233,6 @@ class AEContextCenter(AEContextDelegate):
         if not isinstance(data, dict):
             logger.error(f"LLM 回复非 JSON 对象: {reply!r}")
             return
-        # 打印收到的整体数据
-        logger.info(
-            "收到 LLM 回复（整体）:\n%s",
-            json.dumps(data, ensure_ascii=False, indent=2),
-        )
         ident = data.get(AE_IDENT)
         if not ident:
             logger.error(f"LLM 回复缺少 ident: {data!r}")

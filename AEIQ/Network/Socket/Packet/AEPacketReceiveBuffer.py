@@ -9,10 +9,11 @@ AEPacket 接收缓冲区
 import threading
 import logging
 from queue import Queue, Empty
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 from dataclasses import dataclass
 
-from .AEPacket import AEPacketHeader, AEPacket, AEDataType, calculate_crc16
+from .AEPacket import AEPacketHeader, AEPacket, AEDataType, UNIQUE_ID_SENTINEL, calculate_crc16
+from .AEPacketPool import AEPacketPool
 from ...Core import AENetReq, AENetRsp
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ class AEPacketReceiveBuffer:
         self._running = False
         self._parse_thread: Optional[threading.Thread] = None
 
+        # 分片重组：unique_id -> AEPacketPool；解析线程单线程访问，无需加锁
+        self._packet_pools: Dict[int, AEPacketPool] = {}
+
     def start(self) -> None:
         if self._running:
             return
@@ -70,6 +74,7 @@ class AEPacketReceiveBuffer:
         if self._parse_thread and self._parse_thread.is_alive():
             self._parse_thread.join(timeout=2.0)
 
+        self._packet_pools.clear()
         logger.info("AEPacketReceiveBuffer stopped")
 
     def set_callback(self, callback: PacketReceivedCallback) -> None:
@@ -124,24 +129,59 @@ class AEPacketReceiveBuffer:
     # ==================== 异步分发 ====================
 
     def _dispatch_packet(self, packet: AEPacket, client_addr: tuple) -> None:
-        """AEPacket → AEDataType 对应消息体 → 回调上层"""
-        data_type_value = packet.header.data_type
+        """AEPacket →（分片重组）→ AEDataType 对应消息体 → 回调上层"""
+        unique_id = packet.header.unique_id
 
+        # 非分片单包：直接按类型分发
+        if unique_id == UNIQUE_ID_SENTINEL:
+            self._dispatch_by_type(packet.header.data_type_value, packet.data, client_addr)
+            return
+
+        # 分片包：按 unique_id 收集，收齐后拼装再分发
+        self._handle_fragment(packet, client_addr)
+
+    def _handle_fragment(self, packet: AEPacket, client_addr: tuple) -> None:
+        """按 unique_id 聚合分片，收齐后组包并按类型分发。"""
+        unique_id = packet.header.unique_id
+
+        pool = self._packet_pools.get(unique_id)
+        if pool is None:
+            # 首个分片：传入构造函数
+            pool = AEPacketPool(unique_id=unique_id, packet=packet)
+            self._packet_pools[unique_id] = pool
+        else:
+            pool.add(packet)
+
+        # 每收到一包都检测是否已完整
+        if pool.is_complete():
+            assembled = pool.assemble()
+            data_type_value = pool.data_type_value
+            last_seq = pool.last_seq
+            # 清理
+            self._packet_pools.pop(unique_id, None)
+            logger.info(
+                f"Fragment assembled - unique_id={unique_id}, "
+                f"count={(last_seq + 1) if last_seq is not None else 0}, size={len(assembled)}"
+            )
+            self._dispatch_by_type(data_type_value, assembled, client_addr)
+
+    def _dispatch_by_type(self, data_type_value: int, data: bytes, client_addr: tuple) -> None:
+        """按数据类型解析消息体并回调上层。"""
         try:
             if data_type_value == AEDataType.REQUEST.value:
-                payload = AENetReq.from_bytes(packet.data)
+                payload = AENetReq.from_bytes(data)
                 ae_type = AEDataType.REQUEST
             elif data_type_value == AEDataType.RESPONSE.value:
-                payload = AENetRsp.from_bytes(packet.data)
+                payload = AENetRsp.from_bytes(data)
                 ae_type = AEDataType.RESPONSE
             elif data_type_value == AEDataType.HEARTBEAT.value:
-                payload = packet.data
+                payload = data
                 ae_type = AEDataType.HEARTBEAT
             elif data_type_value == AEDataType.PING.value:
-                payload = packet.data
+                payload = data
                 ae_type = AEDataType.PING
             elif data_type_value == AEDataType.PONG.value:
-                payload = packet.data
+                payload = data
                 ae_type = AEDataType.PONG
             else:
                 logger.warning(f"Unknown data type: 0x{data_type_value:04X}")
@@ -151,7 +191,7 @@ class AEPacketReceiveBuffer:
                 data_type=ae_type,
                 payload=payload,
                 client_addr=client_addr,
-                raw_data=packet.data
+                raw_data=data,
             )
 
             if self._on_packet_received:

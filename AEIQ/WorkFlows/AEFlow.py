@@ -166,8 +166,15 @@ class AEFlow(AEFlowInfo):
 
     @property
     def outResult_summary(self) -> str:
-        """从 outResult 中提取总结内容（AE_ANSWER 字段值，递归查找嵌套结构）。"""
-        return self._extract_answer(self.outResult) or ""
+        """从 outResult 中提取总结内容（AE_ANSWER），并附带角色说明。
+
+        形如「我是一名{title}，{responsibility}。我的回答：{answer}」；
+        title / responsibility 均为空时省略角色前缀，仅返回「我的回答：{answer}」。
+        """
+        answer = self._extract_answer(self.outResult) or ""
+        if len(self.title) > 0 or len(self.responsibility) > 0:
+            return f"我是一名{self.title}，{self.responsibility}。我的回答：{answer}"
+        return f"我的回答：{answer}"
 
     @staticmethod
     def _extract_answer(obj) -> Optional[str]:
@@ -310,6 +317,7 @@ class AEFlow(AEFlowInfo):
         if not all_complete:
             self._advance_next_flow(answer)
             return
+
         self._summarize_to_llm()
 
     def _advance_next_flow(self, answer: Optional[str]) -> None:
@@ -343,7 +351,7 @@ class AEFlow(AEFlowInfo):
                 })
         messages.append({
             AE_ROLE: AERole.USER.value,
-            AE_CONTENT: f"以上内容中，{AE_USER_QUESTION_PREFIX}所指即为需回答的用户问题；请基于其余提供的内容仔细思考，针对该用户问题输出结论。",
+            AE_CONTENT: f"以上内容中，{AE_USER_QUESTION_PREFIX}为用户问题；请基于所有提供的回答仔细思考，针对该用户问题输出结论",
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
