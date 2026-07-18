@@ -5,7 +5,7 @@ AEFlow 继承本类以获得这些元信息属性。
 ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
 {"ident": <回程路由目标 ident>, "reply": <llm 占位>}：子 flow 填父 flow.ident（路由回父 flow），
-根 flow 留空则内部回填为自身 ident。input 不在创建时配置，由 startFlow 设置。
+根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 startFlow 设置。
 """
 import uuid
 from enum import Enum
@@ -37,7 +37,7 @@ class AEFlowInfo:
     # 创建所需的数据结构说明：ident 由内部生成，无需传入
     CREATE_SCHEMA: Dict[str, Any] = {}
 
-    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         """Flow 元信息初始化。
 
         Args:
@@ -46,6 +46,8 @@ class AEFlowInfo:
             ident: flow 标识；默认空字符串，为空时内部生成 uuid。外部可显式传入以便与
                    flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
                         子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
+            flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，
+                        未传时仍由 startFlow 设置。命名沿用 startFlow 的 flowInput 约定。
         """
         # ident 为空时内部生成
         if not ident:
@@ -59,8 +61,8 @@ class AEFlowInfo:
         # output：本 flow 输出结构，创建时必传（不再经 startFlow 注入）
         self.output: AEFlowOutput = flowOutput
 
-        # input 不在初始化阶段配置，由 startFlow 设置
-        self.input: Optional[AEFlowInput] = None
+        # input：可在初始化时传入（默认 None），未传时由 startFlow 设置
+        self.input: Optional[AEFlowInput] = flowInput
 
         # LLM 生成的问问题模板话术：由 receiveQuestionTemplate 赋值
         self.questionTemplateResult: str = ""
