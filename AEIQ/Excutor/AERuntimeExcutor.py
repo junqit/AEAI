@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # namespace 键名（同时是脚本内引用的变量名）
 AE_SELF = "self"    # 注册时绑定的 target（方法的 self）
 AE_INNER = "inner"  # exec 传入的数据
+AE_RESULT = "__ae_result__"  # 方法执行结果（脚本内赋值，exec 读取后判断/打印）
 
 
 class AEFunctional:
@@ -103,21 +104,25 @@ class AERuntimeExcutor:
 
     @staticmethod
     def method_call(method: str) -> str:
-        """拼接默认方法调用脚本：self.<method>(inner)。
+        """拼接默认方法调用脚本：__ae_result__ = self.<method>(inner)。
 
-        用 AE_SELF / AE_INNER 常量拼接，避免脚本与 namespace 键名漂移。
+        将方法返回值赋给 AE_RESULT，供 exec 读取后判断/打印。
+        用 AE_SELF / AE_INNER / AE_RESULT 常量拼接，避免脚本与 namespace 键名漂移。
         """
-        return f"{AE_SELF}.{method}({AE_INNER})"
+        return f"{AE_RESULT} = {AE_SELF}.{method}({AE_INNER})"
 
-    def exec(self, funcident: str, inner) -> None:
-        """按 funcident 查找注册项并 exec 执行。
+    def exec(self, funcident: str, inner):
+        """按 funcident 查找注册项并 exec 执行，获取方法返回结果并判断/打印。
 
         注册时绑定的 target 作为 AE_SELF 注入，inner 作为 AE_INNER 直接注入 namespace；
-        temporary 注册执行后自动清除。
+        方法返回值经 AE_RESULT 取回，按 bool 判断执行状态并打印日志；temporary 注册执行后自动清除。
 
         Args:
             funcident: 方法标识
             inner: 传入数据，注入 namespace 的 AE_INNER
+
+        Returns:
+            方法的执行结果（通常为 bool：True=当前数据处理完成，False/其他=未完成或异常）
 
         Raises:
             KeyError: funcident 未注册
@@ -127,6 +132,13 @@ class AERuntimeExcutor:
             raise KeyError(f"未注册的 funcident: {funcident!r}")
         namespace = {AE_SELF: entry.target, AE_INNER: inner}
         exec(entry.script, namespace)
+        # 获取方法执行结果并判断/打印
+        result = namespace.get(AE_RESULT)
+        if result is True:
+            logger.info("[AERuntimeExcutor] funcident=%s 执行完成: result=%r", funcident, result)
+        else:
+            logger.warning("[AERuntimeExcutor] funcident=%s 执行未完成: result=%r", funcident, result)
         # temporary 执行后清除，避免残留
         if is_temporary:
             self._temporary.pop(funcident, None)
+        return result

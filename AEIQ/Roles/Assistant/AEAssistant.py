@@ -52,7 +52,7 @@ class AEAssistant(AERole):
             "3. 字段需贴合问题领域，不可随意编造。"
         )
 
-    def updateAssisstantInfo(self, data: dict) -> "AEAssistant":
+    def updateAssisstantInfo(self, data: dict) -> bool:
         """更新助理的身份与职责（覆盖默认 title / responsibility）。
 
         Args:
@@ -60,7 +60,7 @@ class AEAssistant(AERole):
                   {"title": <助理职称>, "responsibility": <助理职责要求>}
 
         Returns:
-            self（便于链式调用）
+            bool: 当前数据处理是否完成（True=已处理）
         """
         import json
         logger.info("[AEAssistant:%s] updateAssisstantInfo 收到数据:\n%s",
@@ -91,9 +91,9 @@ class AEAssistant(AERole):
         flow_out.set_llm_out(list(self.addWorkGroups_input))
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
-        return self
+        return True
 
-    def addWorkGroups(self, tasks: list) -> "AEAssistant":
+    def addWorkGroups(self, tasks: list) -> bool:
         """根据任务内容列表添加并启动工作组子 flow。
 
         每个任务由一个独立工作组（AEWorkGroup）完成，互不耦合；工作组的 output.ident
@@ -104,7 +104,7 @@ class AEAssistant(AERole):
                    [<工作组可独立完成的任务内容>, ...]，每项为字符串
 
         Returns:
-            self（便于链式调用）
+            bool: 当前数据处理是否完成（True=已处理）
         """
         for task in tasks:
             content = task if isinstance(task, str) else str(task or "")
@@ -113,7 +113,7 @@ class AEAssistant(AERole):
             )
             self.addFlow(wg)
             wg.startFlow(AEFlowInput(content=content))
-        return self
+        return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，拼装 AELLMPayload 发送。

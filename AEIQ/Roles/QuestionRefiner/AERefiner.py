@@ -55,7 +55,7 @@ class AERefiner(AERole):
         """问题转换后的内容（精炼后的问题；未接收回包时返回空串）。"""
         return self._refinedQuestion
 
-    def receiveRefinerQuestion(self, data: dict) -> None:
+    def receiveRefinerQuestion(self, data: dict) -> bool:
         """接收精炼后问题的回包：单独提取「问题转换后的内容」并存储，再向上 complete 通知。
 
         回包 inner（llm_out）形如 {AE_IDENT: <chat.ident>, AE_ANSWER(reply): <问题转换后的内容>}：
@@ -65,13 +65,17 @@ class AERefiner(AERole):
 
         Args:
             data: 回包内层 llm_out（含 ident / reply，reply 即问题转换后的内容）
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         # 单独定义「问题转换后的内容」：从回包提取精炼后的问题
         self._refinedQuestion = self._extract_answer(data) or ""
         # 拿到精炼问题后，交 LLM 选择负责解决问题的角色人选
         self.requestRoleChoice()
+        return True
 
-    def receiveOptimizeInputOptimize(self, data: dict) -> None:
+    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
         """接收优化后的问题：存入 _refinedQuestion 并打印，再交 LLM 选择负责解决问题的角色。
 
         覆写基类：优化后的问题即精炼后的问题，存入 self._refinedQuestion 供 requestRoleChoice
@@ -79,6 +83,9 @@ class AERefiner(AERole):
 
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>}；若直接为字符串则视为问题
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         result = self._extract_answer(data) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
@@ -90,6 +97,7 @@ class AERefiner(AERole):
         )
         # 收到优化后的问题后，交 LLM 选择负责解决问题的角色人选
         self.requestRoleChoice()
+        return True
 
     def requestRoleChoice(self) -> None:
         """组装角色选择 LLM 请求：以 AEFlowRole 各角色的 type / title / responsibility 拼 system 消息，
@@ -112,19 +120,22 @@ class AERefiner(AERole):
         )
         messages = [
             {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: system_content},
-            {AE_ROLE: AEConentRole.USER.value, AE_CONTENT: f"用户问题（已精炼）：{self._refinedQuestion}"},
+            {AE_ROLE: AEConentRole.USER.value, AE_CONTENT: f"用户问题：{self._refinedQuestion}"},
         ]
         flow_out = self.flowOutput(AERefinerFunctional.roleChoice)
         flow_out.set_llm_out({"type": llm_generate("所选角色的 type，取值之一：expert / workgroup / employee / reviewer")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
-    def roleChoice(self, data) -> None:
+    def roleChoice(self, data) -> bool:
         """接收 LLM 选择的问题解决角色 type，存入 self._roleChoiceType（不完成 flow）。
 
         Args:
             data: 回包内层 llm_out，形如 {"type": <expert / workgroup / employee / reviewer>}；
                   若直接为字符串则视为 type 值
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         if isinstance(data, dict):
             self._roleChoiceType = data.get("type") or ""
@@ -136,6 +147,7 @@ class AERefiner(AERole):
             "[AEFlow:%s][%s] 收到角色选择: data=%r, type=%r",
             self.ident, self.title, data, self._roleChoiceType,
         )
+        return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，拼装 AELLMPayload 发送。

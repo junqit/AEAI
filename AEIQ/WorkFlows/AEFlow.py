@@ -145,26 +145,38 @@ class AEFlow(AEFlowInfo):
         # inner 直接传入；target 在注册时已绑定为 self，temporary 执行后由 excutor 自动清除
         self.excutor.exec(command, inner)
 
-    def flow_receive_default(self, out_schema: "Optional[dict]") -> None:
+    def flow_receive_default(self, out_schema: "Optional[dict]") -> bool:
         """
         status=default：收到结果数据，置本 flow 状态为 default。子类可覆写做业务处理。
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         self.status = AEFlowStatus.default
+        return True
 
-    def flow_receive_processing(self, out_schema: "Optional[dict]") -> None:
+    def flow_receive_processing(self, out_schema: "Optional[dict]") -> bool:
         """
         status=processing：收到结果数据，置本 flow 状态为 processing。子类可覆写做业务处理。
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         self.status = AEFlowStatus.processing
+        return True
 
-    def flow_receive_complete(self, out_schema: "Optional[dict]") -> None:
+    def flow_receive_complete(self, out_schema: "Optional[dict]") -> bool:
         """
         status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.flow_complete 通知返回。
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
             self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
+        return True
 
     @property
     def outResult_summary(self) -> str:
@@ -205,11 +217,14 @@ class AEFlow(AEFlowInfo):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
-    def receiveOptimizePrompt(self, data: dict) -> None:
+    def receiveOptimizePrompt(self, data: dict) -> bool:
         """接收 LLM 生成的问题优化提示（不完成 flow，仅存储供后续使用）。
 
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的问题优化提示>}
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         prompt = self._extract_answer(data) if isinstance(data, dict) else None
         if prompt is None and isinstance(data, str):
@@ -221,6 +236,7 @@ class AEFlow(AEFlowInfo):
         )
         # 收到提示词后，用其作为输入上下文发起下一步 LLM 请求，得到最终结果
         self.requestOptimizeInputOptimize()
+        return True
 
     def requestOptimizeInputOptimize(self) -> None:
         """综合自身 title/能力(role_brief)、optimizePromptResult 与 input.content 发送 LLM 请求，得到结果。
@@ -254,11 +270,14 @@ class AEFlow(AEFlowInfo):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
-    def receiveOptimizeInputOptimize(self, data: dict) -> None:
+    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
         """接收 LLM 返回的最终结果，仅打印（不完成 flow、不写 outResult）。
 
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <最终结果>}；若直接为字符串则视为结果
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         result = self._extract_answer(data) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
@@ -267,6 +286,7 @@ class AEFlow(AEFlowInfo):
             "[AEFlow:%s][%s] 收到最终结果:\n%s",
             self.ident, self.title, result or "",
         )
+        return True
 
     def requestRoleInfo(self) -> None:
         """根据问题内容(input.content)请求 LLM 生成自身工作名称(title)与能力范围(responsibility)。
@@ -294,11 +314,14 @@ class AEFlow(AEFlowInfo):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
-    def receiveRole(self, data: dict) -> None:
+    def receiveRole(self, data: dict) -> bool:
         """接收 LLM 生成的自身工作名称与能力范围，写入 title / responsibility（不完成 flow）。
 
         Args:
             data: 回包内层 llm_out，形如 {"title": <工作名称>, "responsibility": <能力范围>}
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
         """
         if not isinstance(data, dict):
             data = {}
@@ -308,6 +331,7 @@ class AEFlow(AEFlowInfo):
             "[AEFlow:%s] 收到角色信息:\ntitle=%r\nresponsibility=%r",
             self.ident, self.title, self.responsibility,
         )
+        return True
 
     @staticmethod
     def _extract_answer(obj) -> Optional[str]:
