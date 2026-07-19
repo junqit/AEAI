@@ -64,8 +64,8 @@ class AEFlowInfo:
         # input：可在初始化时传入（默认 None），未传时由 startFlow 设置
         self.input: Optional[AEFlowInput] = flowInput
 
-        # LLM 生成的问问题模板话术：由 receiveQuestionTemplate 赋值
-        self.questionTemplateResult: str = ""
+        # LLM 基于 title+能力 生成的问题优化提示：由 receiveOptimizePrompt 赋值
+        self.optimizePromptResult: str = ""
 
         # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
         self.outResult: Optional[dict] = None

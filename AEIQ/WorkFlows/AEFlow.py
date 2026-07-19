@@ -23,8 +23,6 @@ from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONT
 from Excutor import AERuntimeExcutor
 from Excutor.AERuntimeExcutor import AEFunctional
 
-# 分隔线标识：用于在话术/日志中分隔角色上下文与指令/内容
-SEPARATOR_LINE = "─" * 28
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +33,9 @@ if TYPE_CHECKING:
 
 class AEFlowFunctional(AEFunctional):
     """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveQuestionTemplate = "receiveQuestionTemplate"  # 接收 LLM 生成的问问题模板话术，传入 map
     receiveRole = "receiveRole"                            # 接收 LLM 生成的自身工作名称与能力范围，传入 map
+    receiveOptimizePrompt = "receiveOptimizePrompt"        # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
+    receiveOptimizeInputOptimize = "receiveOptimizeInputOptimize"  # 接收 LLM 综合上下文返回的最终结果，传入 map
 
 
 class AEFlow(AEFlowInfo):
@@ -179,60 +178,112 @@ class AEFlow(AEFlowInfo):
             return f"我是一名{self.title}，{self.responsibility}。我的回答：{answer}"
         return f"我的回答：{answer}"
 
-    def requestQuestionTemplate(self) -> None:
-        """组装并发送 LLM 请求：带上自身名称(title)与能力(responsibility)，
-        让 LLM 据此生成问问题的模板话术。
+    def requestOptimizePrompt(self) -> None:
+        """组装并发送 LLM 请求：仅带自身名称(title)与能力(responsibility)，
+        让 LLM 据此生成一段「问题优化提示」——该提示用于引导 LLM 对用户输入的问题做进一步优化。
 
-        - messages: system(role_brief + 分隔线，含身份与能力) / user(生成提问模板的指令)
-        - out_schema: {AE_ANSWER: 问问题的模板话术 占位}，由 LLM 填充
-        - 走 receiveQuestionTemplate：回包后赋值 questionTemplateResult（不完成 flow）
+        - messages: system(role_brief，含身份与能力) / user(生成问题优化提示的指令)
+        - out_schema: {AE_ANSWER: 问题优化提示 占位}，由 LLM 填充
+        - 走 receiveOptimizePrompt：回包后赋值 optimizePromptResult（不完成 flow）
+
+        注：本步仅依据 title + 能力生成提示，不传入用户问题；用户问题留待后续步骤用该提示进一步优化。
         """
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            # 以分隔线标识收尾，将角色上下文与后续指令视觉分隔
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{role_brief}\n{SEPARATOR_LINE}"})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: "请根据你的标题与能力，生成一个用于向用户提问的模板话术；话术需体现你的专业角色与能力范围，便于引导用户提出更精准的问题。",
+            AE_CONTENT: (
+                "请根据你的标题与能力，生成一段「问题优化提示」；该提示将用于引导 LLM 对用户输入的问题"
+                "做进一步优化（更清晰、更完整、更易于理解）。提示需体现你的专业角色与能力范围，"
+                "且不依赖任何具体用户问题，仅给出通用的优化方向与约束。"
+            ),
         })
-        flow_out = self.flowOutput(AEFlowFunctional.receiveQuestionTemplate)
-        flow_out.set_llm_out({AE_ANSWER: llm_generate("问问题的模板话术")})
+        flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizePrompt)
+        flow_out.set_llm_out({AE_ANSWER: llm_generate("问题优化提示，用于引导对用户问题做进一步优化")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
-    def receiveQuestionTemplate(self, data: dict) -> None:
-        """接收 LLM 生成的问问题模板话术（不完成 flow，仅存储供后续使用）。
+    def receiveOptimizePrompt(self, data: dict) -> None:
+        """接收 LLM 生成的问题优化提示（不完成 flow，仅存储供后续使用）。
 
         Args:
-            data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的模板话术>}
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的问题优化提示>}
         """
-        template = self._extract_answer(data) if isinstance(data, dict) else None
-        if template is None and isinstance(data, str):
-            template = data
-        self.questionTemplateResult = template or ""
-        # 以分隔线标识包裹模板，便于在日志中辨识边界
+        prompt = self._extract_answer(data) if isinstance(data, dict) else None
+        if prompt is None and isinstance(data, str):
+            prompt = data
+        self.optimizePromptResult = prompt or ""
         logger.info(
-            "[AEFlow:%s][%s] 收到问问题模板话术:\n%s\n%s\n%s",
-            self.ident, self.title, SEPARATOR_LINE, self.questionTemplateResult, SEPARATOR_LINE,
+            "[AEFlow:%s][%s] 收到问题优化提示:\n%s",
+            self.ident, self.title, self.optimizePromptResult,
+        )
+        # 收到提示词后，用其作为输入上下文发起下一步 LLM 请求，得到最终结果
+        self.requestOptimizeInputOptimize()
+
+    def requestOptimizeInputOptimize(self) -> None:
+        """综合自身 title/能力(role_brief)、optimizePromptResult 与 input.content 发送 LLM 请求，得到结果。
+
+        - messages: system(role_brief) / system(input.content) / user(optimizePromptResult)，每条信息单独一条消息
+        - out_schema: 本 flow 的输出结构（output 已在构造时设置），由 LLM 填充最终结果
+        - 走 receiveOptimizeInputOptimize：回包仅打印结果（不完成 flow）
+        """
+        messages = []
+        # system：身份与能力(role_brief)，单独一条
+        role_brief = self.role_brief
+        if len(role_brief) > 0:
+            messages.append({
+                AE_ROLE: AEConentRole.SYSTEM.value,
+                AE_CONTENT: role_brief,
+            })
+        # system：用户问题(input.content)，单独一条
+        if self.input is not None and self.input.content:
+            messages.append({
+                AE_ROLE: AEConentRole.SYSTEM.value,
+                AE_CONTENT: f"用户问题：\n{self.input.content}",
+            })
+        # user：问题优化提示(optimizePromptResult)，作为优化指引
+        if len(self.optimizePromptResult) > 0:
+            messages.append({
+                AE_ROLE: AEConentRole.USER.value,
+                AE_CONTENT: self.optimizePromptResult,
+            })
+        # out_schema 由 flowOutput 构建（注册功能 + 标准结构），不复用当前 flow 的 output
+        flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInputOptimize)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
+
+    def receiveOptimizeInputOptimize(self, data: dict) -> None:
+        """接收 LLM 返回的最终结果，仅打印（不完成 flow、不写 outResult）。
+
+        Args:
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <最终结果>}；若直接为字符串则视为结果
+        """
+        result = self._extract_answer(data) if isinstance(data, dict) else None
+        if result is None and isinstance(data, str):
+            result = data
+        logger.info(
+            "[AEFlow:%s][%s] 收到最终结果:\n%s",
+            self.ident, self.title, result or "",
         )
 
     def requestRoleInfo(self) -> None:
         """根据问题内容(input.content)请求 LLM 生成自身工作名称(title)与能力范围(responsibility)。
 
-        - messages: system(role_brief + 分隔线，含已有身份与能力，可为空) / user(问题内容 + 生成角色指令)
+        - messages: system(role_brief，含已有身份与能力，可为空) / user(问题内容 + 生成角色指令)
         - out_schema: {title, responsibility 占位}，由 LLM 填充
         - 走 receiveRole：回包后写入 self.title / self.responsibility（不完成 flow）
         """
         messages = []
         role_brief = self.role_brief
         if len(role_brief) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{role_brief}\n{SEPARATOR_LINE}"})
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "请根据以下问题内容，生成你的工作名称与能力范围；工作名称需体现专业领域与定位，"
-                f"能力范围需明确职责边界与禁止事项。\n{SEPARATOR_LINE}\n问题内容：{self.input.content if self.input else ''}"
+                f"能力范围需明确职责边界与禁止事项。\n问题内容：{self.input.content if self.input else ''}"
             ),
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveRole)
@@ -254,8 +305,8 @@ class AEFlow(AEFlowInfo):
         self.title = data.get("title", "") or ""
         self.responsibility = data.get("responsibility", "") or ""
         logger.info(
-            "[AEFlow:%s] 收到角色信息:\n%s\ntitle=%r\nresponsibility=%r\n%s",
-            self.ident, SEPARATOR_LINE, self.title, self.responsibility, SEPARATOR_LINE,
+            "[AEFlow:%s] 收到角色信息:\ntitle=%r\nresponsibility=%r",
+            self.ident, self.title, self.responsibility,
         )
 
     @staticmethod

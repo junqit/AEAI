@@ -126,7 +126,7 @@ class AERefiner(AEFlow):
             return
 
 
-        self.requestQuestionTemplate()
+        self.requestOptimizePrompt()
         # messages = []
         # role_brief = self.role_brief
         # if len(role_brief) > 0:
