@@ -8,7 +8,8 @@ from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
-from WorkFlows.AEFlow import AEFlowStatus, AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
@@ -106,10 +107,10 @@ class AEBaseContext:
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 
-    def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
-        """AEFlowDelegate: flow 完成通知。status=complete 时组装 AENetRsp 经 delegate 发送给客户端。"""
+    def flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
+        """AEFlowDelegate: flow 完成通知。event=default 时组装 AENetRsp 经 delegate 发送给客户端。"""
         flow_ident = result.get(AE_IDENT) if isinstance(result, dict) else None
-        if flowStatus != AEFlowStatus.complete:
+        if event != AEFlowCompletEvent.default:
             return
         # complete：找到所属 chat，回填 req 组装 response 发送
         chat = self._chat_map.get(flow_ident)

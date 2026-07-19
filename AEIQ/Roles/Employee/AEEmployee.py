@@ -6,11 +6,8 @@ AEEmployee - 员工 Flow，继承 AERole。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
 from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
@@ -32,21 +29,19 @@ class AEEmployee(AERole):
         )
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input，拼装 AELLMPayload 发送。
-
-        - messages: system(role_brief) / user(input.content)
-        - out_schema: 本 flow 的输出结构（output 已在构造时设置，由 LLM 填充）
+        """启动：交基类置 input，先 requestRoleInfo 生成自身 title/能力，回包 receiveRole 后再执行实际任务。
 
         Args:
             flowInput: flow 输入数据（content 即工作组下发的子任务）
         """
         if not super().startFlow(flowInput):
             return
-        messages = []
-        role_brief = self.role_brief
-        if len(role_brief) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
-        flow_out = self.flowOutput(AEFlowFunctional.flow_receive_complete)
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRole，再发送实际任务）
+        self.requestRoleInfo()
+
+    def receiveRole(self, data: dict) -> bool:
+        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizePrompt）。"""
+        result = super().receiveRole(data)
+        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizePrompt）
+        self.requestOptimizePrompt()
+        return result

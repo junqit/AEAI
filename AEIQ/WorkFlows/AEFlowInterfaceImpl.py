@@ -13,8 +13,8 @@ import logging
 from typing import Optional, TYPE_CHECKING
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AEFlowInfo, AE_IDENT, AEFlowStatus
-from Context.Context.AELLMPayload import AELLMPayload
+from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_ANSWER, AE_CONFIRM, AEFlowStatus
+from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
 
 if TYPE_CHECKING:
@@ -123,14 +123,22 @@ class AEFlowOptimizeQuestion(AEFlowInfo):
             })
         # out_schema 由 flowOutput 构建（注册功能 + 标准结构），不复用当前 flow 的 output
         flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInputOptimize)
+        # llm_out：最终结果(AE_ANSWER) 与 需确认信息(AE_CONFIRM) 二选一，不可同时填写
+        flow_out.set_llm_out({
+            AE_ANSWER: llm_generate("优化后的最终结果；与 confirm 二选一，需提问者确认时本字段留空"),
+            AE_CONFIRM: llm_generate("需要提问者确认的信息；根据自身工作范围填写，不要超出职责范围，要有界限；与 reply 二选一，给出确认信息时 reply 留空，无确认需求时本字段留空"),
+        })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
     def receiveOptimizeInputOptimize(self, data: dict) -> bool:
         """接收 LLM 返回的最终结果，仅打印（不完成 flow、不写 outResult）。
 
+        解析结论中是否含「需要提问者确认的信息」(AE_CONFIRM 字段)：非空则记录为待确认。
+
         Args:
-            data: 回包内层 llm_out，形如 {AE_ANSWER: <最终结果>}；若直接为字符串则视为结果
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <最终结果>, AE_CONFIRM: <需确认信息>}；
+                  若直接为字符串则视为结果
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -138,8 +146,17 @@ class AEFlowOptimizeQuestion(AEFlowInfo):
         result = self._extract_answer(data) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
-        logger.info(
-            "[AEFlow:%s][%s] 收到最终结果:\n%s",
-            self.ident, self.title, result or "",
-        )
+        # 解析是否含有需要用户确认的信息
+        confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
+        confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
+        if confirm:
+            logger.info(
+                "[AEFlow:%s][%s] 收到最终结果:\n%s\n[需要用户确认] %s",
+                self.ident, self.title, result or "", confirm,
+            )
+        else:
+            logger.info(
+                "[AEFlow:%s][%s] 收到最终结果:\n%s",
+                self.ident, self.title, result or "",
+            )
         return True

@@ -21,6 +21,9 @@ AE_IDENT = "ident"
 # llm_out 内默认 answer 字段名
 AE_ANSWER = "reply"
 
+# llm_out 内「需要提问者确认的信息」字段名
+AE_CONFIRM = "confirm"
+
 # out_schema 内功能性调用唯一标识字段名（每次 flowOutput 随机生成）
 AE_funcationkey = "excutor"
 
