@@ -8,7 +8,6 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, ROLE_PARAMS
@@ -107,7 +106,7 @@ class AERefiner(AERole):
 
     def roleChoice(self, data) -> bool:
         """接收 LLM 选择的问题解决角色 type：存储后据 type 创建角色 flow，
-        通过 delegate.flow_add_next_flow 添加为下一个 flow，再调用 delegate.flow_complete 通知完成。
+        通过 delegate.flow_add_next_flow 添加为下一个 flow，再调用 self.flow_receive_complete 完成 refiner。
 
         Args:
             data: 回包内层 llm_out，形如 {"type": <expert / workgroup / employee / reviewer>}；
@@ -129,12 +128,23 @@ class AERefiner(AERole):
         # 根据角色 type 创建对应角色 flow，交 delegate 添加为下一个 flow，再通知 delegate 完成
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
         role_flow = self.createRoleFlow(self._roleChoiceType, delegate_ident)
-        if role_flow is not None and self.delegate is not None:
-            self.delegate.flow_add_next_flow(role_flow)
-            self.delegate.flow_complete(
-                {AE_IDENT: self.ident, AE_ANSWER: self._refinedQuestion},
-                AEFlowCompletEvent.startFlow,
+        if role_flow is None:
+            logger.warning(
+                "[AERefiner:%s] 创建角色 flow 失败，type=%r，跳过添加与完成通知",
+                self.ident, self._roleChoiceType,
             )
+            return True
+        if self.delegate is None:
+            logger.warning(
+                "[AERefiner:%s] delegate 未设置，无法添加角色 flow / 通知完成，type=%r",
+                self.ident, self._roleChoiceType,
+            )
+            return True
+        self.delegate.flow_add_next_flow(role_flow)
+        # 完成 refiner 自身：置 complete、写 outResult，并由 flow_receive_complete 向上 flow_complete 通知
+        self.flow_receive_complete(
+            {AE_IDENT: role_flow.ident, AE_ANSWER: self._refinedQuestion},
+        )
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:

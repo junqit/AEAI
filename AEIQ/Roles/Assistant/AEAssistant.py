@@ -9,6 +9,7 @@ import logging
 from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
+from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 from Roles.AEBaseRole import AERole
@@ -111,7 +112,7 @@ class AEAssistant(AERole):
             wg = AEWorkGroup(
                 flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("工作组结论")}),
             )
-            self.addFlow(wg)
+            AEFlowInterfaceImpl.addFlow(self, wg)
             wg.startFlow(AEFlowInput(content=content))
         return True
 
