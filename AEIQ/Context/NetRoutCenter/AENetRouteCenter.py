@@ -34,8 +34,16 @@ class AENetRouteCenter:
             logger.warning("Request user has no uid, ignored")
             return
 
+        logger.info("[AENetRouteCenter] on_request_received: user_key=%s, path=%s, cont_type=%s, cont_ident=%s, cont_space=%s",
+                    user_key,
+                    request.req.path if request.req else None,
+                    request.cont.type if request.cont else None,
+                    request.cont.ident if request.cont else None,
+                    request.cont.space if request.cont else None)
+
         center = self.userCenters.get(user_key)
         if center is None:
+            logger.info("[AENetRouteCenter] 创建 AEUserContext: user_key=%s", user_key)
             center = AEUserContext(request.user, self)
             self.userCenters[user_key] = center
 

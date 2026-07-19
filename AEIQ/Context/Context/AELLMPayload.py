@@ -68,6 +68,11 @@ class AELLMPayload:
         if param in self._env_params:
             self._env_params.remove(param)
 
+    @property
+    def env_params(self) -> List[AEEnvParamType]:
+        """返回当前携带的环境参数列表（副本）。"""
+        return list(self._env_params)
+
     def to_llm_request_dic(self) -> dict:
         # 按 out_schema 输出：注入 system 指令，要求按该结构输出合法 JSON
         schema_json = json.dumps(self.out_schema, ensure_ascii=False, indent=2)

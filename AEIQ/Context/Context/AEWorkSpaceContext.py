@@ -19,7 +19,7 @@ class AEWorkSpaceContext(AEBaseContext):
     def __init__(self, space: str = ""):
         super().__init__(context_type=AEContextType.workspace, space=space)
 
-    def flow_llm_request(self, payload: "AELLMPayload") -> None:
+    def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
         # 注入工作目录约束（首条 system 消息）：所有修改只能在此目录下，不可操作其他目录内容
@@ -27,8 +27,8 @@ class AEWorkSpaceContext(AEBaseContext):
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: f"当前工作目录：{self.space}。所有修改只能在此目录下进行，不可操作其他目录的内容。",
         })
-        # env_param prompt 注入 + 包装 out_schema + 上送，交基类处理
-        super().flow_llm_request(payload)
+        # env_param prompt 注入由基类 AEBaseContext.receive_flow_llm_request 处理
+        super().receive_flow_llm_request(payload)
 
     def receive_llm_response(self, data: dict) -> None:
         """

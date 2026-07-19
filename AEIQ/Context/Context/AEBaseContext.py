@@ -73,11 +73,9 @@ class AEBaseContext:
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
         """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，构建 input 后交 startFlow 启动
         （不等回，flow 内部异步流转）。
-
-        - 新建 AEChat（构造时传入本 chat 输出结构 {ident, reply}），delegate 设为当前 context，
-          req 存入 chat，按 chat.ident 存入 _chat_map（添加持有）
-        - 由 question 构建 AEFlowInput，startFlow 丢到线程池后立即返回；后续 LLM 往返经 loop 异步流转
         """
+        logger.info("[Context:%s] receive_chat: question=%r, context_type=%s",
+                    self.ident, question.content if question else None, self.context_type)
         if question is None:
             logger.error("[Context:%s] 收到的 AENetQues 为空，忽略", self.ident)
             return
@@ -101,9 +99,9 @@ class AEBaseContext:
 
     # ==================== AEFlowDelegate 实现（作为所属 chat 的 delegate） ====================
 
-    def flow_llm_request(self, payload: "AELLMPayload") -> None:
+    def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
-        用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
+        用 context.ident 包装 out_schema，回程按 ident 路由回本 Context。"""
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 

@@ -42,40 +42,50 @@ class AEUserContext:
 
     def handle_request(self, request: AENetReq) -> None:
         """处理该用户请求：提交到事件循环异步处理，不阻塞调用方（socket 解析线程）。"""
+        logger.info("[AEUserContext] handle_request: 提交到事件循环, user=%s, path=%s",
+                    request.user.user_key if request.user else None,
+                    request.req.path if request.req else None)
         asyncio.run_coroutine_threadsafe(self._dispatch(request), self._loop)
 
     async def _dispatch(self, request: AENetReq) -> None:
         """全路径分解后命中/创建 context 并分发（在事件循环内异步执行，无同步阻塞）。"""
         # 关键判断：context 信息
         if not request.cont or not request.cont.type:
-            logger.warning("Request has no context info, ignored")
+            logger.warning("[AEUserContext] _dispatch: 无 context 信息, cont=%r, 忽略", request.cont)
             return
 
         path = request.req.path if request.req else None
         cont = request.cont
         req = request.req
 
+        logger.info("[AEUserContext] _dispatch: path=%s, cont_type=%s, cont_ident=%s, cont_space=%s",
+                    path, cont.type, cont.ident, cont.space)
+
         # context list 无需具体 context
         if path == AE_PATH_CONTEXT_LIST:
+            logger.info("[AEUserContext] → handle_context_list")
             self._context_center.handle_context_list(req)
             return
 
         # 路径分解：create / chat / chat_list / info，交 AEContextCenter 处理（各自内部 resolve）
-        # 仅 info（subprocess）有异步 I/O 需 await；create / chat / chat_list 为同步处理
         if path == AE_PATH_CONTEXT_CREATE:
+            logger.info("[AEUserContext] → handle_create")
             self._context_center.handle_create(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT:
+            logger.info("[AEUserContext] → handle_chat")
             self._context_center.handle_chat(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT_LIST:
+            logger.info("[AEUserContext] → handle_chat_list")
             self._context_center.handle_chat_list(cont, req)
             return
         if path == AE_PATH_CONTEXT_INFO:
+            logger.info("[AEUserContext] → handle_info")
             await self._context_center.handle_info(cont, req)
             return
 
-        logger.info(f"Unhandled path: {path}")
+        logger.warning("[AEUserContext] _dispatch: 未处理的 path=%s", path)
 
     # ==================== AEContextDelegate 实现 ====================
     # 网络请求/回复转发给 delegate（AENetworkDelegate）；

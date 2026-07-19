@@ -62,7 +62,7 @@ class AEFlowInterfaceImpl:
           - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receive_llm_response）
           - ident 既非自身、也未命中子 flow → 打印错误日志
 
-        data 约定为 flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
+        data 约定为 receive_flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
         """
         if not isinstance(data, dict):
@@ -125,7 +125,7 @@ class AEFlowOptimizeQuestion(AEFlowInfo):
         flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInputOptimize)
         # llm_out：最终结果(AE_ANSWER) 与 需确认信息(AE_CONFIRM) 二选一，不可同时填写
         flow_out.set_llm_out({
-            AE_ANSWER: llm_generate("优化后的最终结果；与 confirm 二选一，需提问者确认时本字段留空"),
+            AE_ANSWER: llm_generate("优化后的最终结果"),
             # AE_CONFIRM: llm_generate("需要提问者确认的信息；根据自身工作范围填写，不要超出职责范围，要有界限；与 reply 二选一，给出确认信息时 reply 留空，无确认需求时本字段留空"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

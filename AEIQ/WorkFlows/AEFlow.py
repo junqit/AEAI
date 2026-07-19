@@ -5,7 +5,7 @@ AEFlow - Flow 基类，多继承 AEFlowRolePrompt / AEFlowOptimizeQuestion，
 方法分区：
   - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
     flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
-  - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：flow_llm_request / flow_add_next_flow / receive_flow_complete
+  - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
   - 私有方法 / 属性：outResult_summary / _extract_answer
 
 角色描述（requestOptimizePrompt 等）、问题优化（requestOptimizeInputOptimize 等）、
@@ -172,17 +172,17 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
             "title": self.title,
             AE_LLM_OUT: payload.out_schema,
         }
-        self.delegate.flow_llm_request(payload)
+        self.delegate.receive_flow_llm_request(payload)
 
     # ==================== AEFlowDelegate 实现（转调 AEFlowDelegateImpl 静态方法，传入 self）====================
 
-    def flow_llm_request(self, payload: "AELLMPayload") -> None:
+    def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """发送 AELLMPayload 调用 LLM（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.flow_llm_request(self, payload)
+        AEFlowDelegateImpl.receive_flow_llm_request(self, payload)
 
-    def flow_add_next_flow(self, flow: "AEFlowInterface") -> None:
+    def receive_add_flow(self, flow: "AEFlowInterface") -> None:
         """添加下一个待执行的子 flow（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.flow_add_next_flow(self, flow)
+        AEFlowDelegateImpl.receive_add_flow(self, flow)
 
     def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
         """Flow 完成通知（转调 AEFlowDelegateImpl）。"""

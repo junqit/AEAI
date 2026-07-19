@@ -107,7 +107,7 @@ class AERefiner(AERole):
 
     def roleChoice(self, data) -> bool:
         """接收 LLM 选择的问题解决角色 type：存储后据 type 创建角色 flow，
-        通过 delegate.flow_add_next_flow 添加为下一个 flow，再调用 self.flow_receive_complete 完成 refiner。
+        通过 delegate.receive_add_flow 添加为下一个 flow，再调用 self.flow_receive_complete 完成 refiner。
 
         Args:
             data: 回包内层 llm_out，形如 {"type": <expert / workgroup / employee / reviewer>}；
@@ -142,7 +142,7 @@ class AERefiner(AERole):
                 self.ident, self._roleChoiceType,
             )
             return True
-        self.delegate.flow_add_next_flow(role_flow)
+        self.delegate.receive_add_flow(role_flow)
         # 完成 refiner 自身：置 complete、写 outResult，并以 startFlow 事件向上通知，delegate 据此 startFlow role_flow
         self.flow_receive_complete(
             {AE_IDENT: role_flow.ident, AE_ANSWER: self._refinedQuestion},

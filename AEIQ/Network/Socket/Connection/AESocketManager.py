@@ -55,9 +55,17 @@ class AESocketManager:
             request: AENetReq = result.payload
             if request.user:
                 self._register_user(request.user, result.client_addr)
-                
+
+            logger.info("[AESocketManager] 收到 REQUEST，listeners=%d, user=%s, path=%s, cont_type=%s",
+                        len(self._listeners),
+                        request.user.user_key if request.user else None,
+                        request.req.path if request.req else None,
+                        request.cont.type if request.cont else None)
             for listener in self._listeners:
-                listener.on_request_received(request)
+                try:
+                    listener.on_request_received(request)
+                except Exception as e:
+                    logger.error("[AESocketManager] listener.on_request_received 异常: %s", e, exc_info=True)
         elif result.data_type == AEDataType.PING:
             logger.debug(f"PING from {result.client_addr}")
         elif result.data_type == AEDataType.HEARTBEAT:

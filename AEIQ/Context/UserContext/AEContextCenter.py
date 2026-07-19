@@ -53,7 +53,15 @@ class AEContextCenter(AEContextDelegate):
         self._delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:
-        """转发 LLM 请求给上层 delegate。"""
+        """转发 LLM 请求给上层 delegate；注入 DirectoryContext 的环境参数 prompt。"""
+        # 获取 DirectoryContext，注入 payload 携带的环境参数（env_params）prompt
+        directory = self.find_by_type(AEContextType.directory)
+        if directory is not None:
+            from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+            for env_param in reversed(list(payload.env_params)):
+                prompt = directory.build_env_param_prompt(env_param)
+                if prompt:
+                    payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
@@ -61,20 +69,24 @@ class AEContextCenter(AEContextDelegate):
     def resolve_context(self, cont: Optional[AENetCont]) -> Optional[AEBaseContext]:
         """按 cont.ident 命中已有 context；命中不到则按 cont.type 创建。"""
         if cont is None or not cont.type:
-            logger.warning("Request has no context info, ignored")
+            logger.warning("[AEContextCenter] resolve_context: 无 context 信息, 忽略")
             return None
+
+        logger.info("[AEContextCenter] resolve_context: type=%s, ident=%s, space=%s", cont.type, cont.ident, cont.space)
 
         # 先按 ident 命中
         if cont.ident:
             existing = self._contexts.get(cont.ident)
             if existing is not None:
+                logger.info("[AEContextCenter] 命中已有 context: ident=%s, type=%s", cont.ident, existing.context_type)
                 return existing
 
         # 命中不到则按 type 创建
         space = cont.space or ""
         if cont.type == AEContextType.workspace.value and not space:
-            logger.warning("Cannot create WorkSpaceContext: space is required")
+            logger.warning("[AEContextCenter] 无法创建 WorkSpaceContext: space 为空")
             return None
+        logger.info("[AEContextCenter] 未命中, 按 type 创建: type=%s, space=%s", cont.type, space)
         return self._create_context(cont.type, space=space)
 
     def get_all(self) -> list:
@@ -96,12 +108,13 @@ class AEContextCenter(AEContextDelegate):
         try:
             context_type = AEContextType(context_type_str)
         except ValueError:
-            logger.warning(f"Unknown context type: {context_type_str}")
+            logger.warning("[AEContextCenter] _create_context: 未知 context type=%s", context_type_str)
             return None
 
         if context_type in self._SINGLETON_TYPES:
             existing = self.find_by_type(context_type)
             if existing:
+                logger.info("[AEContextCenter] _create_context: 单例已存在, 复用 type=%s, ident=%s", context_type, existing.ident)
                 return existing
 
         context_map = {
@@ -115,9 +128,8 @@ class AEContextCenter(AEContextDelegate):
         context.set_delegate(self)
 
         self._contexts[context.ident] = context
-        logger.info(
-            f"Context created: ident={context.ident}, type={context_type_str}({context_type!r})"
-        )
+        logger.info("[AEContextCenter] _create_context: 创建成功 type=%s, ident=%s, space=%s",
+                     context_type, context.ident, space)
         return context
 
     # ==================== Path 处理（收 cont，经 delegate 发响应） ====================
@@ -151,15 +163,18 @@ class AEContextCenter(AEContextDelegate):
     def handle_chat(self, cont: AENetCont, req: AENetReqInfo) -> None:
         """处理 chat：交 workspace 接收（receive_chat 内部异步流转，不等回）；
         回复由 Chat 处理完成后 Context 内部自行处理，不在此处回复。"""
+        logger.info("[AEContextCenter] handle_chat: 开始, cont_type=%s, cont_ident=%s", cont.type if cont else None, cont.ident if cont else None)
         context = self.resolve_context(cont)
         if context is None:
+            logger.warning("[AEContextCenter] handle_chat: resolve_context 返回 None, 无法处理")
             return
 
         if not isinstance(context, AEWorkSpaceContext):
-            logger.warning(f"chat 仅支持 WorkSpace，当前 type={context.context_type!r}")
+            logger.warning("[AEContextCenter] handle_chat: chat 仅支持 WorkSpace, 当前 type=%s", context.context_type)
             return
 
         question = cont.ques if cont else None
+        logger.info("[AEContextCenter] handle_chat: 交 workspace receive_chat, question=%r", question.content if question else None)
         context.receive_chat(question, req)
 
     def handle_chat_list(self, cont: AENetCont, req: AENetReqInfo) -> None:

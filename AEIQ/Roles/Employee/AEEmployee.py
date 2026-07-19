@@ -10,7 +10,7 @@ from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_CONFIRM
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
-from Context.Context.AELLMPayload import AELLMPayload, llm_generate
+from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Tools.Scrips import AEScript
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
@@ -111,12 +111,21 @@ class AEEmployee(AERole):
             ),
         })
         flow_out = self.flowOutput(AEEmployeeFunction.receiveScripts)
+        # AE_ANSWER 设为数组结构：每项为脚本 spec 模板（title / script / type 占位），由 LLM 填充多项
         flow_out.set_llm_out({
-            AE_ANSWER: llm_generate(
-                "脚本任务 JSON 数组，每项结构 {title: 作用, script: 脚本内容, type: python/shell/ruby}"
-            ),
+            AE_ANSWER: [
+                {
+                    "title": llm_generate("作用（脚本用途说明）"),
+                    "script": llm_generate("脚本内容（可执行的脚本文本）"),
+                    "type": llm_generate("脚本类型，取值 python / shell / ruby 之一"),
+                }
+            ],
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        # 携带可用脚本执行环境（AEEnvParamType: python / ruby / shell）
+        payload.add_env_param(AEEnvParamType.python)
+        payload.add_env_param(AEEnvParamType.ruby)
+        payload.add_env_param(AEEnvParamType.shell)
         self.send_llm_payload(payload)
 
     def receiveScripts(self, data: dict) -> bool:

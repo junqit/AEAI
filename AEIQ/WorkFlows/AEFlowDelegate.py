@@ -2,9 +2,9 @@
 AEFlowDelegate - Flow 内部信息向外流转的委托协议 + AEFlowCompletEvent 事件 + AEFlowDelegateImpl 实现。
 
 Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / ContextManager）交互：
-  1. flow_llm_request                发送 AELLMPayload 调用 LLM
+  1. receive_flow_llm_request                发送 AELLMPayload 调用 LLM
   2. receive_flow_complete           Flow 完成，按 input_schema 结构返回 map
-  3. flow_add_next_flow      添加下一个待执行的子 flow
+  3. receive_add_flow      添加下一个待执行的子 flow
 
 任何类只要实现以下方法即视为符合协议，无需继承。
 
@@ -41,7 +41,7 @@ class AEFlowCompletEvent(str, Enum):
 class AEFlowDelegate(Protocol):
     """Flow 委托协议：Flow 内部信息向外流转的出口"""
 
-    def flow_llm_request(self, payload: 'AELLMPayload') -> None:
+    def receive_flow_llm_request(self, payload: 'AELLMPayload') -> None:
         """
         发送 AELLMPayload 结构体调用 LLM（无返回值）。
 
@@ -60,7 +60,7 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def flow_add_next_flow(self, flow: 'AEFlowInterface') -> None:
+    def receive_add_flow(self, flow: 'AEFlowInterface') -> None:
         """
         添加下一个待执行的子 flow。
 
@@ -74,7 +74,7 @@ class AEFlowDelegateImpl:
     """AEFlowDelegate 协议方法实现（静态工具类，不实例化）。调用方传入 AEFlow 实例 flow。"""
 
     @staticmethod
-    def flow_add_next_flow(flow, next_flow) -> None:
+    def receive_add_flow(flow, next_flow) -> None:
         """添加下一个待执行的子 flow：将其作为子 flow 加入（addFlow），成为 nextFlow 候选。
 
         加入后由父 flow 的 receive_flow_result 在适当时机 startFlow 启动（input 取上游结果）。
@@ -85,12 +85,12 @@ class AEFlowDelegateImpl:
         """
         AEFlowInterfaceImpl.addFlow(flow, next_flow)
         logger.info(
-            "[AEFlow:%s][%s] flow_add_next_flow 添加子 flow: ident=%s",
+            "[AEFlow:%s][%s] receive_add_flow 添加子 flow: ident=%s",
             flow.ident, flow.title, next_flow.ident,
         )
 
     @staticmethod
-    def flow_llm_request(flow, payload: "AELLMPayload") -> None:
+    def receive_flow_llm_request(flow, payload: "AELLMPayload") -> None:
         """
         发送 AELLMPayload 调用 LLM（无返回值）。
 
@@ -113,7 +113,7 @@ class AEFlowDelegateImpl:
             "title": flow.title,
             AE_LLM_OUT: payload.out_schema,
         }
-        flow.delegate.flow_llm_request(payload)
+        flow.delegate.receive_flow_llm_request(payload)
 
     @staticmethod
     def receive_flow_complete(flow, result: dict, event: "AEFlowCompletEvent") -> None:

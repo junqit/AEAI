@@ -3,15 +3,19 @@ import shutil
 import subprocess
 import platform
 import logging
-from typing import Dict
+from typing import Dict, List, Optional
+
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from .AELLMPayload import AEEnvParamType
 
 logger = logging.getLogger(__name__)
 
-class AEDirectoryContext(AEBaseContext):
 
+class AEDirectoryContext(AEBaseContext):
+    """目录级 Context：提供系统/脚本环境探测、环境参数 prompt 构建与 role prompt 组装。"""
+
+    # 可探测的脚本语言
     SCRIPT_LANGUAGES = ["ruby", "python", "zsh"]
 
     # 各环境参数类型的描述文本（prompt 静态部分）
@@ -55,9 +59,10 @@ class AEDirectoryContext(AEBaseContext):
 
     def __init__(self, space: str = ""):
         super().__init__(context_type=AEContextType.directory, space=space)
-        self._scripts_cache: list = None
-        # 环境参数信息缓存（env_param -> info），仅生成一次，refresh_scripts 时清空
+        self._scripts_cache: Optional[list] = None
         self._env_param_info_cache: Dict[AEEnvParamType, str] = {}
+
+    # ==================== 环境参数（env_param）探测与 prompt 构建 ====================
 
     def _discover_scripts(self) -> list:
         """查找当前电脑内所有可用的脚本语言，结果缓存只执行一次"""
@@ -69,7 +74,7 @@ class AEDirectoryContext(AEBaseContext):
             if which:
                 scripts.append(self._get_script_info(name, which))
         self._scripts_cache = scripts
-        return self._scripts_cache
+        return scripts
 
     def refresh_scripts(self):
         """外部触发重新扫描脚本信息"""
@@ -156,6 +161,8 @@ class AEDirectoryContext(AEBaseContext):
         except Exception:
             pass
         return []
+
+    # ==================== role prompt 组装 ====================
 
     def build_system_prompt(self) -> str:
         """将当前系统信息和脚本信息组装为 role prompt"""
