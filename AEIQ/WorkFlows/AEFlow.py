@@ -16,6 +16,7 @@ import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_ANSWER, AE_funcationkey
+from .AEFlowDelegate import AEFlowCompletEvent
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
@@ -175,7 +176,7 @@ class AEFlow(AEFlowInfo):
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            self.delegate.flow_complete(out_schema, AEFlowStatus.complete)
+            self.delegate.flow_complete(out_schema, AEFlowCompletEvent.default)
         return True
 
     @property
@@ -419,29 +420,23 @@ class AEFlow(AEFlowInfo):
         }
         self.delegate.flow_llm_request(payload)
 
-    def flow_complete(self, result: dict, flowStatus: "AEFlowStatus") -> None:
+    def flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
         """
-        Flow 完成通知：仅处理 complete，按 result.ident 路由结果数据。
+        Flow 完成通知：按 result.ident 路由结果数据；event 标识完成事件（default / startFlow）。
 
         - ident == self.ident → 确认是本 flow 需处理的内容，交 receive_flow_result
         - ident 命中 _flows 内子 flow → 转发给该子 flow（receive_flow_result）
 
-        非 complete 状态（default / processing）忽略并记录告警。
+        default / startFlow 均视为完成通知，按 ident 路由；startFlow 由 delegate 侧据需启动下一个 flow。
 
         Args:
             result: 完成 flow 的结果数据（含 ident）
-            flowStatus: 完成 flow 的状态
+            event: 完成事件（AEFlowCompletEvent.default / startFlow）
         """
-        if flowStatus != AEFlowStatus.complete:
-            logger.warning(
-                "[AEFlow:%s][%s] flow_complete 仅处理 complete，当前 %s，忽略",
-                self.ident, self.title, flowStatus,
-            )
-            return
         ident = result.get(AE_IDENT) if isinstance(result, dict) else None
         logger.info(
-            "[recv][AEFlow:%s][%s] flow_complete ident=%r, result:\n%s",
-            self.ident, self.title, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
+            "[recv][AEFlow:%s][%s] flow_complete event=%s ident=%r, result:\n%s",
+            self.ident, self.title, event, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
         )
         # 确认是本 flow 需处理的内容：ident 命中自身 → 交 receive_flow_result
         if ident == self.ident:

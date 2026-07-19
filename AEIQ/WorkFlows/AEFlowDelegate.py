@@ -8,12 +8,18 @@ Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / C
 
 任何类只要实现以下方法即视为符合协议，无需继承。
 """
+from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
     from Context.Context.AELLMPayload import AELLMPayload
-    from .AEFlow import AEFlowStatus
     from .AEFlowInterface import AEFlowInterface
+
+
+class AEFlowCompletEvent(str, Enum):
+    """Flow 完成事件（delegate.flow_complete 传入）：区分完成后的后续动作"""
+    default = "default"            # 完成回到默认（普通完成）
+    startFlow = "startFlow"        # 完成并启动下一个 flow
 
 
 @runtime_checkable
@@ -29,13 +35,13 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def flow_complete(self, result: dict, flowStatus: 'AEFlowStatus') -> None:
+    def flow_complete(self, result: dict, event: 'AEFlowCompletEvent') -> None:
         """
-        Flow 完成通知：result 为完成 flow 的元信息（map），flowStatus 为其状态。
+        Flow 完成通知：result 为完成 flow 的元信息（map），event 为完成事件。
 
         Args:
             result: 完成 flow 的元信息 map（含 ident）
-            flowStatus: 完成 flow 的状态
+            event: 完成事件（AEFlowCompletEvent.default / startFlow）
         """
         ...
 

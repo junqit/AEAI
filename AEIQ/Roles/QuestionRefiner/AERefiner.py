@@ -7,6 +7,8 @@ import logging
 
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, ROLE_PARAMS
@@ -17,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 class AERefinerFunctional(AEFunctional):
     """问题精炼 Flow 专属回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveRefinerQuestion = "receiveRefinerQuestion"  # 接收 LLM 精炼后的问题，传入 map
     roleChoice = "roleChoice"                            # 接收 LLM 选择的问题解决角色 type，传入 map
 
 
@@ -39,7 +40,7 @@ class AERefiner(AERole):
             "6. 输出应该直接作为后续 AI 的输入。\n"
             "如果问题已经清晰，则仅做轻微优化。"
         )
-        # 问题转换后的内容（精炼后的问题）：由 receiveRefinerQuestion 从回包单独提取并存储
+        # 问题转换后的内容（精炼后的问题）：由 receiveOptimizeInputOptimize 从回包提取并存储
         self._refinedQuestion: str = ""
         # LLM 选择的问题解决角色 type（expert / workgroup / employee / reviewer）：由 roleChoice 接收并存储
         self._roleChoiceType: str = ""
@@ -50,36 +51,11 @@ class AERefiner(AERole):
         answer = self._extract_answer(self.outResult) or ""
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
-    @property
-    def refinerQuestion(self) -> str:
-        """问题转换后的内容（精炼后的问题；未接收回包时返回空串）。"""
-        return self._refinedQuestion
-
-    def receiveRefinerQuestion(self, data: dict) -> bool:
-        """接收精炼后问题的回包：单独提取「问题转换后的内容」并存储，再向上 complete 通知。
-
-        回包 inner（llm_out）形如 {AE_IDENT: <chat.ident>, AE_ANSWER(reply): <问题转换后的内容>}：
-        - 单独提取 reply（问题转换后的内容）存入 self._refinedQuestion，供 refinerQuestion 属性读取；
-        - 交基类 flow_receive_complete 置 complete、写 outResult，并通过 delegate.flow_complete
-          路由回 AEChat，驱动下一个子 flow（assistant）。
-
-        Args:
-            data: 回包内层 llm_out（含 ident / reply，reply 即问题转换后的内容）
-
-        Returns:
-            bool: 当前数据处理是否完成（True=已处理）
-        """
-        # 单独定义「问题转换后的内容」：从回包提取精炼后的问题
-        self._refinedQuestion = self._extract_answer(data) or ""
-        # 拿到精炼问题后，交 LLM 选择负责解决问题的角色人选
-        self.requestRoleChoice()
-        return True
-
     def receiveOptimizeInputOptimize(self, data: dict) -> bool:
         """接收优化后的问题：存入 _refinedQuestion 并打印，再交 LLM 选择负责解决问题的角色。
 
         覆写基类：优化后的问题即精炼后的问题，存入 self._refinedQuestion 供 requestRoleChoice
-        与 refinerQuestion 属性使用；打印后调用 requestRoleChoice 进入角色选择步骤。
+        使用；打印后调用 requestRoleChoice 进入角色选择步骤。
 
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>}；若直接为字符串则视为问题
@@ -127,8 +103,11 @@ class AERefiner(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
+    # 角色 type -> 角色 Flow 类的创建移至基类 AERole.createRoleFlow（懒导入避免循环）
+
     def roleChoice(self, data) -> bool:
-        """接收 LLM 选择的问题解决角色 type，存入 self._roleChoiceType（不完成 flow）。
+        """接收 LLM 选择的问题解决角色 type：存储后据 type 创建角色 flow，
+        通过 delegate.flow_add_next_flow 添加为下一个 flow，再调用 delegate.flow_complete 通知完成。
 
         Args:
             data: 回包内层 llm_out，形如 {"type": <expert / workgroup / employee / reviewer>}；
@@ -147,6 +126,15 @@ class AERefiner(AERole):
             "[AEFlow:%s][%s] 收到角色选择: data=%r, type=%r",
             self.ident, self.title, data, self._roleChoiceType,
         )
+        # 根据角色 type 创建对应角色 flow，交 delegate 添加为下一个 flow，再通知 delegate 完成
+        delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
+        role_flow = self.createRoleFlow(self._roleChoiceType, delegate_ident)
+        if role_flow is not None and self.delegate is not None:
+            self.delegate.flow_add_next_flow(role_flow)
+            self.delegate.flow_complete(
+                {AE_IDENT: self.ident, AE_ANSWER: self._refinedQuestion},
+                AEFlowCompletEvent.startFlow,
+            )
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
