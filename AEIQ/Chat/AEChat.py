@@ -29,18 +29,9 @@ class AEChat(AEFlow):
         # 添加首个子 flow：问题精炼（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
         # refiner 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
         from Context.Context.AELLMPayload import llm_generate
-        self.refiner = AERefiner(
-            flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")}),
-        )
-        AEFlowInterfaceImpl.addFlow(self, self.refiner)
-        self.refiner.set_delegate(self)
-        # 添加子 flow：助理生成（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
-        # assistant 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
-        self.assistant = AEAssistant(
-            flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("助理定义")}),
-        )
-        AEFlowInterfaceImpl.addFlow(self, self.assistant)
-        self.assistant.set_delegate(self)
+        refiner_output = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")})
+        refiner = AERefiner(flowOutput=refiner_output)
+        AEFlowInterfaceImpl.addFlow(self, refiner)
 
     @property
     def role_brief(self) -> str:
@@ -53,9 +44,12 @@ class AEChat(AEFlow):
         - 仅当基类 startFlow 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
         """
         if not super().startFlow(flowInput):
+            logger.warning("[AEChat:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
             return
         next_flow = self.nextFlow()
-        if next_flow is not None:
-            next_flow.startFlow(flowInput)
+        if next_flow is None:
+            logger.warning("[AEChat:%s] startFlow 失败：无 default 状态子 flow 可启动", self.ident)
+            return
+        next_flow.startFlow(flowInput)
 
 

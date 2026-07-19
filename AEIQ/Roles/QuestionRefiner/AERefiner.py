@@ -8,6 +8,7 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, ROLE_PARAMS
@@ -125,6 +126,7 @@ class AERefiner(AERole):
             "[AEFlow:%s][%s] 收到角色选择: data=%r, type=%r",
             self.ident, self.title, data, self._roleChoiceType,
         )
+
         # 根据角色 type 创建对应角色 flow，交 delegate 添加为下一个 flow，再通知 delegate 完成
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
         role_flow = self.createRoleFlow(self._roleChoiceType, delegate_ident)
@@ -141,9 +143,10 @@ class AERefiner(AERole):
             )
             return True
         self.delegate.flow_add_next_flow(role_flow)
-        # 完成 refiner 自身：置 complete、写 outResult，并由 flow_receive_complete 向上 flow_complete 通知
+        # 完成 refiner 自身：置 complete、写 outResult，并以 startFlow 事件向上通知，delegate 据此 startFlow role_flow
         self.flow_receive_complete(
             {AE_IDENT: role_flow.ident, AE_ANSWER: self._refinedQuestion},
+            AEFlowCompletEvent.startFlow,
         )
         return True
 

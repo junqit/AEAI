@@ -27,6 +27,7 @@ AE_funcationkey = "excutor"
 class AEFlowStatus(str, Enum):
     """Flow 执行状态"""
     default = "default"            # 初始状态
+    pending = "pending"            # 待执行（已加入但未启动）
     processing = "processing"      # 执行中
     complete = "complete"          # 已完成
 

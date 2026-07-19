@@ -122,9 +122,13 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         self.status = AEFlowStatus.processing
         return True
 
-    def flow_receive_complete(self, out_schema: "Optional[dict]") -> bool:
+    def flow_receive_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.default) -> bool:
         """
         status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.flow_complete 通知返回。
+
+        Args:
+            out_schema: 完成回包内层 llm_out（含 ident / reply）
+            event: 完成事件（AEFlowCompletEvent.default / startFlow / error），透传给 delegate.flow_complete
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -132,7 +136,7 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            self.delegate.flow_complete(out_schema, AEFlowCompletEvent.default)
+            self.delegate.flow_complete(out_schema, event)
         return True
 
     def nextFlow(self) -> "Optional[AEFlowInterface]":
