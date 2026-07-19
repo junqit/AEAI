@@ -3,7 +3,7 @@ AEFlowDelegate - Flow 内部信息向外流转的委托协议 + AEFlowCompletEve
 
 Flow 在执行过程中通过该 Delegate 与外部（如 WorkFlow 运行器 / ContextManager）交互：
   1. flow_llm_request                发送 AELLMPayload 调用 LLM
-  2. flow_complete           Flow 完成，按 input_schema 结构返回 map
+  2. receive_flow_complete           Flow 完成，按 input_schema 结构返回 map
   3. flow_add_next_flow      添加下一个待执行的子 flow
 
 任何类只要实现以下方法即视为符合协议，无需继承。
@@ -21,7 +21,7 @@ from .AEFlowInfo import AE_IDENT, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
 from .AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload
-from Excutor.AERuntimeExcutor import AEFunctional
+from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AEFlowCompletEvent(str, Enum):
-    """Flow 完成事件（delegate.flow_complete 传入）：区分完成后的后续动作"""
+    """Flow 完成事件（delegate.receive_flow_complete 传入）：区分完成后的后续动作"""
     default = "default"            # 完成回到默认（普通完成）
     startFlow = "startFlow"        # 完成并启动下一个 flow
     error = "error"                # 完成但出现错误
@@ -50,7 +50,7 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def flow_complete(self, result: dict, event: 'AEFlowCompletEvent') -> None:
+    def receive_flow_complete(self, result: dict, event: 'AEFlowCompletEvent') -> None:
         """
         Flow 完成通知：result 为完成 flow 的元信息（map），event 为完成事件。
 
@@ -116,7 +116,7 @@ class AEFlowDelegateImpl:
         flow.delegate.flow_llm_request(payload)
 
     @staticmethod
-    def flow_complete(flow, result: dict, event: "AEFlowCompletEvent") -> None:
+    def receive_flow_complete(flow, result: dict, event: "AEFlowCompletEvent") -> None:
         """
         Flow 完成通知：按 event 区分处理。
 
@@ -132,7 +132,7 @@ class AEFlowDelegateImpl:
         """
         ident = result.get(AE_IDENT) if isinstance(result, dict) else None
         logger.info(
-            "[recv][AEFlow:%s][%s] flow_complete event=%s ident=%r, result:\n%s",
+            "[recv][AEFlow:%s][%s] receive_flow_complete event=%s ident=%r, result:\n%s",
             flow.ident, flow.title, event, ident, json.dumps(result, ensure_ascii=False, indent=2, default=str),
         )
         # startFlow：从 subFlows 按 ident 取出子 flow 并启动（input 取 result 的 AE_ANSWER）
@@ -171,7 +171,7 @@ class AEFlowDelegateImpl:
     @staticmethod
     def receive_flow_result(flow, out_schema: "Optional[dict]") -> None:
         """
-        收到经 flow_complete 路由到自身、确认由本 flow 处理的结果数据。
+        收到经 receive_flow_complete 路由到自身、确认由本 flow 处理的结果数据。
 
         判断所有子 flow 是否全部 complete：
         - 未全部 complete：把 AE_ANSWER 内容组装成 flowInput，交给首个 default 状态子 flow startFlow

@@ -107,7 +107,7 @@ class AEBaseContext:
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 
-    def flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
+    def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
         """AEFlowDelegate: flow 完成通知。event=default 时组装 AENetRsp 经 delegate 发送给客户端。"""
         flow_ident = result.get(AE_IDENT) if isinstance(result, dict) else None
         if event != AEFlowCompletEvent.default:

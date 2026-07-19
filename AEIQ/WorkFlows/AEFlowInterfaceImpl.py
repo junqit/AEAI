@@ -126,7 +126,7 @@ class AEFlowOptimizeQuestion(AEFlowInfo):
         # llm_out：最终结果(AE_ANSWER) 与 需确认信息(AE_CONFIRM) 二选一，不可同时填写
         flow_out.set_llm_out({
             AE_ANSWER: llm_generate("优化后的最终结果；与 confirm 二选一，需提问者确认时本字段留空"),
-            AE_CONFIRM: llm_generate("需要提问者确认的信息；根据自身工作范围填写，不要超出职责范围，要有界限；与 reply 二选一，给出确认信息时 reply 留空，无确认需求时本字段留空"),
+            # AE_CONFIRM: llm_generate("需要提问者确认的信息；根据自身工作范围填写，不要超出职责范围，要有界限；与 reply 二选一，给出确认信息时 reply 留空，无确认需求时本字段留空"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

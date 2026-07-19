@@ -1,0 +1,15 @@
+{
+    "location": "北京",
+    "date": "明天",
+    "weather": "晴转多云",
+    "temperature": {
+        "high": "25℃",
+        "low": "14℃"
+    },
+    "precipitation_probability": "10%",
+    "wind": {
+        "direction": "北风",
+        "level": "3-4级"
+    },
+    "air_quality": "良"
+}

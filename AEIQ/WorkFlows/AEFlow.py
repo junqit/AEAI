@@ -5,7 +5,7 @@ AEFlow - Flow 基类，多继承 AEFlowRolePrompt / AEFlowOptimizeQuestion，
 方法分区：
   - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
     flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
-  - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：flow_llm_request / flow_add_next_flow / flow_complete
+  - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：flow_llm_request / flow_add_next_flow / receive_flow_complete
   - 私有方法 / 属性：outResult_summary / _extract_answer
 
 角色描述（requestOptimizePrompt 等）、问题优化（requestOptimizeInputOptimize 等）、
@@ -25,8 +25,8 @@ from .AEFlowDescription import AEFlowDescription
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
-from Excutor import AERuntimeExcutor
-from Excutor.AERuntimeExcutor import AEFunctional
+from Tools.Excutor import AERuntimeExcutor
+from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
 
 logger = logging.getLogger(__name__)
@@ -124,11 +124,11 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
 
     def flow_receive_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.default) -> bool:
         """
-        status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.flow_complete 通知返回。
+        status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.receive_flow_complete 通知返回。
 
         Args:
             out_schema: 完成回包内层 llm_out（含 ident / reply）
-            event: 完成事件（AEFlowCompletEvent.default / startFlow / error），透传给 delegate.flow_complete
+            event: 完成事件（AEFlowCompletEvent.default / startFlow / error），透传给 delegate.receive_flow_complete
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -136,7 +136,7 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            self.delegate.flow_complete(out_schema, event)
+            self.delegate.receive_flow_complete(out_schema, event)
         return True
 
     def nextFlow(self) -> "Optional[AEFlowInterface]":
@@ -184,9 +184,9 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         """添加下一个待执行的子 flow（转调 AEFlowDelegateImpl）。"""
         AEFlowDelegateImpl.flow_add_next_flow(self, flow)
 
-    def flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
+    def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
         """Flow 完成通知（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.flow_complete(self, result, event)
+        AEFlowDelegateImpl.receive_flow_complete(self, result, event)
 
     # ==================== 私有方法 / 属性 ====================
 

@@ -65,7 +65,7 @@ class AEFlowInterface(Protocol):
 
     def receive_flow_result(self, data: dict) -> None:
         """
-        接收 flow 结果数据（经 flow_complete 按 ident 路由到自身）。
+        接收 flow 结果数据（经 receive_flow_complete 按 ident 路由到自身）。
 
         子类覆写以处理收到的结果数据。
 
