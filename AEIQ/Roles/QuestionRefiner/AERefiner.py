@@ -1,16 +1,16 @@
 """
-AERefiner - 问题精炼 Flow，继承 AEFlow。
+AERefiner - 问题精炼 Flow，继承 AERole。
 
 将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowStatus, AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, ROLE_PARAMS
+from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class AERefinerFunctional(AEFunctional):
     roleChoice = "roleChoice"                            # 接收 LLM 选择的问题解决角色 type，传入 map
 
 
-class AERefiner(AEFlow):
+class AERefiner(AERole):
     """问题精炼 Flow：改写用户问题，输出 answer。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
@@ -71,6 +71,26 @@ class AERefiner(AEFlow):
         # 拿到精炼问题后，交 LLM 选择负责解决问题的角色人选
         self.requestRoleChoice()
 
+    def receiveOptimizeInputOptimize(self, data: dict) -> None:
+        """接收优化后的问题：存入 _refinedQuestion 并打印，再交 LLM 选择负责解决问题的角色。
+
+        覆写基类：优化后的问题即精炼后的问题，存入 self._refinedQuestion 供 requestRoleChoice
+        与 refinerQuestion 属性使用；打印后调用 requestRoleChoice 进入角色选择步骤。
+
+        Args:
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>}；若直接为字符串则视为问题
+        """
+        result = self._extract_answer(data) if isinstance(data, dict) else None
+        if result is None and isinstance(data, str):
+            result = data
+        self._refinedQuestion = result or ""
+        logger.info(
+            "[AEFlow:%s][%s] 收到优化后的问题:\n%s",
+            self.ident, self.title, self._refinedQuestion,
+        )
+        # 收到优化后的问题后，交 LLM 选择负责解决问题的角色人选
+        self.requestRoleChoice()
+
     def requestRoleChoice(self) -> None:
         """组装角色选择 LLM 请求：以 AEFlowRole 各角色的 type / title / responsibility 拼 system 消息，
         由 LLM 选出最适合解决本问题的角色，返回 type。
@@ -112,6 +132,10 @@ class AERefiner(AEFlow):
             self._roleChoiceType = data.strip()
         else:
             self._roleChoiceType = ""
+        logger.info(
+            "[AEFlow:%s][%s] 收到角色选择: data=%r, type=%r",
+            self.ident, self.title, data, self._roleChoiceType,
+        )
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，拼装 AELLMPayload 发送。

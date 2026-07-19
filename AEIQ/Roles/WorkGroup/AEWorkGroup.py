@@ -1,21 +1,22 @@
 """
-AEWorkGroup - 工作组 Flow，继承 AEFlow。
+AEWorkGroup - 工作组 Flow，继承 AERole。
 
 负责完成一个维度 / 目录的目标：接收上游（如 AEAssistant）分配的维度目标，
 驱动该维度的工作并输出结果。各工作组相互独立，可并行。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
+from WorkFlows.AEFlow import AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
 from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AEWorkGroup(AEFlow):
+class AEWorkGroup(AERole):
     """工作组 Flow：完成单一维度 / 目录的目标。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):

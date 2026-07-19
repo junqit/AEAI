@@ -1,16 +1,17 @@
 """
-AEAssistant - 助理生成 Flow，继承 AEFlow。
+AEAssistant - 助理生成 Flow，继承 AERole。
 
 根据传入的 map（领域 / 用户问题等信息）驱动「专家助理」的生成，
 最终输出助理定义 map（名称、领域、职责、能力、评价规则等），供后续流程加载使用。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AEBaseRole import AERole
 from Roles.WorkGroup.AEWorkGroup import AEWorkGroup
 from Excutor.AERuntimeExcutor import AEFunctional
 
@@ -26,7 +27,7 @@ class AEAssistantFunction(AEFunctional):
     addWorkGroups = "addWorkGroups"                # 添加工作组，传入任务内容列表
 
 
-class AEAssistant(AEFlow):
+class AEAssistant(AERole):
     """助理生成 Flow：根据传入 map 生成专家助理定义。"""
 
     # updateAssisstantInfo 接收的 map 整体结构：llm_generate 占位说明各字段应填充内容

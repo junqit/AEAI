@@ -93,7 +93,7 @@ class AEFlowRole(Enum):
 
 
 @dataclass(frozen=True)
-class RoleParamInfo:
+class AERoleParamInfo:
     """单个 Flow 角色的参数信息（仅定义角色能力）。
 
     title / responsibility 直接对应 AEFlow / AEFlowInfo 的同名字段，由 role_brief
@@ -118,32 +118,32 @@ class RoleParamInfo:
         }
 
 
-# 各角色默认参数信息注册表：AEFlowRole -> RoleParamInfo
-# 仅定义角色能力（title / responsibility），与 AEFlow.role_brief 组装口径一致
-ROLE_PARAMS: Dict[AEFlowRole, RoleParamInfo] = {
-    AEFlowRole.expert: RoleParamInfo(
+# 各角色默认参数信息注册表：AEFlowRole -> AERoleParamInfo
+# title / responsibility 仅作简单概括，供 LLM 据角色标识 + 能力大意生成完整 title 与能力
+ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
+    AEFlowRole.expert: AERoleParamInfo(
         role=AEFlowRole.expert,
         title="领域专家",
-        responsibility="整体规划与最终产出收口",
+        responsibility="统筹规划，对最终产出收口",
     ),
-    AEFlowRole.workgroup: RoleParamInfo(
+    AEFlowRole.workgroup: AERoleParamInfo(
         role=AEFlowRole.workgroup,
         title="工作组",
-        responsibility="单一维度目标的完成，可由多名员工协作",
+        responsibility="完成单一维度目标，可由多名员工协作",
     ),
-    AEFlowRole.employee: RoleParamInfo(
+    AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
         title="员工",
-        responsibility="单一的流水线工作",
+        responsibility="完成单一流水线工作",
     ),
-    AEFlowRole.reviewer: RoleParamInfo(
+    AEFlowRole.reviewer: AERoleParamInfo(
         role=AEFlowRole.reviewer,
         title="评审者",
-        responsibility="产出审查与验收",
+        responsibility="审查并验收产出",
     ),
 }
 
 
-def get_role_param(role: AEFlowRole) -> RoleParamInfo:
+def get_role_param(role: AEFlowRole) -> AERoleParamInfo:
     """按 AEFlowRole 取其默认参数信息；未注册时抛出 KeyError。"""
     return ROLE_PARAMS[role]

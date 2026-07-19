@@ -1,21 +1,22 @@
 """
-AEEmployee - 员工 Flow，继承 AEFlow。
+AEEmployee - 员工 Flow，继承 AERole。
 
 完成单一流水线的工作：承接上游分配的一条流水线，调用 LLM / Tools 执行其各环节，
 产出可被上游整合的结构化结果。
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlow, AEFlowFunctional
+from WorkFlows.AEFlow import AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
 from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AEEmployee(AEFlow):
+class AEEmployee(AERole):
     """员工 Flow：完成单一流水线的工作。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
