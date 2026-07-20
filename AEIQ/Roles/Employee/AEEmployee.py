@@ -69,7 +69,7 @@ class AEEmployee(AERole):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        result = self._extract_answer(data) if isinstance(data, dict) else None
+        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
@@ -145,7 +145,7 @@ class AEEmployee(AERole):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        result = self._extract_answer(data) if isinstance(data, dict) else None
+        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
         # AE_ANSWER 已是 JSON 结构（数组），直接使用；非数组则告警并打印数据

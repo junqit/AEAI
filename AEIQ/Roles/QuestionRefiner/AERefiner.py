@@ -48,7 +48,7 @@ class AERefiner(AERole):
     @property
     def outResult_summary(self) -> str:
         """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回精炼后的问题。"""
-        answer = self._extract_answer(self.outResult) or ""
+        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
     def receiveOptimizeInputOptimize(self, data: dict) -> bool:
@@ -63,7 +63,7 @@ class AERefiner(AERole):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        result = self._extract_answer(data) if isinstance(data, dict) else None
+        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
         self._refinedQuestion = result or ""

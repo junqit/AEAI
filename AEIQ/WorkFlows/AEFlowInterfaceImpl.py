@@ -143,7 +143,7 @@ class AEFlowOptimizeQuestion(AEFlowInfo):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        result = self._extract_answer(data) if isinstance(data, dict) else None
+        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
         # 解析是否含有需要用户确认的信息

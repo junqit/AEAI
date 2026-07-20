@@ -6,7 +6,7 @@ AEFlow - Flow 基类，多继承 AEFlowRolePrompt / AEFlowOptimizeQuestion，
   - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
     flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
   - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
-  - 私有方法 / 属性：outResult_summary / _extract_answer
+  - 私有方法 / 属性：outResult_summary
 
 角色描述（requestOptimizePrompt 等）、问题优化（requestOptimizeInputOptimize 等）、
 角色信息（requestRoleInfo / receiveRole）分别由父类
@@ -25,6 +25,7 @@ from .AEFlowDescription import AEFlowDescription
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
+from Roles.AERole import AE_USER_QUESTION_PREFIX
 from Tools.Excutor import AERuntimeExcutor
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -197,20 +198,8 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         形如「{AE_USER_QUESTION_PREFIX}{input.content} 我的回答：{answer}」；
         input 为空时仅返回「我的回答：{answer}」。
         """
-        answer = self._extract_answer(self.outResult) or ""
+        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
         content = self.input.content if (self.input is not None and self.input.content) else ""
         if content:
             return f"{AE_USER_QUESTION_PREFIX}{content} 我的回答：{answer}"
         return f"我的回答：{answer}"
-
-    @staticmethod
-    def _extract_answer(obj) -> Optional[str]:
-        """递归查找 obj 内首个 AE_ANSWER 键的值。"""
-        if isinstance(obj, dict):
-            if AE_ANSWER in obj:
-                return obj[AE_ANSWER]
-            for v in obj.values():
-                r = AEFlow._extract_answer(v)
-                if r is not None:
-                    return r
-        return None

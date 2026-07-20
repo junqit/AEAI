@@ -183,7 +183,13 @@ class AEFlowDelegateImpl:
         """
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
         # 判断所有子 flow 是否全部 complete
-        all_complete = all(f.status == AEFlowStatus.complete for f in flow._flows.values())
+        complete_count = sum(1 for f in flow._flows.values() if f.status == AEFlowStatus.complete)
+        total_count = len(flow._flows)
+        all_complete = complete_count == total_count
+        logger.info(
+            "[AEFlow:%s][%s] receive_flow_result: complete=%d/%d, answer=%r",
+            flow.ident, flow.title, complete_count, total_count, (answer or "")[:100],
+        )
         if not all_complete:
             AEFlowDelegateImpl._advance_next_flow(flow, answer)
             return
@@ -205,25 +211,39 @@ class AEFlowDelegateImpl:
 
     @staticmethod
     def _summarize_to_llm(flow) -> None:
-        """全部 complete：汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。
-
-        问题已由上游（如 AERefiner）具象化，此处不再带原始 input.content。
-        """
+        """全部 complete：汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。"""
+        logger.info(
+            "[AEFlow:%s][%s] _summarize_to_llm 开始汇总, 子 flow 数=%d",
+            flow.ident, flow.title, len(flow._flows),
+        )
         flow_out = flow.flowOutput(AEFunctional.flow_receive_complete)
         messages = []
         role_brief = flow.role_brief
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 把所有子 flow 的 outResult 总结内容放入 messages（作为 assistant 回答）
+        has_result = 0
         for f in flow._flows.values():
+            logger.info("[AEFlow:%s] _summarize 检查子 flow[%s] status=%s outResult=%s",
+                        flow.ident, f.ident, f.status, type(f.outResult).__name__ if f.outResult is not None else "None")
             if f.outResult is not None:
-                messages.append({
-                    AE_ROLE: AEConentRole.ASSISTANT.value,
-                    AE_CONTENT: f.outResult_summary,
-                })
+                try:
+                    summary = f.outResult_summary
+                    logger.info("[AEFlow:%s] _summarize 子 flow[%s] outResult_summary=%r", flow.ident, f.ident, summary[:200])
+                    messages.append({
+                        AE_ROLE: AEConentRole.ASSISTANT.value,
+                        AE_CONTENT: summary,
+                    })
+                    has_result += 1
+                except Exception as e:
+                    logger.error("[AEFlow:%s] _summarize 子 flow[%s] outResult_summary 异常: %s", flow.ident, f.ident, e, exc_info=True)
+            else:
+                logger.warning("[AEFlow:%s] _summarize 子 flow[%s] outResult is None, 跳过, status=%s", flow.ident, f.ident, f.status)
+        logger.info("[AEFlow:%s] _summarize 有 outResult 的子 flow 数=%d / 总数=%d", flow.ident, has_result, len(flow._flows))
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: f"以上内容中，{AE_USER_QUESTION_PREFIX}为用户问题；请基于所有提供的回答仔细思考，针对该用户问题输出结论",
+            AE_CONTENT: "请根据以上提供的信息进行汇总，输出最终结论。",
         })
+        logger.info("[AEFlow:%s] _summarize_to_llm 发送汇总 LLM 请求, messages 数=%d", flow.ident, len(messages))
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         flow.send_llm_payload(payload)

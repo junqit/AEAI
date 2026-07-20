@@ -44,9 +44,10 @@ class AEScriptRunner:
                 f"  stdout: {result.stdout.strip()}\n"
                 f"  stderr: {result.stderr.strip()}"
             )
-        # 打印执行结果
-        print(f"[{self.interpreter}] 脚本执行结果:\n{result.stdout}")
-        return result.stdout
+        # 确保 stdout 为字符串
+        stdout = result.stdout if isinstance(result.stdout, str) else str(result.stdout or "")
+        print(f"[{self.interpreter}] 脚本执行结果:\n{stdout}")
+        return stdout
 
     def run_script(self, script: AEScript, timeout: Optional[float] = None) -> str:
         """按 AEScript 执行其脚本内容。"""
