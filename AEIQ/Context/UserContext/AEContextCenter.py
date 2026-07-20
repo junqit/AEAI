@@ -62,6 +62,10 @@ class AEContextCenter(AEContextDelegate):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
+        # 打印完整 LLM 请求
+        logger.info("[AEContextCenter] === 发送 LLM 请求 ===\nmessages:\n%s\nout_schema:\n%s",
+                     json.dumps(payload.messages, ensure_ascii=False, indent=2),
+                     json.dumps(payload.out_schema, ensure_ascii=False, indent=2))
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
@@ -240,10 +244,13 @@ class AEContextCenter(AEContextDelegate):
         if not reply:
             logger.warning("LLM 回复为空，跳过 dispatch")
             return
+        # 打印完整 LLM 回复
+        logger.info("[AEContextCenter] === 收到 LLM 回复 ===\n%s", reply)
+        stripped = self._strip_code_fence(reply)
         try:
-            data = json.loads(self._strip_code_fence(reply))
+            data = json.loads(stripped)
         except (ValueError, TypeError) as e:
-            logger.error(f"LLM 回复非合法 JSON: {e}, reply={reply!r}")
+            logger.error("[AEContextCenter] JSON 解析失败: %s\nreply(前2000字符)=%s", e, reply[:2000])
             return
         if not isinstance(data, dict):
             logger.error(f"LLM 回复非 JSON 对象: {reply!r}")

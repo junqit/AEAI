@@ -84,6 +84,8 @@ class AELLMPayload:
             + "\n\n其中形如 \"<|描述|>\" 的字符串值为占位符，<||> 之间的描述说明了该位置应填充的内容；"
             "请根据用户问题及占位符描述生成实际内容后替换该占位符；"
             "其余字段与元信息保持原值不变，仅按原结构回填。"
+            "\n\n重要：只可替换 <|描述|> 占位符的内容，不可修改、删除、新增占位符以外的任何字段名、字段值或结构；"
+            "字符串值内若包含双引号须转义为 \\\"。"
         )
         messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
         # llm_type 输出枚举值（如 "chatgpt"），level 输出成员名（如 "default"），

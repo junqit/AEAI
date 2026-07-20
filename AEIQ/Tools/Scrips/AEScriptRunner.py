@@ -40,7 +40,9 @@ class AEScriptRunner:
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"{self.interpreter} 执行失败(returncode={result.returncode}): {result.stderr.strip()}"
+                f"{self.interpreter} 执行失败(returncode={result.returncode})\n"
+                f"  stdout: {result.stdout.strip()}\n"
+                f"  stderr: {result.stderr.strip()}"
             )
         # 打印执行结果
         print(f"[{self.interpreter}] 脚本执行结果:\n{result.stdout}")

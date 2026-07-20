@@ -46,11 +46,13 @@ class AEFlowDescription(AEFlowInfo):
     def receiveRole(self, data: dict) -> bool:
         """接收 LLM 生成的自身工作名称与能力范围，写入 title / responsibility（不完成 flow）。
 
+        title 与 responsibility 均非空时返回 True；任一为空返回 False。
+
         Args:
             data: 回包内层 llm_out，形如 {"title": <工作名称>, "responsibility": <能力范围>}
 
         Returns:
-            bool: 当前数据处理是否完成（True=已处理）
+            bool: title 与 responsibility 均有值时 True，否则 False
         """
         if not isinstance(data, dict):
             data = {}
@@ -60,4 +62,7 @@ class AEFlowDescription(AEFlowInfo):
             "[AEFlow:%s] 收到角色信息:\ntitle=%r\nresponsibility=%r",
             self.ident, self.title, self.responsibility,
         )
+        if not self.title or not self.responsibility:
+            logger.warning("[AEFlow:%s] title 或 responsibility 为空，返回 False", self.ident)
+            return False
         return True
