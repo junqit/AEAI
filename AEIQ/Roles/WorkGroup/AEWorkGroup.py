@@ -8,7 +8,7 @@ import logging
 
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
@@ -109,8 +109,8 @@ class AEWorkGroup(AERole):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "请针对上述问题生成多个可独立执行的员工任务，严格输出 JSON 数组，每项结构如下：\n"
-                "  - title：任务标题（简述员工负责的工作，字符串）\n"
-                "  - task：任务内容（交给员工执行的具体任务描述，字符串）"
+                " title：任务标题（简述员工负责的工作，字符串）\n"
+                " task：任务内容（交给员工执行的具体任务描述，包含任务必要的上下文"
             ),
         })
         flow_out = self.flowOutput(AEWorkGroupFunctional.receiveEmployees)
@@ -118,8 +118,8 @@ class AEWorkGroup(AERole):
         flow_out.set_llm_out({
             AE_ANSWER: [
                 {
-                    "title": llm_generate("任务标题（简述员工负责的工作）"),
-                    "task": llm_generate("任务内容（交给员工执行的具体任务描述）"),
+                    AE_TITLE: llm_generate("任务标题（简述员工负责的工作）"),
+                    "task": llm_generate("任务内容（交给员工执行的具体任务描述和任务必要的上下文）"),
                 }
             ],
         })
@@ -158,10 +158,10 @@ class AEWorkGroup(AERole):
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("员工结论")})
                 employee = AEEmployee(flowOutput=flowOutput)
                 AEFlowInterfaceImpl.addFlow(self, employee)
-                task = spec.get("task", "") or spec.get("title", "")
+                task = spec.get("task", "") or spec.get(AE_TITLE, "")
                 logger.info(
                     "[AEWorkGroup:%s] 添加 AEEmployee 子 flow: title=%r task=%r",
-                    self.ident, spec.get("title", ""), task,
+                    self.ident, spec.get(AE_TITLE, ""), task,
                 )
             except Exception as e:
                 logger.warning("[AEWorkGroup:%s] 跳过非法 employee spec=%r: %s", self.ident, spec, e)
@@ -171,9 +171,9 @@ class AEWorkGroup(AERole):
             # 取首个 spec 的 task 作为 input.content
             first_task = ""
             if specs and isinstance(specs[0], dict):
-                first_task = specs[0].get("task", "") or specs[0].get("title", "")
+                first_task = specs[0].get("task", "") or specs[0].get(AE_TITLE, "")
             first_employee.startFlow(AEFlowInput(content=first_task))
-            logger.info("[AEWorkGroup:%s] 启动首个 AEEmployee: title=%r", self.ident, getattr(first_employee, "title", ""))
+            logger.info("[AEWorkGroup:%s] 启动首个 AEEmployee: title=%r", self.ident, getattr(first_employee, AE_TITLE, ""))
         else:
             logger.warning("[AEWorkGroup:%s] 无可执行的 AEEmployee", self.ident)
         return True

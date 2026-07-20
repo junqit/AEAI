@@ -1,3 +1,4 @@
+from WorkFlows.AEFlowInfo import AE_TITLE
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict
@@ -59,7 +60,7 @@ class AERoleParamInfo:
         """返回参数信息的 map 形态（枚举转为字符串，便于日志 / 序列化）。"""
         return {
             "role": self.role.value,
-            "title": self.title,
+            AE_TITLE: self.title,
             "responsibility": self.responsibility,
         }
 

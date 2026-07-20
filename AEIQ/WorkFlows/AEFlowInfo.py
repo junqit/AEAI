@@ -18,6 +18,9 @@ from Tools.Excutor.AERuntimeExcutor import AEFunctional
 # out_schema / 路由信封内 ident 字段名
 AE_IDENT = "ident"
 
+# out_schema / 路由信封内 title 字段名
+AE_TITLE = "title"
+
 # llm_out 内默认 answer 字段名
 AE_ANSWER = "reply"
 
@@ -121,7 +124,7 @@ class AEFlowInfo:
 
         return AEFlowOutput(out_schema={
             AE_IDENT: self.ident,
-            "title": self.title,
+            AE_TITLE: self.title,
             AE_funcationkey: funcationkey,
             AE_LLM_OUT: llm_out,
         })
@@ -143,7 +146,7 @@ class AEFlowInfo:
         """返回元信息的 map 形态（ident / title / responsibility / input / output）"""
         return {
             AE_IDENT: self.ident,
-            "title": self.title,
+            AE_TITLE: self.title,
             "responsibility": self.responsibility,
             "input": self.input,
             "output": self.output,

@@ -17,7 +17,7 @@ from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AE_IDENT, AE_ANSWER, AEFlowStatus
+from .AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
 from .AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload
@@ -110,7 +110,7 @@ class AEFlowDelegateImpl:
         # 用当前 flow 的 ident / title 包装 payload.out_schema
         payload.out_schema = {
             AE_IDENT: flow.ident,
-            "title": flow.title,
+            AE_TITLE: flow.title,
             AE_LLM_OUT: payload.out_schema,
         }
         flow.delegate.receive_flow_llm_request(payload)
@@ -214,11 +214,11 @@ class AEFlowDelegateImpl:
         role_brief = flow.role_brief
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        # 把所有子 flow 的 outResult 总结内容放入 messages
+        # 把所有子 flow 的 outResult 总结内容放入 messages（作为 assistant 回答）
         for f in flow._flows.values():
             if f.outResult is not None:
                 messages.append({
-                    AE_ROLE: AEConentRole.SYSTEM.value,
+                    AE_ROLE: AEConentRole.ASSISTANT.value,
                     AE_CONTENT: f.outResult_summary,
                 })
         messages.append({

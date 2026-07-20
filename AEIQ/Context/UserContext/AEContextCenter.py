@@ -23,6 +23,7 @@ from ..Context.AEDirectoryContext import AEDirectoryContext
 from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
 from WorkFlows.AEFlow import AE_IDENT
+from WorkFlows.AEFlowInfo import AE_TITLE
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class AEContextCenter(AEContextDelegate):
         chats = []
         if isinstance(context, AEWorkSpaceContext):
             chats = [
-                {AE_IDENT: c.ident, "title": c.title, "status": c.status.value}
+                {AE_IDENT: c.ident, AE_TITLE: c.title, "status": c.status.value}
                 for c in context._chat_map.values()
             ]
         response = AENetRsp(
@@ -244,8 +245,6 @@ class AEContextCenter(AEContextDelegate):
         if not reply:
             logger.warning("LLM 回复为空，跳过 dispatch")
             return
-        # 打印完整 LLM 回复
-        logger.info("[AEContextCenter] === 收到 LLM 回复 ===\n%s", reply)
         stripped = self._strip_code_fence(reply)
         try:
             data = json.loads(stripped)

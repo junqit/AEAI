@@ -8,7 +8,7 @@ import logging
 
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
@@ -106,8 +106,15 @@ class AEEmployee(AERole):
             AE_CONTENT: (
                 "请针对上述问题生成多个可独立执行的脚本任务，严格输出 JSON 数组，每项结构如下：\n"
                 "  - title：作用（脚本用途说明，字符串）\n"
-                "  - script：脚本内容（可执行的脚本文本，字符串）\n"
-                "  - type：脚本类型（取值 python / shell / ruby 之一，字符串）"
+                "  - script：脚本内容（纯代码，字符串）\n"
+                "  - type：脚本类型（取值 python / shell / ruby 之一，字符串）\n\n"
+                "script 字段格式要求（重要）：\n"
+                "- type=python 时，script 必须是纯 Python 代码，直接写代码内容，不要包裹 python3 -c \"...\" 等调用命令；"
+                "例如 script 值应为 \"import os\\nprint(os.getcwd())\"，而不是 \"python3 -c \\\"import os; print(os.getcwd())\\\"\"\n"
+                "- type=shell 时，script 必须是纯 shell 命令，直接写命令内容，不要包裹 sh -c \"...\" 等调用命令；"
+                "例如 script 值应为 \"find . -name '*.py' | head -10\"，而不是 \"sh -c \\\"find . -name '*.py'\\\"\"\n"
+                "- type=ruby 时，script 必须是纯 Ruby 代码，直接写代码内容，不要包裹 ruby -e \"...\" 等调用命令\n"
+                "- 脚本内容中的双引号须转义为 \\\""
             ),
         })
         flow_out = self.flowOutput(AEEmployeeFunction.receiveScripts)
@@ -115,7 +122,7 @@ class AEEmployee(AERole):
         flow_out.set_llm_out({
             AE_ANSWER: [
                 {
-                    "title": llm_generate("作用（脚本用途说明）"),
+                    AE_TITLE: llm_generate("作用（脚本用途说明）"),
                     "script": llm_generate("脚本内容（可执行的脚本文本）"),
                     "type": llm_generate("脚本类型，取值 python / shell / ruby 之一"),
                 }
@@ -158,7 +165,7 @@ class AEEmployee(AERole):
                 # 脚本完成回程 ident 填本 employee.ident，路由回本 employee
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("脚本执行结果")})
                 script_flow = AEScript(flowOutput=flowOutput)
-                script_flow.update(spec.get("title", ""), spec.get("script", ""), spec.get("type", ""))
+                script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
                 AEFlowInterfaceImpl.addFlow(self, script_flow)
                 logger.info(
                     "[AEEmployee:%s] 添加 AEScript 子 flow: title=%r type=%r",

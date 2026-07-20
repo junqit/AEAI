@@ -16,7 +16,7 @@ from enum import Enum
 
 from WorkFlows.AEFlow import AEFlow
 from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class AEScript(AEFlow):
 
     # 字段意义（供动态创建 / 文档化使用）
     INIT_SCHEMA = {
-        "title": "作用（脚本用途说明）",
+        AE_TITLE: "作用（脚本用途说明）",
         "script": "脚本内容",
         "type": "脚本类型，取值 python / shell / ruby 之一",
     }

@@ -6,7 +6,7 @@ AEFlowDescription - AEFlow 的父类：角色信息（title / responsibility）�
 """
 import logging
 
-from .AEFlowInfo import AEFlowInfo
+from .AEFlowInfo import AEFlowInfo, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
 
@@ -37,7 +37,7 @@ class AEFlowDescription(AEFlowInfo):
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveRole)
         flow_out.set_llm_out({
-            "title": llm_generate("工作名称，体现专业领域与定位"),
+            AE_TITLE: llm_generate("工作名称，体现专业领域与定位"),
             "responsibility": llm_generate("能力范围，明确职责边界与禁止事项"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
@@ -49,14 +49,14 @@ class AEFlowDescription(AEFlowInfo):
         title 与 responsibility 均非空时返回 True；任一为空返回 False。
 
         Args:
-            data: 回包内层 llm_out，形如 {"title": <工作名称>, "responsibility": <能力范围>}
+            data: 回包内层 llm_out，形如 {AE_TITLE: <工作名称>, "responsibility": <能力范围>}
 
         Returns:
             bool: title 与 responsibility 均有值时 True，否则 False
         """
         if not isinstance(data, dict):
             data = {}
-        self.title = data.get("title", "") or ""
+        self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get("responsibility", "") or ""
         logger.info(
             "[AEFlow:%s] 收到角色信息:\ntitle=%r\nresponsibility=%r",

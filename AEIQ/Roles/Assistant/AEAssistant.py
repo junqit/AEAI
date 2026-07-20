@@ -7,6 +7,7 @@ AEAssistant - 助理生成 Flow，继承 AERole。
 import logging
 
 from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowInfo import AE_TITLE
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
@@ -33,7 +34,7 @@ class AEAssistant(AERole):
 
     # updateAssisstantInfo 接收的 map 整体结构：llm_generate 占位说明各字段应填充内容
     updateAssisstantInfo_input = {
-        "title": llm_generate("专家职称，体现专业领域与定位"),
+        AE_TITLE: llm_generate("专家职称，体现专业领域与定位"),
         "responsibility": llm_generate("专家职责要求，明确能力范围与禁止事项"),
     }
 
@@ -58,7 +59,7 @@ class AEAssistant(AERole):
 
         Args:
             data: 助理配置 map，结构见 updateAssisstantInfo_input：
-                  {"title": <助理职称>, "responsibility": <助理职责要求>}
+                  {AE_TITLE: <助理职称>, "responsibility": <助理职责要求>}
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -68,7 +69,7 @@ class AEAssistant(AERole):
                     self.ident, json.dumps(data, ensure_ascii=False, indent=2, default=str) if isinstance(data, dict) else repr(data))
         if not isinstance(data, dict):
             data = {}
-        self.title = data.get("title", "") or ""
+        self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get("responsibility", "") or ""
 
         # 收到 title/responsibility 后，发起第二步：维度目标生成

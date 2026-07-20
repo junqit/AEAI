@@ -17,7 +17,7 @@ import logging
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_ANSWER, AE_funcationkey
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_TITLE, AE_ANSWER, AE_funcationkey
 from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
 from .AEFlowInterfaceImpl import AEFlowInterfaceImpl, AEFlowOptimizeQuestion
 from .AEFlowRolePrompt import AEFlowRolePrompt
@@ -169,7 +169,7 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
         # 外层信封：ident / title 用于回程路由，llm_out 包装内层内容
         payload.out_schema = {
             AE_IDENT: self.ident,
-            "title": self.title,
+            AE_TITLE: self.title,
             AE_LLM_OUT: payload.out_schema,
         }
         self.delegate.receive_flow_llm_request(payload)
@@ -192,14 +192,15 @@ class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
 
     @property
     def outResult_summary(self) -> str:
-        """从 outResult 中提取总结内容（AE_ANSWER），并附带角色说明。
+        """组装 input.content（问题）与 outResult（回答）为总结内容。
 
-        形如「我是一名{title}，{responsibility}。我的回答：{answer}」；
-        title / responsibility 均为空时省略角色前缀，仅返回「我的回答：{answer}」。
+        形如「{AE_USER_QUESTION_PREFIX}{input.content} 我的回答：{answer}」；
+        input 为空时仅返回「我的回答：{answer}」。
         """
         answer = self._extract_answer(self.outResult) or ""
-        if len(self.title) > 0 or len(self.responsibility) > 0:
-            return f"我是一名{self.title}，{self.responsibility}。我的回答：{answer}"
+        content = self.input.content if (self.input is not None and self.input.content) else ""
+        if content:
+            return f"{AE_USER_QUESTION_PREFIX}{content} 我的回答：{answer}"
         return f"我的回答：{answer}"
 
     @staticmethod
