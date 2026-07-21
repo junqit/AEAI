@@ -103,12 +103,15 @@ class AELLMPayload:
 
         messages = list(self.messages)
         instruction = (
-            "请按以下结构输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
+            "请按以下完整结构输出合法 JSON 对象，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
             + schema_json
             + f"\n\n【需要填写的字段】（共 {len(fill_fields)} 个，替换占位符内容）：\n{fill_list}"
             + f"\n\n【不可修改的字段】（共 {len(fixed_fields)} 个，必须保持原值不变）：\n{fixed_list}"
-            + "\n\n规则：只可替换 <|描述|> 占位符的内容，不可修改、删除、新增占位符以外的任何字段名、字段值或结构；"
-            "字符串值内若包含双引号须转义为 \\\"。"
+            + "\n\n规则："
+            "\n1. 必须返回上述完整 JSON 对象，包含所有层级的外层字段（ident、type、llm_out 等），"
+            "不可只返回内层某个字段或数组；"
+            "\n2. 只可替换 <|描述|> 占位符的内容，不可修改、删除、新增占位符以外的任何字段名、字段值或结构；"
+            "\n3. 字符串值内若包含双引号须转义为 \\\"。"
         )
         messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
         return {

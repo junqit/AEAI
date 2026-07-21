@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import platform
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from .AEBaseContext import AEBaseContext
@@ -61,6 +62,15 @@ class AEDirectoryContext(AEBaseContext):
         super().__init__(context_type=AEContextType.directory, space=space)
         self._scripts_cache: Optional[list] = None
         self._env_param_info_cache: Dict[AEEnvParamType, str] = {}
+        # 创建后即探测并生成所有系统信息与脚本相关信息（缓存，后续直接复用）
+        self._build_all_env_param_info()
+
+    def _build_all_env_param_info(self) -> None:
+        """创建时一次性探测并缓存所有环境参数信息（系统 + 所有脚本语言）。"""
+        # 先探测脚本（system 不依赖脚本，但脚本类信息依赖此缓存）
+        self._discover_scripts()
+        for env_param in AEEnvParamType:
+            self.build_env_param_info(env_param)
 
     # ==================== 环境参数（env_param）探测与 prompt 构建 ====================
 
@@ -80,7 +90,7 @@ class AEDirectoryContext(AEBaseContext):
         """外部触发重新扫描脚本信息"""
         self._scripts_cache = None
         self._env_param_info_cache.clear()
-        self._discover_scripts()
+        self._build_all_env_param_info()
 
     def build_env_param_info(self, env_param: AEEnvParamType) -> str:
         """构建指定环境参数类型对应的当前系统实际信息（结果缓存，仅生成一次）。
@@ -99,7 +109,7 @@ class AEDirectoryContext(AEBaseContext):
         if env_param == AEEnvParamType.system:
             return (
                 f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
-                f"Node: {platform.node()}"
+                f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
         name = self._ENV_SCRIPT_NAME.get(env_param)
         if not name:

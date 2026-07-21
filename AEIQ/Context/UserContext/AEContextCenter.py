@@ -252,7 +252,12 @@ class AEContextCenter(AEContextDelegate):
             logger.error("[AEContextCenter] JSON 解析失败: %s\nreply(前2000字符)=%s", e, reply[:2000])
             return
         if not isinstance(data, dict):
-            logger.error(f"LLM 回复非 JSON 对象: {reply!r}")
+            # LLM 可能返回裸数组/裸值，未按 out_schema 嵌套结构输出，无法按 ident 路由
+            logger.error(
+                "[AEContextCenter] LLM 回复非 JSON 对象(type=%s)，无法路由，丢弃。"
+                "LLM 应按 out_schema 原结构回填，不可只返回内层数组。\nreply(前500字符)=%s",
+                type(data).__name__, reply[:500],
+            )
             return
         ident = data.get(AE_IDENT)
         if not ident:
