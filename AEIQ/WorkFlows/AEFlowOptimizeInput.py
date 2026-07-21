@@ -43,9 +43,9 @@ class AEFlowOptimizeInput(AEFlowInfo):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做进一步优化与扩展"
+                f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做优化，不可扩展、不可改变原意思"
                 "（更清晰、更完整、更易于理解），使问题更契合你的专业能力与约束范围。"
-                "优化与扩展需体现你的专业角色，不得超出你的能力与职责边界。"
+                "体现你的专业角色，不得超出你的能力与职责边界。"
             ),
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInput)

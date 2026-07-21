@@ -15,6 +15,7 @@ from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
+
 # out_schema / 路由信封内 ident 字段名
 AE_IDENT = "ident"
 
@@ -50,7 +51,7 @@ class AEFlowInfo:
         Args:
             flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
                         flowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
-            ident: flow 标识；默认空字符串，为空时内部生成 uuid。外部可显式传入以便与
+            ident: flow 标识；默认空字符串，为空时内部生成短 ident。外部可显式传入以便与
                    flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
                         子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
             flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class AEEmployeeFunction(AEFunctional):
     """员工 Flow 专属回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
+    receiveQuestionType = "receiveQuestionType"  # 接收 LLM 判定的问题处理类型（script / other），传入 map
     receiveScripts = "receiveScripts"  # 接收 LLM 返回的多个 AEScript 任务，传入 map
 
 
@@ -38,6 +39,8 @@ class AEEmployee(AERole):
             "3. 产出可直接被上游整合的结构化结果。\n"
             "4. 遇到不明确处向上回传，由工作组或专家裁决。"
         )
+        # 问题处理类型判定结果（script / other）：由 receiveQuestionType 赋值
+        self._questionType: str = ""
 
     def roleDescription(self) -> str:
         """角色描述：返回本角色（员工）的职称与职责。"""
@@ -63,13 +66,13 @@ class AEEmployee(AERole):
         return result
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收优化后的问题（AE_ANSWER）：直接传入 requestScripts 请求多个 AEScript 任务。
+        """接收优化后的问题（AE_ANSWER）：存入 optimizePromptResult，再请求判定是否需要脚本处理。
 
-        - AE_ANSWER 非空：精炼后的问题，直接传给 requestScripts。
+        - AE_ANSWER 非空：优化后的问题，存入 self.optimizePromptResult，并调用 requestQuestionType 判定处理方式。
         - AE_CONFIRM 非空：需提问者确认的信息（此时 AE_ANSWER 为空），仅记录。
 
         Args:
-            data: 回包内层 llm_out，形如 {AE_ANSWER: <精炼后的问题>, AE_CONFIRM: <需确认信息>}（二选一）
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>, AE_CONFIRM: <需确认信息>}（二选一）
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -82,10 +85,90 @@ class AEEmployee(AERole):
         if confirm:
             logger.info("[AEEmployee:%s] 收到需确认信息:\n%s", self.ident, confirm)
             return True
-        # 当前 AE_ANSWER 作为问题，直接传入 requestScripts
-        logger.info("[AEEmployee:%s] 收到精炼后的问题:\n%s", self.ident, result or "")
-        self.requestScripts(result or "")
+        self.optimizePromptResult = result or ""
+        logger.info("[AEEmployee:%s] 收到优化后的问题:\n%s", self.ident, self.optimizePromptResult)
+        # 先判定是否需要脚本程序处理，再据结果分流（receiveQuestionType）
+        self.requestQuestionType()
         return True
+
+    def requestQuestionType(self) -> None:
+        """请求 LLM 判定当前优化后的问题是否需要脚本程序处理。
+
+        - messages: system(role_brief) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(判定指令)
+        - out_schema: {result 占位}，由 LLM 填充 "script" 或 "other"
+        - 走 receiveQuestionType：回包后据 result 决定走脚本流程或其它处理
+        """
+        messages = []
+        role_brief = self.role_brief()
+        if len(role_brief) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        # 用户问题以统一前缀标明，作为 system 消息
+        messages.append({
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.optimizePromptResult}",
+        })
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: (
+                f"请判定{AE_USER_QUESTION_PREFIX}是否需要通过编写并执行脚本程序"
+                "（python / shell / ruby）来处理，并将判定结果填入 result 字段："
+                "script（需要脚本）或 other（不需要脚本，走其它方式）。"
+            ),
+        })
+        flow_out = self.flowOutput(AEEmployeeFunction.receiveQuestionType)
+        flow_out.set_llm_out({"result": llm_generate("script 或 other")})
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
+
+    def receiveQuestionType(self, data: dict) -> bool:
+        """接收 LLM 判定结果（result: script / other），据结果分流。
+
+        - script：走 requestScripts 生成并执行脚本。
+        - other：无需脚本，以优化后的问题作为本员工结论完成 flow。
+
+        Args:
+            data: 回包内层 llm_out，形如 {"result": <script / other>}；若直接为字符串则视为 result 值
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
+        """
+        result = data.get("result") if isinstance(data, dict) else None
+        if result is None and isinstance(data, str):
+            result = data
+        result = (result or "").strip().lower()
+        self._questionType = result
+        logger.info("[AEEmployee:%s] 问题类型判定: result=%s", self.ident, result)
+        if result == "script":
+            # 需要脚本：以优化后的问题请求生成并执行脚本
+            self.requestScripts(self.optimizePromptResult)
+            return True
+        # other：无需脚本，直接请求 LLM 对优化后的问题给出结论
+        self.requestDirectAnswer()
+        return True
+
+    def requestDirectAnswer(self) -> None:
+        """无需脚本时，直接请求 LLM 对优化后的问题给出结论。
+
+        - messages: system(role_brief) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(直接作答指令)
+        - out_schema: 走 flow_receive_complete，回包直接完成本员工（outResult 取 self.output.out_schema，含 AE_ANSWER）
+        """
+        messages = []
+        role_brief = self.role_brief()
+        if len(role_brief) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        # 用户问题以统一前缀标明，作为 system 消息
+        messages.append({
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.optimizePromptResult}",
+        })
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: f"请直接回答{AE_USER_QUESTION_PREFIX}，给出准确、完整的结论。",
+        })
+        # 走 flow_receive_complete：回包直接完成本员工
+        flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
 
     def requestScripts(self, question: str) -> None:
         """以传入的问题（当前 AE_ANSWER）请求 LLM 生成多个 AEScript 任务。
