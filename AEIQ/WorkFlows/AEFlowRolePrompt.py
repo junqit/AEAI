@@ -41,7 +41,7 @@ class AEFlowRolePrompt(AEFlowInfo):
             ),
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizePrompt)
-        flow_out.set_llm_out({AE_ANSWER: llm_generate("问题优化提示，用于引导对用户问题做进一步优化")})
+        flow_out.set_llm_out({AE_ANSWER: llm_generate("用于对用户输入的问题更好的提问")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 

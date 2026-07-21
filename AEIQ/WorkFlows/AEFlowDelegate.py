@@ -173,41 +173,27 @@ class AEFlowDelegateImpl:
         """
         收到经 receive_flow_complete 路由到自身、确认由本 flow 处理的结果数据。
 
-        判断所有子 flow 是否全部 complete：
-        - 未全部 complete：把 AE_ANSWER 内容组装成 flowInput，交给首个 default 状态子 flow startFlow
-        - 全部 complete：汇总所有子 flow 的 outResult 交 LLM 生成最终答案
+        - 有 default 子 flow：启动下一个 default 子 flow（异步执行）
+        - 直接汇总所有已完成的子 flow 的 outResult 交 LLM 生成最终答案
+        _summarize_to_llm 内部只收集 outResult 非 None 的子 flow，未完成的自动跳过。
 
         Args:
             flow: 调用方 AEFlow 实例
             out_schema: 结果数据（含 AE_ANSWER 字段）
         """
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
-        # 判断所有子 flow 是否全部 complete
         complete_count = sum(1 for f in flow._flows.values() if f.status == AEFlowStatus.complete)
         total_count = len(flow._flows)
-        all_complete = complete_count == total_count
         logger.info(
             "[AEFlow:%s][%s] receive_flow_result: complete=%d/%d, answer=%r",
             flow.ident, flow.title, complete_count, total_count, (answer or "")[:100],
         )
-        if not all_complete:
-            AEFlowDelegateImpl._advance_next_flow(flow, answer)
-            return
-
-        AEFlowDelegateImpl._summarize_to_llm(flow)
-
-    @staticmethod
-    def _advance_next_flow(flow, answer: Optional[str]) -> None:
-        """未全部 complete：把 answer 组装成 flowInput，交给首个 default 状态子 flow startFlow。"""
-        flow_input = AEFlowInput(content=answer or "")
+        # 启动下一个 default 子 flow（如果有）
         next_flow = flow.nextFlow()
         if next_flow is not None:
-            next_flow.startFlow(flow_input)
-        else:
-            logger.warning(
-                "[AEFlow:%s][%s] 未全部 complete 但无 default 状态子 flow，无法继续",
-                flow.ident, flow.title,
-            )
+            next_flow.startFlow(AEFlowInput(content=answer or ""))
+        # 直接汇总已完成的子 flow
+        AEFlowDelegateImpl._summarize_to_llm(flow)
 
     @staticmethod
     def _summarize_to_llm(flow) -> None:

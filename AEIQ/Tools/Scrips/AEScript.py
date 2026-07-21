@@ -71,7 +71,7 @@ class AEScript(AEFlow):
         """启动：执行 self.script（按 type 选 runner），stdout 作为结果回传父 flow。
 
         脚本不使用 input.content（执行内容为 self.script），用空内容替代，
-        避免 _advance_next_flow 传入的上游 stdout 被存入 input 导致 outResult_summary 超长。
+        避免 receive_flow_result 传入的上游 stdout 被存入 input 导致 outResult_summary 超长。
 
         Args:
             flowInput: flow 输入数据（内容不参与脚本执行，执行内容为 self.script）

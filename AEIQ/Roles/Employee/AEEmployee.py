@@ -105,16 +105,12 @@ class AEEmployee(AERole):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "请针对上述问题生成多个可独立执行的脚本任务，严格输出 JSON 数组，每项结构如下：\n"
-                "  - title：作用（脚本用途说明，字符串）\n"
-                "  - script：脚本内容（纯代码，字符串）\n"
-                "  - type：脚本类型（取值 python / shell / ruby 之一，字符串）\n\n"
-                "script 字段格式要求（重要）：\n"
-                "- type=python 时，script 必须是纯 Python 代码，直接写代码内容，不要包裹 python3 -c \"...\" 等调用命令；"
-                "例如 script 值应为 \"import os\\nprint(os.getcwd())\"，而不是 \"python3 -c \\\"import os; print(os.getcwd())\\\"\"\n"
-                "- type=shell 时，script 必须是纯 shell 命令，直接写命令内容，不要包裹 sh -c \"...\" 等调用命令；"
-                "例如 script 值应为 \"find . -name '*.py' | head -10\"，而不是 \"sh -c \\\"find . -name '*.py'\\\"\"\n"
-                "- type=ruby 时，script 必须是纯 Ruby 代码，直接写代码内容，不要包裹 ruby -e \"...\" 等调用命令\n"
-                "- 脚本内容中的双引号须转义为 \\\""
+                "  - title：作用（字符串）\n"
+                "  - script：纯代码（字符串，不要包裹解释器调用命令）\n"
+                "  - type：python / shell / ruby 之一\n\n"
+                "要求：\n"
+                "- 脚本可无人值守自动执行，禁止 input()/gets/read 等交互输入，参数硬编码或用环境变量\n"
+                "- 双引号须转义为 \\\""
             ),
         })
         flow_out = self.flowOutput(AEEmployeeFunction.receiveScripts)

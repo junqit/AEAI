@@ -17,12 +17,12 @@ class AEScriptRunner:
     interpreter: str = ""
     flag: str = ""
 
-    def run(self, script_content: str, timeout: Optional[float] = None) -> str:
+    def run(self, script_content: str, timeout: Optional[float] = 30) -> str:
         """执行脚本内容，返回 stdout。
 
         Args:
             script_content: 脚本文本。
-            timeout: 超时秒数；None 表示不限制。
+            timeout: 超时秒数；默认 30 秒，None 表示不限制。
 
         Returns:
             脚本 stdout。
@@ -37,6 +37,7 @@ class AEScriptRunner:
             capture_output=True,
             text=True,
             timeout=timeout,
+            stdin=subprocess.DEVNULL,
         )
         if result.returncode != 0:
             raise RuntimeError(
