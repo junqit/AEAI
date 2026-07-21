@@ -129,8 +129,8 @@ class AEZhipuModel:
             json.dumps(payload, ensure_ascii=False, indent=2),
         )
 
-        # 最多重试 5 次（429 限流 / 5xx / 网络异常等），全部失败则返回失败
-        MAX_RETRY = 5
+        # 最多重试 10 次（429 限流 / 5xx / 网络异常等），全部失败则返回失败
+        MAX_RETRY = 10
         backoff = 1.0
         last_error = "未知错误"
         for attempt in range(1, MAX_RETRY + 1):

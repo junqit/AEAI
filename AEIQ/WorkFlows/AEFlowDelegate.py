@@ -201,12 +201,16 @@ class AEFlowDelegateImpl:
             status_counts[s] = status_counts.get(s, 0) + 1
         complete = status_counts.get(AEFlowStatus.complete.value, 0)
         pending = total - complete
+        # 分别记录已完成 / 未完成子 flow 的名字（title），便于排查卡点
+        done_names = [f.title for f in flow._flows.values() if f.status == AEFlowStatus.complete]
+        pending_names = [f.title for f in flow._flows.values() if f.status != AEFlowStatus.complete]
         logger.info(
             "[AEFlow:%s][%s] _summarize_to_llm: total=%d, 状态分布=%s",
             flow.ident, flow.title, total, status_counts,
         )
+        logger.info("[AEFlow:%s] 已完成(%d/%d): %s", flow.ident, complete, total, done_names)
         if pending > 0:
-            logger.info("[AEFlow:%s] 未全部完成(%d/%d)，等待中", flow.ident, complete, total)
+            logger.info("[AEFlow:%s] 未完成(%d/%d)，等待中: %s", flow.ident, pending, total, pending_names)
             return
         flow_out = flow.flowOutput(AEFunctional.flow_receive_complete)
         messages = []
@@ -216,12 +220,9 @@ class AEFlowDelegateImpl:
         # 把所有子 flow 的 outResult 总结内容放入 messages（作为 assistant 回答）
         has_result = 0
         for f in flow._flows.values():
-            logger.info("[AEFlow:%s] _summarize 检查子 flow[%s] status=%s outResult=%s",
-                        flow.ident, f.ident, f.status, type(f.outResult).__name__ if f.outResult is not None else "None")
             if f.outResult is not None:
                 try:
                     summary = f.outResult_summary()
-                    logger.info("[AEFlow:%s] _summarize 子 flow[%s] outResult_summary=%r", flow.ident, f.ident, summary[:200])
                     messages.append({
                         AE_ROLE: AEConentRole.ASSISTANT.value,
                         AE_CONTENT: summary,
@@ -231,7 +232,6 @@ class AEFlowDelegateImpl:
                     logger.error("[AEFlow:%s] _summarize 子 flow[%s] outResult_summary 异常: %s", flow.ident, f.ident, e, exc_info=True)
             else:
                 logger.warning("[AEFlow:%s] _summarize 子 flow[%s] outResult is None, 跳过, status=%s", flow.ident, f.ident, f.status)
-        logger.info("[AEFlow:%s] _summarize 有 outResult 的子 flow 数=%d / 总数=%d", flow.ident, has_result, len(flow._flows))
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: "请根据以上提供的信息进行汇总，输出最终结论。",

@@ -30,20 +30,20 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
     try:
         client = _get_async_client()
         # 打印即将发送的数据（JSON 标准格式输出）
-        logger.info(
-            "📤 即将发送 LLM 请求:\n%s",
-            json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
-        )
+        # logger.info(
+        #     "📤 即将发送 LLM 请求:\n%s",
+        #     json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
+        # )
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
-        logger.info(f"LLM response received, reply_length={len(reply) if reply else 0}")
+        # logger.info(f"LLM response received, reply_length={len(reply) if reply else 0}")
         filled_content = _parse_content_json(reply)
         if filled_content is None:
             logger.error("LLM 内容解析失败，丢弃回包")
             return None
         envelope = payload.fill_content(filled_content)
-        logger.info("LLM 回填信封:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
+        # logger.info("LLM 回填信封:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
         return envelope
     except Exception as e:
         logger.error(f"LLM request failed: {e}")

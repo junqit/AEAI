@@ -115,6 +115,11 @@ class AEAssistant(AERole):
             )
             AEFlowInterfaceImpl.addFlow(self, wg)
             wg.startFlow(AEFlowInput(content=content))
+            # 打印工作组信息：ident、任务内容、回包目标 assistant.ident
+            logger.info(
+                "[addWorkGroups] 工作组已创建并启动：ident=%s | 路由回 assistant.ident=%s | 任务内容=%s",
+                getattr(wg, "ident", ""), self.ident, content,
+            )
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:

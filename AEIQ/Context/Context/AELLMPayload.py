@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from common.aellm_enums import AELLMType, AEAiLevel
 from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
+from WorkFlows.AEFlowInfo import AE_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -75,19 +76,26 @@ class AELLMPayload:
         return list(self._env_params)
 
     def _extract_content_template(self):
-        """取出 out_schema 最内层的「内容模板」——占位符所在层，不含任何 ident / 路由信封。
+        """取出 out_schema 最内层 llm_out（内容），并按 AE_ANSWER 收敛，确保 LLM 不接触 ident：
 
-        信封每层形如 {ident, title[, excutor], llm_out: <下一层>}；沿 llm_out 下钻，
-        直到某层的 llm_out 不再是「含 llm_out 的 dict」，即为内容模板（dict / list / 占位结构）。
+        - 沿 llm_out 下钻到最内层内容（占位符所在层）。
+        - 若内容为含 AE_ANSWER 的 dict（如 complete 阶段 {ident, reply: <|..|>}），
+          只取 {AE_ANSWER: <模板>}，隐去 ident 等路由字段——LLM 只填 AE_ANSWER。
+        - 否则（内容无 AE_ANSWER，如 {"result": <|..|>} 或任务数组）取整个内容；
+          这些内容本身不含 ident，可直接发给 LLM。
         """
         node = self.out_schema
+        content = node
         while isinstance(node, dict) and AE_LLM_OUT in node:
             child = node[AE_LLM_OUT]
             if isinstance(child, dict) and AE_LLM_OUT in child:
                 node = child
             else:
-                return child
-        return node
+                content = child
+                break
+        if isinstance(content, dict) and AE_ANSWER in content:
+            return {AE_ANSWER: content[AE_ANSWER]}
+        return content
 
     def to_llm_request_dic(self) -> dict:
         # 两步流程·第一步：仅把「内容模板」（含占位符、无 ident）发给 LLM，让其填充 / 展开
@@ -112,7 +120,11 @@ class AELLMPayload:
         }
 
     def fill_content(self, filled_content) -> dict:
-        """两步流程·第二步：把 LLM 生成的内容回填到信封最内层 llm_out，返回完整信封（含可信 ident，逐字保留）。"""
+        """两步流程·第二步：把 LLM 生成的内容回填到信封，返回完整信封（含可信 ident，逐字保留）。
+
+        - 若最内层内容为含 AE_ANSWER 的 dict：仅回填 AE_ANSWER，ident 等路由字段保持不变。
+        - 否则：用 LLM 生成的内容整体替换最内层 llm_out（此类内容不含 ident）。
+        """
         import copy
         envelope = copy.deepcopy(self.out_schema)
         node = envelope
@@ -121,6 +133,12 @@ class AELLMPayload:
             if isinstance(child, dict) and AE_LLM_OUT in child:
                 node = child
             else:
-                node[AE_LLM_OUT] = filled_content
+                if isinstance(child, dict) and AE_ANSWER in child:
+                    if isinstance(filled_content, dict) and AE_ANSWER in filled_content:
+                        child[AE_ANSWER] = filled_content[AE_ANSWER]
+                    else:
+                        child[AE_ANSWER] = filled_content
+                else:
+                    node[AE_LLM_OUT] = filled_content
                 break
         return envelope
