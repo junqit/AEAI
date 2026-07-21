@@ -85,7 +85,6 @@ class AEFlowInfo:
         """flow 标识（只读）"""
         return self._ident
 
-    @property
     def role_brief(self) -> str:
         """组装身份与能力范围信息，供 LLM 明确本 flow 的角色定位。
 
@@ -99,6 +98,13 @@ class AEFlowInfo:
         if len(parts) == 0:
             return ""
         return "".join(parts)
+
+    def roleDescription(self) -> str:
+        """角色描述信息，供子类覆写补充更细粒度的角色说明。
+
+        基类默认返回空字符串。
+        """
+        return ""
 
     def flowOutput(self, functional: str) -> AEFlowOutput:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, title, funcationkey, llm_out}。

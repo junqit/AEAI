@@ -42,7 +42,7 @@ class AEReviewer(AERole):
         if not super().startFlow(flowInput):
             return
         messages = []
-        role_brief = self.role_brief
+        role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})

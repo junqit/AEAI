@@ -33,7 +33,6 @@ class AEChat(AEFlow):
         refiner = AERefiner(flowOutput=refiner_output)
         AEFlowInterfaceImpl.addFlow(self, refiner)
 
-    @property
     def role_brief(self) -> str:
         """覆写：Chat 不向 LLM 声明身份与能力，返回空字符串。"""
         return ""

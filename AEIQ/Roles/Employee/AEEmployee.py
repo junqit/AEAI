@@ -93,7 +93,7 @@ class AEEmployee(AERole):
             question: 当前 AE_ANSWER（精炼后的问题）
         """
         messages = []
-        role_brief = self.role_brief
+        role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 问题以统一前缀标明，作为 system 消息

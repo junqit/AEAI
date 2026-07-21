@@ -23,7 +23,7 @@ class AEDirectoryContext(AEBaseContext):
     ENV_PARAM_DESC: Dict[AEEnvParamType, str] = {
         AEEnvParamType.system: (
             "【系统环境】当前主机的操作系统、硬件架构与系统级工具信息；"
-            "据此判断可用能力，所有操作须在当前工作目录内完成。"
+            "据此判断可用能力，所涉及的程序、脚本、工具须在当前系统可用。"
         ),
         AEEnvParamType.python: (
             "【Python 环境】可使用已安装的 Python 解释器及第三方库执行代码；"

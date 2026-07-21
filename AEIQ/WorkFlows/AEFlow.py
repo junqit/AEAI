@@ -6,7 +6,7 @@ AEFlow - Flow 基类，多继承 AEFlowOptimizeInput / AEFlowInformation，
   - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
     flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
   - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
-  - 私有方法 / 属性：outResult_summary
+  - 私有方法：outResult_summary
 
 问题优化（requestOptimizeInput 等）、角色信息（requestRoleInformation / receiveRoleInfomation）
 分别由父类 AEFlowOptimizeInput / AEFlowInformation 提供。
@@ -187,17 +187,16 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
         """Flow 完成通知（转调 AEFlowDelegateImpl）。"""
         AEFlowDelegateImpl.receive_flow_complete(self, result, event)
 
-    # ==================== 私有方法 / 属性 ====================
+    # ==================== 私有方法 ====================
 
-    @property
     def outResult_summary(self) -> str:
-        """组装 input.content（问题）与 outResult（回答）为总结内容。
+        """组装优化后的问题（optimizePromptResult）与 outResult（回答）为总结内容。
 
-        形如「{AE_USER_QUESTION_PREFIX}{input.content} 我的回答：{answer}」；
-        input 为空时仅返回「我的回答：{answer}」。
+        形如「{AE_USER_QUESTION_PREFIX}{optimizePromptResult} 我的回答：{answer}」；
+        优化后的问题为空时仅返回「我的回答：{answer}」。
         """
         answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
-        content = self.input.content if (self.input is not None and self.input.content) else ""
-        if content:
-            return f"{AE_USER_QUESTION_PREFIX}{content} 我的回答：{answer}"
+        question = self.optimizePromptResult or ""
+        if question:
+            return f"{AE_USER_QUESTION_PREFIX}{question} 我的回答：{answer}"
         return f"我的回答：{answer}"

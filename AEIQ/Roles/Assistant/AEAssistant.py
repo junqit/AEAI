@@ -7,7 +7,6 @@ AEAssistant - 助理生成 Flow，继承 AERole。
 import logging
 
 from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
-from WorkFlows.AEFlowInfo import AE_TITLE
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
@@ -25,18 +24,11 @@ class AEAssistantFunction(AEFunctional):
 
     每个方法接收一个 map（步骤输入 / 输出数据），由 executor 按名调用。
     """
-    updateAssisstantInfo = "updateAssisstantInfo"  # 更新助理信息，传入 map
     addWorkGroups = "addWorkGroups"                # 添加工作组，传入任务内容列表
 
 
 class AEAssistant(AERole):
     """助理生成 Flow：根据传入 map 生成专家助理定义。"""
-
-    # updateAssisstantInfo 接收的 map 整体结构：llm_generate 占位说明各字段应填充内容
-    updateAssisstantInfo_input = {
-        AE_TITLE: llm_generate("专家职称，体现专业领域与定位"),
-        "responsibility": llm_generate("专家职责要求，明确能力范围与禁止事项"),
-    }
 
     # addWorkGroups 接收的参数格式：任务内容列表，每项为一个工作组可独立完成的任务内容
     addWorkGroups_input = [
@@ -54,33 +46,36 @@ class AEAssistant(AERole):
             "3. 字段需贴合问题领域，不可随意编造。"
         )
 
-    def updateAssisstantInfo(self, data: dict) -> bool:
-        """更新助理的身份与职责（覆盖默认 title / responsibility）。
+    def receiveRoleInfomation(self, data: dict) -> bool:
+        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        result = super().receiveRoleInfomation(data)
+        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+        self.requestOptimizeInput()
+        return result
+
+    def receiveOptimizeInput(self, data: dict) -> bool:
+        """接收优化后的问题：交基类存储为 optimizePromptResult，再请求生成多个工作组任务（维度分离）。
+
+        覆写基类：基类负责提取 AE_ANSWER 并存入 self.optimizePromptResult；
+        本类在此基础上发起维度目标生成请求（回包走 addWorkGroups）。
 
         Args:
-            data: 助理配置 map，结构见 updateAssisstantInfo_input：
-                  {AE_TITLE: <助理职称>, "responsibility": <助理职责要求>}
+            data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>}
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        import json
-        logger.info("[AEAssistant:%s] updateAssisstantInfo 收到数据:\n%s",
-                    self.ident, json.dumps(data, ensure_ascii=False, indent=2, default=str) if isinstance(data, dict) else repr(data))
-        if not isinstance(data, dict):
-            data = {}
-        self.title = data.get(AE_TITLE, "") or ""
-        self.responsibility = data.get("responsibility", "") or ""
-
-        # 收到 title/responsibility 后，发起第二步：维度目标生成
+        # 基类负责提取 AE_ANSWER 并存入 self.optimizePromptResult
+        result = super().receiveOptimizeInput(data)
+        # 收到优化后的问题后，发起维度目标生成
         # 用户问题以统一前缀（AE_USER_QUESTION_PREFIX）标识，作为 system 消息
         messages = []
-        role_brief = self.role_brief
+        role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
-            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.content if self.input else ''}",
+            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.optimizePromptResult}",
         })
         # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
         messages.append({
@@ -93,7 +88,7 @@ class AEAssistant(AERole):
         flow_out.set_llm_out(list(self.addWorkGroups_input))
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
-        return True
+        return result
 
     def addWorkGroups(self, tasks: list) -> bool:
         """根据任务内容列表添加并启动工作组子 flow。
@@ -118,24 +113,12 @@ class AEAssistant(AERole):
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input，拼装 AELLMPayload 发送。
-
-        - messages: system(role_brief) / user(input.content)
-        - out_schema: 本 flow 的输出结构（output 已在构造时设置，含助理定义 map 占位，由 LLM 填充）
+        """启动：交基类置 input，先 requestRoleInformation 生成自身 title/能力，回包 receiveRoleInfomation 后再执行实际任务。
 
         Args:
             flowInput: flow 输入数据（content 即用户问题 / 领域描述）
         """
         if not super().startFlow(flowInput):
             return
-        messages = []
-        role_brief = self.role_brief
-        if len(role_brief) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
-        flow_out = self.flowOutput(AEAssistantFunction.updateAssisstantInfo)
-        # flow_out 默认 llm_out 为占位，此处替换为 updateAssisstantInfo 需要的参数结构
-        # （title / responsibility 占位），由 LLM 填充后回包交 updateAssisstantInfo(inner) 处理
-        flow_out.set_llm_out(dict(self.updateAssisstantInfo_input))
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
+        self.requestRoleInformation()

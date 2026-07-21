@@ -210,7 +210,7 @@ class AEFlowDelegateImpl:
             return
         flow_out = flow.flowOutput(AEFunctional.flow_receive_complete)
         messages = []
-        role_brief = flow.role_brief
+        role_brief = flow.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 把所有子 flow 的 outResult 总结内容放入 messages（作为 assistant 回答）
@@ -220,7 +220,7 @@ class AEFlowDelegateImpl:
                         flow.ident, f.ident, f.status, type(f.outResult).__name__ if f.outResult is not None else "None")
             if f.outResult is not None:
                 try:
-                    summary = f.outResult_summary
+                    summary = f.outResult_summary()
                     logger.info("[AEFlow:%s] _summarize 子 flow[%s] outResult_summary=%r", flow.ident, f.ident, summary[:200])
                     messages.append({
                         AE_ROLE: AEConentRole.ASSISTANT.value,

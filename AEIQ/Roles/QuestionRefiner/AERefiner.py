@@ -45,7 +45,6 @@ class AERefiner(AERole):
         # LLM 选择的问题解决角色 type（expert / workgroup / employee / reviewer）：由 roleChoice 接收并存储
         self._roleChoiceType: str = ""
 
-    @property
     def outResult_summary(self) -> str:
         """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回精炼后的问题。"""
         answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""

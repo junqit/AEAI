@@ -30,7 +30,7 @@ class AEFlowOptimizeInput(AEFlowInfo):
         """
         from WorkFlows.AEFlow import AEFlowFunctional  # 懒导入避免循环
         messages = []
-        role_brief = self.role_brief
+        role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 用户问题以统一前缀（AE_USER_QUESTION_PREFIX）单独作为 system 消息传入

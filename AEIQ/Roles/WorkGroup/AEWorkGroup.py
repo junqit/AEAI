@@ -93,7 +93,7 @@ class AEWorkGroup(AERole):
             question: 当前最优问题（AE_ANSWER）
         """
         messages = []
-        role_brief = self.role_brief
+        role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 问题以统一前缀标明，作为 system 消息
