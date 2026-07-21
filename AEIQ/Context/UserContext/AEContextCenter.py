@@ -236,28 +236,17 @@ class AEContextCenter(AEContextDelegate):
 
     # ==================== LLM 回复接收与分发 ====================
 
-    def dispatch_llm_response(self, reply: str) -> None:
-        """解析 LLM 回复 JSON，按其中的 ident 把数据传给本用户内对应 Context。"""
-        if not reply:
-            logger.warning("LLM 回复为空，跳过 dispatch")
-            return
-        stripped = self._strip_code_fence(reply)
-        try:
-            data = json.loads(stripped)
-        except (ValueError, TypeError) as e:
-            logger.error("[AEContextCenter] JSON 解析失败: %s\nreply(前2000字符)=%s", e, reply[:2000])
-            return
+    def dispatch_llm_response(self, data: dict) -> None:
+        """路由回填好的信封 dict（含可信 ident）到对应 Context。
+
+        data 由 AELLMClient 回填完成：ident 等路由字段由框架逐字保留，LLM 仅生成最内层内容。
+        """
         if not isinstance(data, dict):
-            # LLM 可能返回裸数组/裸值，未按 out_schema 嵌套结构输出，无法按 ident 路由
-            logger.error(
-                "[AEContextCenter] LLM 回复非 JSON 对象(type=%s)，无法路由，丢弃。"
-                "LLM 应按 out_schema 原结构回填，不可只返回内层数组。\nreply(前500字符)=%s",
-                type(data).__name__, reply[:500],
-            )
+            logger.error("[AEContextCenter] LLM 回填信封非 map，丢弃: %r", data)
             return
         ident = data.get(AE_IDENT)
         if not ident:
-            logger.error(f"LLM 回复缺少 ident: {data!r}")
+            logger.error(f"LLM 回填信封缺少 ident: {data!r}")
             return
         context = self.find_by_ident(ident)
         if context is None:
@@ -265,16 +254,3 @@ class AEContextCenter(AEContextDelegate):
             return
         # 剥掉第一层（context.ident），把内层 llm_out 传给 context，由各层逐层解析本层数据
         context.receive_llm_response(data.get(AE_LLM_OUT))
-
-    @staticmethod
-    def _strip_code_fence(text: str) -> str:
-        """去掉 LLM 回复可能包裹的 ```json ... ``` 代码块围栏"""
-        t = text.strip()
-        if t.startswith("```"):
-            lines = t.splitlines()
-            if lines:
-                lines = lines[1:]
-            if lines and lines[-1].strip().startswith("```"):
-                lines = lines[:-1]
-            t = "\n".join(lines)
-        return t

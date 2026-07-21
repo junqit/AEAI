@@ -106,8 +106,10 @@ class AEUserContext:
         asyncio.run_coroutine_threadsafe(self._do_llm(payload), self._loop)
 
     async def _do_llm(self, payload) -> None:
-        """在 loop 上 await async LLM，回复到达后直接 dispatch 驱动 flow（与请求同在一个异步线程）。"""
+        """在 loop 上 await async LLM，回复到达后回填信封并 dispatch 驱动 flow（与请求同在一个异步线程）。"""
         from ..Context.AELLMClient import send_llm_request
 
-        reply = await send_llm_request(payload)
-        self._context_center.dispatch_llm_response(reply)
+        envelope = await send_llm_request(payload)
+        if envelope is None:
+            return
+        self._context_center.dispatch_llm_response(envelope)
