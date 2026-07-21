@@ -77,17 +77,40 @@ class AELLMPayload:
         # 按 out_schema 输出：注入 system 指令，要求按该结构输出合法 JSON
         schema_json = json.dumps(self.out_schema, ensure_ascii=False, indent=2)
         logger.info("out_schema 结构:\n%s", schema_json)
+
+        # 遍历 out_schema，分类占位符字段（需填写）与非占位符字段（不可修改）
+        fill_fields: List[str] = []
+        fixed_fields: List[str] = []
+
+        def _walk(obj, path: str = ""):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    p = f"{path}.{k}" if path else k
+                    if isinstance(v, str) and is_llm_placeholder(v):
+                        fill_fields.append(f"{p} ← {v}")
+                    elif isinstance(v, (dict, list)):
+                        _walk(v, p)
+                    else:
+                        fixed_fields.append(f"{p} = {v!r}")
+            elif isinstance(obj, list):
+                for i, v in enumerate(obj):
+                    _walk(v, f"{path}[{i}]")
+
+        _walk(self.out_schema)
+
+        fill_list = "\n".join(f"  - {f}" for f in fill_fields) or "  (无)"
+        fixed_list = "\n".join(f"  - {f}" for f in fixed_fields) or "  (无)"
+
         messages = list(self.messages)
         instruction = (
             "请按以下结构输出合法 JSON，不要输出任何 JSON 之外的文字或解释，结构如下：\n"
             + schema_json
-            + "\n\n其中形如 \"<|描述|>\" 的字符串值为占位符，<||> 之间的描述说明了该位置应填充的内容；不允许修改其他字段内容！！！"
-            "\n\n重要：只可替换 <|描述|> 占位符的内容，不可修改、删除、新增占位符以外的任何字段名、字段值或结构！！！"
+            + f"\n\n【需要填写的字段】（共 {len(fill_fields)} 个，替换占位符内容）：\n{fill_list}"
+            + f"\n\n【不可修改的字段】（共 {len(fixed_fields)} 个，必须保持原值不变）：\n{fixed_list}"
+            + "\n\n规则：只可替换 <|描述|> 占位符的内容，不可修改、删除、新增占位符以外的任何字段名、字段值或结构；"
             "字符串值内若包含双引号须转义为 \\\"。"
         )
         messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
-        # llm_type 输出枚举值（如 "chatgpt"），level 输出成员名（如 "default"），
-        # 与下游 llms 服务约定的字符串协议保持一致，避免硬编码字符串
         return {
             "messages": messages,
             "llm_type": self.llm_type.value,
