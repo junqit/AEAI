@@ -182,26 +182,32 @@ class AEFlowDelegateImpl:
             out_schema: 结果数据（含 AE_ANSWER 字段）
         """
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
-        complete_count = sum(1 for f in flow._flows.values() if f.status == AEFlowStatus.complete)
-        total_count = len(flow._flows)
-        logger.info(
-            "[AEFlow:%s][%s] receive_flow_result: complete=%d/%d, answer=%r",
-            flow.ident, flow.title, complete_count, total_count, (answer or "")[:100],
-        )
         # 启动下一个 default 子 flow（如果有）
         next_flow = flow.nextFlow()
         if next_flow is not None:
             next_flow.startFlow(AEFlowInput(content=answer or ""))
-        # 直接汇总已完成的子 flow
         AEFlowDelegateImpl._summarize_to_llm(flow)
 
     @staticmethod
     def _summarize_to_llm(flow) -> None:
-        """全部 complete：汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。"""
+        """汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。
+
+        未全部 complete 时不汇总，等待剩余子 flow 完成。
+        """
+        total = len(flow._flows)
+        status_counts = {}
+        for f in flow._flows.values():
+            s = f.status.value
+            status_counts[s] = status_counts.get(s, 0) + 1
+        complete = status_counts.get(AEFlowStatus.complete.value, 0)
+        pending = total - complete
         logger.info(
-            "[AEFlow:%s][%s] _summarize_to_llm 开始汇总, 子 flow 数=%d",
-            flow.ident, flow.title, len(flow._flows),
+            "[AEFlow:%s][%s] _summarize_to_llm: total=%d, 状态分布=%s",
+            flow.ident, flow.title, total, status_counts,
         )
+        if pending > 0:
+            logger.info("[AEFlow:%s] 未全部完成(%d/%d)，等待中", flow.ident, complete, total)
+            return
         flow_out = flow.flowOutput(AEFunctional.flow_receive_complete)
         messages = []
         role_brief = flow.role_brief
