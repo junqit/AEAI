@@ -1,24 +1,14 @@
 """
-AEFlowInterfaceImpl - AEFlowInterface 协议方法的实现（静态工具类，不实例化）+
-AEFlowOptimizeQuestion - AEFlow 的父类（问题优化相关 LLM 请求方法）。
+AEFlowInterfaceImpl - AEFlowInterface 协议方法的实现（静态工具类，不实例化）。
 
-AEFlowInterfaceImpl：将 AEFlow 的接口实现（startFlow / addFlow / receive_llm_response）
-从 AEFlow.py 抽出。本类不创建实例、不作基类；调用方（AEFlow）在薄包装方法中传入自身实例 flow，
+将 AEFlow 的接口实现（startFlow / addFlow / receive_llm_response）从 AEFlow.py 抽出。
+本类不创建实例、不作基类；调用方（AEFlow）在薄包装方法中传入自身实例 flow，
 由本类完成具体逻辑。receive_flow_result 系列已迁至 AEFlowDelegateImpl。
-
-AEFlowOptimizeQuestion：AEFlow 的父类，提供 requestOptimizeInputOptimize /
-receiveOptimizeInputOptimize；AEFlow 多继承本类。AEFlowFunctional 在方法内懒导入避免循环。
 """
 import logging
-from typing import Optional, TYPE_CHECKING
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_ANSWER, AE_CONFIRM, AEFlowStatus
-from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
-
-if TYPE_CHECKING:
-    pass
+from .AEFlowInfo import AE_IDENT, AEFlowStatus
 
 logger = logging.getLogger(__name__)
 
@@ -88,75 +78,3 @@ class AEFlowInterfaceImpl:
             "[AEFlow:%s][%s] ident=%r 无法命中（既非自身也未匹配子 flow），忽略: %r",
             flow.ident, flow.title, ident, data,
         )
-
-
-class AEFlowOptimizeQuestion(AEFlowInfo):
-    """AEFlow 父类：问题优化相关 LLM 请求方法（requestOptimizeInputOptimize / receiveOptimizeInputOptimize）。"""
-
-    def requestOptimizeInputOptimize(self) -> None:
-        """综合自身 title/能力(role_brief)、optimizePromptResult 与 input.content 发送 LLM 请求，得到结果。
-
-        - messages: system(role_brief) / system(input.content) / user(optimizePromptResult)，每条信息单独一条消息
-        - out_schema: 本 flow 的输出结构（output 已在构造时设置），由 LLM 填充最终结果
-        - 走 receiveOptimizeInputOptimize：回包仅打印结果（不完成 flow）
-        """
-        from WorkFlows.AEFlow import AEFlowFunctional  # 懒导入避免循环
-        messages = []
-        # system：身份与能力(role_brief)，单独一条
-        role_brief = self.role_brief
-        if len(role_brief) > 0:
-            messages.append({
-                AE_ROLE: AEConentRole.SYSTEM.value,
-                AE_CONTENT: role_brief,
-            })
-        # system：用户问题(input.content)，单独一条
-        if self.input is not None and self.input.content:
-            messages.append({
-                AE_ROLE: AEConentRole.SYSTEM.value,
-                AE_CONTENT: f"用户问题：\n{self.input.content}",
-            })
-        # user：问题优化提示(optimizePromptResult)，作为优化指引
-        if len(self.optimizePromptResult) > 0:
-            messages.append({
-                AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: self.optimizePromptResult,
-            })
-        # out_schema 由 flowOutput 构建（注册功能 + 标准结构），不复用当前 flow 的 output
-        flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInputOptimize)
-        # llm_out：最终结果(AE_ANSWER) 与 需确认信息(AE_CONFIRM) 二选一，不可同时填写
-        flow_out.set_llm_out({
-            AE_ANSWER: llm_generate("依据经验给出的问题"),
-            # AE_CONFIRM: llm_generate("需要提问者确认的信息；根据自身工作范围填写，不要超出职责范围，要有界限；与 reply 二选一，给出确认信息时 reply 留空，无确认需求时本字段留空"),
-        })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
-
-    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
-        """接收 LLM 返回的最终结果，仅打印（不完成 flow、不写 outResult）。
-
-        解析结论中是否含「需要提问者确认的信息」(AE_CONFIRM 字段)：非空则记录为待确认。
-
-        Args:
-            data: 回包内层 llm_out，形如 {AE_ANSWER: <最终结果>, AE_CONFIRM: <需确认信息>}；
-                  若直接为字符串则视为结果
-
-        Returns:
-            bool: 当前数据处理是否完成（True=已处理）
-        """
-        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
-        if result is None and isinstance(data, str):
-            result = data
-        # 解析是否含有需要用户确认的信息
-        confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
-        confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
-        if confirm:
-            logger.info(
-                "[AEFlow:%s][%s] 收到最终结果:\n%s\n[需要用户确认] %s",
-                self.ident, self.title, result or "", confirm,
-            )
-        else:
-            logger.info(
-                "[AEFlow:%s][%s] 收到最终结果:\n%s",
-                self.ident, self.title, result or "",
-            )
-        return True

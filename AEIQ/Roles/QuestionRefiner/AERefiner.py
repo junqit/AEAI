@@ -40,7 +40,7 @@ class AERefiner(AERole):
             "6. 输出应该直接作为后续 AI 的输入。\n"
             "如果问题已经清晰，则仅做轻微优化。"
         )
-        # 问题转换后的内容（精炼后的问题）：由 receiveOptimizeInputOptimize 从回包提取并存储
+        # 问题转换后的内容（精炼后的问题）：由 receiveOptimizeInput 从回包提取并存储
         self._refinedQuestion: str = ""
         # LLM 选择的问题解决角色 type（expert / workgroup / employee / reviewer）：由 roleChoice 接收并存储
         self._roleChoiceType: str = ""
@@ -51,7 +51,7 @@ class AERefiner(AERole):
         answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
-    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
+    def receiveOptimizeInput(self, data: dict) -> bool:
         """接收优化后的问题：存入 _refinedQuestion 并打印，再交 LLM 选择负责解决问题的角色。
 
         覆写基类：优化后的问题即精炼后的问题，存入 self._refinedQuestion 供 requestRoleChoice
@@ -162,22 +162,4 @@ class AERefiner(AERole):
         if not super().startFlow(flowInput):
             return
 
-
-        self.requestOptimizePrompt()
-        # messages = []
-        # role_brief = self.role_brief
-        # if len(role_brief) > 0:
-        #     messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        # messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: self.input.content if self.input else ""})
-        # # 用本 flow 的 output.out_schema 作 llm_out，由 flowOutput 打包成路由信封
-        # # （ident/title/funcationkey + llm_out）；receiveRefinerQuestion 随机 funcident，回包据此路由
-        # flow_out = self.flowOutput(AERefinerFunctional.receiveRefinerQuestion)
-        # # 切到独立 receiveRefinerQuestion 后，flowOutput 走非 complete 分支会丢失 output.out_schema
-        # # （含回程路由所需的 ident）；用本 flow 的 output.out_schema 补回 llm_out，保持 complete 风格输出结构
-        # flow_out.set_llm_out(self.output.out_schema)
-        # payload = AELLMPayload(
-        #     messages=messages,
-        #     out_schema=flow_out.out_schema,
-        # )
-        # # 发送前置状态为 complete，注入 out_schema 后回包按 complete 处理
-        # self.send_llm_payload(payload)
+        self.requestOptimizeInput()

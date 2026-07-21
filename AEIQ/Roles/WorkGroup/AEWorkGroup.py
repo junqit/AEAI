@@ -36,32 +36,32 @@ class AEWorkGroup(AERole):
             "2. 输出该维度的结论与产物。\n"
             "3. 与其他工作组保持独立，可并行。"
         )
-        # 优化后的问题（最优问题）：由 receiveOptimizeInputOptimize 从回包提取并存储
-        self._optimizedQuestion: str = ""
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input，先 requestRoleInfo 生成自身 title/能力，回包 receiveRole 后再执行实际任务。
+        """启动：交基类置 input，先 requestRoleInformation 生成自身 title/能力，回包 receiveRoleInfomation 后再执行实际任务。
 
         Args:
             flowInput: flow 输入数据（content 即本工作组负责的维度目标）
         """
         if not super().startFlow(flowInput):
             return
-        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRole，再发送实际任务）
-        self.requestRoleInfo()
+        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
+        self.requestRoleInformation()
 
-    def receiveRole(self, data: dict) -> bool:
-        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizePrompt）。"""
-        result = super().receiveRole(data)
-        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizePrompt）
-        self.requestOptimizePrompt()
+    def receiveRoleInfomation(self, data: dict) -> bool:
+        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        result = super().receiveRoleInfomation(data)
+        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+        self.requestOptimizeInput()
         return result
 
-    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
-        """接收优化后的问题（AE_ANSWER），存储并请求创建多个 employee。
+    def receiveOptimizeInput(self, data: dict) -> bool:
+        """接收优化后的问题（AE_ANSWER）：交基类存储为 optimizePromptResult，再请求创建多个 employee。
 
-        先交基类处理（提取+打印），再做 WorkGroup 专属逻辑：
-        - AE_ANSWER 非空：优化后的问题（最优问题），存入 self._optimizedQuestion，并调用 requestEmployees。
+        覆写基类：基类负责提取 AE_ANSWER 并存入 self.optimizePromptResult；
+        本类在此基础上处理确认信息并调用 requestEmployees。
+
+        - AE_ANSWER 非空：优化后的问题（最优问题），由基类存入 optimizePromptResult，并调用 requestEmployees。
         - AE_CONFIRM 非空：需提问者确认的信息（此时 AE_ANSWER 为空），仅记录。
 
         Args:
@@ -70,20 +70,16 @@ class AEWorkGroup(AERole):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        result = super().receiveOptimizeInputOptimize(data)
-        # WorkGroup 专属：处理确认信息 + 存储最优问题 + 请求创建 employee
-        answer = data.get(AE_ANSWER) if isinstance(data, dict) else None
-        if answer is None and isinstance(data, str):
-            answer = data
+        # 基类负责提取 AE_ANSWER 并存入 self.optimizePromptResult
+        result = super().receiveOptimizeInput(data)
+        # WorkGroup 专属：处理确认信息 + 请求创建 employee
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
         confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
         if confirm:
             logger.info("[AEWorkGroup:%s] 收到需确认信息:\n%s", self.ident, confirm)
             return result
-        self._optimizedQuestion = answer or ""
-        logger.info("[AEWorkGroup:%s] 收到优化后的问题:\n%s", self.ident, self._optimizedQuestion)
         # 收到最优问题后，请求创建多个 employee
-        self.requestEmployees(self._optimizedQuestion)
+        self.requestEmployees(self.optimizePromptResult)
         return result
 
     def requestEmployees(self, question: str) -> None:

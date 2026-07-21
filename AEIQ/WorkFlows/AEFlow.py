@@ -1,5 +1,5 @@
 """
-AEFlow - Flow 基类，多继承 AEFlowRolePrompt / AEFlowOptimizeQuestion，
+AEFlow - Flow 基类，多继承 AEFlowOptimizeInput / AEFlowInformation，
 并实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
 
 方法分区：
@@ -8,9 +8,8 @@ AEFlow - Flow 基类，多继承 AEFlowRolePrompt / AEFlowOptimizeQuestion，
   - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
   - 私有方法 / 属性：outResult_summary
 
-角色描述（requestOptimizePrompt 等）、问题优化（requestOptimizeInputOptimize 等）、
-角色信息（requestRoleInfo / receiveRole）分别由父类
-AEFlowRolePrompt / AEFlowOptimizeQuestion / AEFlowDescription 提供。
+问题优化（requestOptimizeInput 等）、角色信息（requestRoleInformation / receiveRoleInfomation）
+分别由父类 AEFlowOptimizeInput / AEFlowInformation 提供。
 """
 import json
 import logging
@@ -19,9 +18,9 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_TITLE, AE_ANSWER, AE_funcationkey
 from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
-from .AEFlowInterfaceImpl import AEFlowInterfaceImpl, AEFlowOptimizeQuestion
-from .AEFlowRolePrompt import AEFlowRolePrompt
-from .AEFlowDescription import AEFlowDescription
+from .AEFlowInterfaceImpl import AEFlowInterfaceImpl
+from .AEFlowOptimizeInput import AEFlowOptimizeInput
+from .AEFlowInformation import AEFlowInformation
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
@@ -39,13 +38,12 @@ if TYPE_CHECKING:
 
 class AEFlowFunctional(AEFunctional):
     """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveRole = "receiveRole"                            # 接收 LLM 生成的自身工作名称与能力范围，传入 map
-    receiveOptimizePrompt = "receiveOptimizePrompt"        # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
-    receiveOptimizeInputOptimize = "receiveOptimizeInputOptimize"  # 接收 LLM 综合上下文返回的最终结果，传入 map
+    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称与能力范围，传入 map
+    receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
 
 
-class AEFlow(AEFlowRolePrompt, AEFlowOptimizeQuestion, AEFlowDescription):
-    """Flow 基类，多继承 AEFlowRolePrompt（角色描述）/ AEFlowOptimizeQuestion（问题优化）/ AEFlowDescription（角色信息）；AEFlowDelegate 协议实现转调 AEFlowDelegateImpl 静态方法"""
+class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
+    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）；AEFlowDelegate 协议实现转调 AEFlowDelegateImpl 静态方法"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         # ----- AEFlowInfo 属性 -----

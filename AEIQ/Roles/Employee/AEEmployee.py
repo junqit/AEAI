@@ -40,24 +40,24 @@ class AEEmployee(AERole):
         )
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input，先 requestRoleInfo 生成自身 title/能力，回包 receiveRole 后再执行实际任务。
+        """启动：交基类置 input，先 requestRoleInformation 生成自身 title/能力，回包 receiveRoleInfomation 后再执行实际任务。
 
         Args:
             flowInput: flow 输入数据（content 即工作组下发的子任务）
         """
         if not super().startFlow(flowInput):
             return
-        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRole，再发送实际任务）
-        self.requestRoleInfo()
+        # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
+        self.requestRoleInformation()
 
-    def receiveRole(self, data: dict) -> bool:
-        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizePrompt）。"""
-        result = super().receiveRole(data)
-        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizePrompt）
-        self.requestOptimizePrompt()
+    def receiveRoleInfomation(self, data: dict) -> bool:
+        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        result = super().receiveRoleInfomation(data)
+        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+        self.requestOptimizeInput()
         return result
 
-    def receiveOptimizeInputOptimize(self, data: dict) -> bool:
+    def receiveOptimizeInput(self, data: dict) -> bool:
         """接收优化后的问题（AE_ANSWER）：直接传入 requestScripts 请求多个 AEScript 任务。
 
         - AE_ANSWER 非空：精炼后的问题，直接传给 requestScripts。
