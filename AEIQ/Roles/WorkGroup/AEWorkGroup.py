@@ -12,7 +12,7 @@ from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
 from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,11 @@ class AEWorkGroup(AERole):
             "2. 输出该维度的结论与产物。\n"
             "3. 与其他工作组保持独立，可并行。"
         )
+
+    def roleDescription(self) -> str:
+        """角色描述：返回本角色（工作组）的职称与职责。"""
+        info = get_role_param(AEFlowRole.workgroup)
+        return f"{info.title}：{info.responsibility}"
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，先 requestRoleInformation 生成自身 title/能力，回包 receiveRoleInfomation 后再执行实际任务。

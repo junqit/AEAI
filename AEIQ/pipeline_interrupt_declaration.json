@@ -1,0 +1,41 @@
+{
+  "pipeline_type": "narrative_causal_conduction",
+  "pipeline_id": "narrative-causal-pipeline-001",
+  "status": "interrupted",
+  "timestamp": "2026-07-21T17:58:33.614155",
+  "interrupt_reason": "missing_required_context",
+  "missing_elements": [
+    "node_A_pre_status",
+    "node_B_expected_status",
+    "transition_intent_or_constraints"
+  ],
+  "action": "halt_and_escalate",
+  "upstream_targets": [
+    "cross_node_narrative_coherence_group",
+    "narrative_architecture_master_expert"
+  ],
+  "request": {
+    "1_node_A_pre_status": {
+      "description": "Node A前置状态",
+      "required_fields": [
+        "current_narrative_elements",
+        "character_status",
+        "occurred_causal_events"
+      ]
+    },
+    "2_node_B_expected_status": {
+      "description": "Node B目标状态",
+      "required_fields": [
+        "expected_narrative_objective",
+        "state_transition_requirements"
+      ]
+    },
+    "3_transition_intent": {
+      "description": "两者间的初步过渡意向或约束条件",
+      "required_fields": [
+        "intent_or_constraints"
+      ]
+    }
+  },
+  "note": "严禁在缺失核心输入数据的情况下擅自补全或臆造上下文。请上游裁决协调并补充数据后重启流水线。"
+}

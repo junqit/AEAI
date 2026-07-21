@@ -11,7 +11,7 @@ from WorkFlows.AEFlow import AEFlow
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
 from Context.Context.AELLMPayload import llm_generate
-from Roles.AERole import AERoleParamInfo, AEFlowRole
+from Roles.AERole import AERoleParamInfo, AEFlowRole, ROLE_PARAMS
 
 logger = logging.getLogger(__name__)
 
@@ -49,3 +49,13 @@ class AERole(AEFlow):
             logger.warning("[AERole:%s] 未知角色 type=%r，无法创建角色 flow", cls.__name__, role_type)
             return None
         return flow_cls(flowOutput=AEFlowOutput({AE_IDENT: ident, AE_ANSWER: llm_generate("角色结论")}))
+
+    def roleDescription(self) -> str:
+        """角色描述：拼接 ROLE_PARAMS 全部角色的花名册（type / 职称 / 职责），供角色选择等场景使用。
+
+        子类可覆写为仅返回自身角色的描述。
+        """
+        lines = []
+        for role, info in ROLE_PARAMS.items():
+            lines.append(f"- type: {role.value}；职称：{info.title}；职责：{info.responsibility}")
+        return "\n".join(lines)

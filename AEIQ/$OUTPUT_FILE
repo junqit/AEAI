@@ -1,0 +1,63 @@
+{
+  "status": "PENDING_UPSTREAM_DECISION",
+  "base_validation": {
+    "boundary_continuous": true,
+    "total_span_error_seconds": 4,
+    "rounding_error_seconds": 1
+  },
+  "proportion_validation": {
+    "input_consistent": true,
+    "total_pct": 100.0,
+    "details": [
+      {
+        "node": "起源",
+        "actual_pct": 0.94
+      },
+      {
+        "node": "发展",
+        "actual_pct": 2.76
+      },
+      {
+        "node": "演进",
+        "actual_pct": 5.62
+      },
+      {
+        "node": "现状",
+        "actual_pct": 90.68
+      }
+    ]
+  },
+  "anomalies": [
+    {
+      "node": "演进",
+      "actual_pct": 58.54,
+      "expected_range": [
+        25.0,
+        45.0
+      ],
+      "deviation": "+13.54%"
+    },
+    {
+      "node": "现状",
+      "actual_pct": 2.22,
+      "expected_range": [
+        5.0,
+        20.0
+      ],
+      "deviation": "-2.78%"
+    }
+  ],
+  "blur_markers": [
+    {
+      "node": "演进",
+      "risk": "潜在子阶段未拆分",
+      "span_days": 546.0
+    },
+    {
+      "node": "现状",
+      "risk": "锚点截断风险",
+      "end_time": "2026-07-21T17:53:39"
+    }
+  ],
+  "restriction": "在未获上游授权前，禁止自行修改节点边界定义、重置占比期望范围或重设锚点。"
+}

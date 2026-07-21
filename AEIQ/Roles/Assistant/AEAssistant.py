@@ -11,7 +11,7 @@ from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
 from Roles.AEBaseRole import AERole
 from Roles.WorkGroup.AEWorkGroup import AEWorkGroup
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
@@ -45,6 +45,11 @@ class AEAssistant(AERole):
             "2. 输出为结构化 map，供后续流程加载使用。\n"
             "3. 字段需贴合问题领域，不可随意编造。"
         )
+
+    def roleDescription(self) -> str:
+        """角色描述：返回本角色（专家）的职称与职责。"""
+        info = get_role_param(AEFlowRole.expert)
+        return f"{info.title}：{info.responsibility}"
 
     def receiveRoleInfomation(self, data: dict) -> bool:
         """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""

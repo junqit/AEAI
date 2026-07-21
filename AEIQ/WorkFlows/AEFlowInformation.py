@@ -19,7 +19,7 @@ class AEFlowInformation(AEFlowInfo):
     def requestRoleInformation(self) -> None:
         """根据问题内容(input.content)请求 LLM 生成自身工作名称(title)与能力范围(responsibility)。
 
-        - messages: system(role_brief，含已有身份与能力，可为空) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(生成角色指令，引用 AE_USER_QUESTION_PREFIX)
+        - messages: system(role_brief，含已有身份与能力，可为空) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / system(生成标题与能力需遵守的角色要求，来自 roleDescription) / user(生成角色指令，引用 AE_USER_QUESTION_PREFIX)
         - out_schema: {title, responsibility 占位}，由 LLM 填充
         - 走 receiveRoleInfomation：回包后写入 self.title / self.responsibility（不完成 flow）
         """
@@ -35,6 +35,11 @@ class AEFlowInformation(AEFlowInfo):
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
             })
+        # 生成标题与能力范围时需遵守的角色要求（来自 roleDescription）
+        messages.append({
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: f"生成标题与能力范围时需遵守以下角色要求：\n{self.roleDescription()}",
+        })
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (

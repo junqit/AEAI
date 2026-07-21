@@ -71,22 +71,38 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     AEFlowRole.expert: AERoleParamInfo(
         role=AEFlowRole.expert,
         title="领域专家",
-        responsibility="统筹规划，对最终产出收口",
+        responsibility=(
+            "统筹规划，对最终产出收口。"
+            "负责整体目标分解、维度划分与最终结论整合，确保产出完整、准确、可交付；"
+            "不介入单一维度的具体执行。"
+        ),
     ),
     AEFlowRole.workgroup: AERoleParamInfo(
         role=AEFlowRole.workgroup,
         title="工作组",
-        responsibility="完成单一维度目标，可由多名员工协作",
+        responsibility=(
+            "完成单一维度目标，可由多名员工协作。"
+            "承接专家分配的某一维度目标，拆解为可独立执行的员工任务并整合本维度结论；"
+            "不跨维度规划，不对其他工作组的工作负责。"
+        ),
     ),
     AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
         title="员工",
-        responsibility="完成单一流水线工作",
+        responsibility=(
+            "完成单一流水线工作。"
+            "调用模型或工具执行流水线各环节（检索 / 分析 / 生成 / 转换等），"
+            "产出可被上游直接整合的结构化结果；不跨流水线、不跨维度决策。"
+        ),
     ),
     AEFlowRole.reviewer: AERoleParamInfo(
         role=AEFlowRole.reviewer,
         title="评审者",
-        responsibility="审查并验收产出",
+        responsibility=(
+            "审查并验收产出。"
+            "对工作组与员工的产出进行质量把关与收敛，指出缺陷、要求修订或确认通过；"
+            "不负责具体执行。"
+        ),
     ),
 }
 

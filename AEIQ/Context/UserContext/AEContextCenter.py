@@ -63,10 +63,6 @@ class AEContextCenter(AEContextDelegate):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
-        # 打印完整 LLM 请求
-        logger.info("[AEContextCenter] === 发送 LLM 请求 ===\nmessages:\n%s\nout_schema:\n%s",
-                     json.dumps(payload.messages, ensure_ascii=False, indent=2),
-                     json.dumps(payload.out_schema, ensure_ascii=False, indent=2))
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================

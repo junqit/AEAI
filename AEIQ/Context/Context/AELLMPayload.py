@@ -76,8 +76,6 @@ class AELLMPayload:
     def to_llm_request_dic(self) -> dict:
         # 按 out_schema 输出：注入 system 指令，要求按该结构输出合法 JSON
         schema_json = json.dumps(self.out_schema, ensure_ascii=False, indent=2)
-        logger.info("out_schema 结构:\n%s", schema_json)
-
         # 遍历 out_schema，分类占位符字段（需填写）与非占位符字段（不可修改）
         fill_fields: List[str] = []
         fixed_fields: List[str] = []

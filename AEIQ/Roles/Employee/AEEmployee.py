@@ -13,7 +13,7 @@ from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Tools.Scrips import AEScript
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
 from Roles.AEBaseRole import AERole
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,11 @@ class AEEmployee(AERole):
             "3. 产出可直接被上游整合的结构化结果。\n"
             "4. 遇到不明确处向上回传，由工作组或专家裁决。"
         )
+
+    def roleDescription(self) -> str:
+        """角色描述：返回本角色（员工）的职称与职责。"""
+        info = get_role_param(AEFlowRole.employee)
+        return f"{info.title}：{info.responsibility}"
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，先 requestRoleInformation 生成自身 title/能力，回包 receiveRoleInfomation 后再执行实际任务。
