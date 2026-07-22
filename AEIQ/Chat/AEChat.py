@@ -9,7 +9,6 @@ from typing import Optional
 from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Network.Core.AENetReq import AENetReqInfo
 from Roles.QuestionRefiner.AERefiner import AERefiner
 from Roles.Assistant.AEAssistant import AEAssistant
@@ -31,7 +30,7 @@ class AEChat(AEFlow):
         from Context.Context.AELLMPayload import llm_generate
         refiner_output = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")})
         refiner = AERefiner(flowOutput=refiner_output)
-        AEFlowInterfaceImpl.addFlow(self, refiner)
+        self.addFlow(refiner)
 
     def role_brief(self) -> str:
         """覆写：Chat 不向 LLM 声明身份与能力，返回空字符串。"""

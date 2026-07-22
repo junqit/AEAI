@@ -9,7 +9,6 @@ import logging
 from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
 from Roles.AEBaseRole import AERole
@@ -85,7 +84,7 @@ class AEAssistant(AERole):
         # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务可独立完成、无耦合。",
+            AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务必须可独立完成、无任何耦合。",
         })
         # 走 addWorkGroups：回包交 self.addWorkGroups(任务列表) 创建并启动各工作组
         flow_out = self.flowOutput(AEAssistantFunction.addWorkGroups)
@@ -113,7 +112,7 @@ class AEAssistant(AERole):
             wg = AEWorkGroup(
                 flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("工作组结论")}),
             )
-            AEFlowInterfaceImpl.addFlow(self, wg)
+            self.addFlow(wg)
             wg.startFlow(AEFlowInput(content=content))
             # 打印工作组信息：ident、任务内容、回包目标 assistant.ident
             logger.info(
@@ -129,6 +128,7 @@ class AEAssistant(AERole):
             flowInput: flow 输入数据（content 即用户问题 / 领域描述）
         """
         if not super().startFlow(flowInput):
+            logger.warning("[AEAssistant:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
             return
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()

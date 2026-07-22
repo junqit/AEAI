@@ -159,6 +159,7 @@ class AERefiner(AERole):
             flowInput: flow 输入数据（content 即用户原始问题）
         """
         if not super().startFlow(flowInput):
+            logger.warning("[AERefiner:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
             return
 
         self.requestOptimizeInput()

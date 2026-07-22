@@ -19,7 +19,6 @@ from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 from .AEFlowOutput import AE_LLM_OUT
 from .AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
-from .AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
@@ -88,7 +87,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         Args:
             next_flow: 待添加的子 flow
         """
-        AEFlowInterfaceImpl.addFlow(self, next_flow)
+        self.addFlow(next_flow)
         logger.info(
             "[AEFlow:%s][%s] receive_add_flow 添加子 flow: ident=%s",
             self.ident, self.title, next_flow.ident,

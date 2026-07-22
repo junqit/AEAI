@@ -42,8 +42,8 @@ class AEFlowFunctional(AEFunctional):
     receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
 
 
-class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl):
-    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）/ AEFlowDelegateImpl（delegate 协议方法实例实现）"""
+class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowInterfaceImpl):
+    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）/ AEFlowDelegateImpl（delegate 方法）/ AEFlowInterfaceImpl（接口方法 startFlow/addFlow/receive_llm_response）"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         # ----- AEFlowInfo 属性 -----
@@ -59,18 +59,11 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl):
         self.excutor = AERuntimeExcutor()
 
     # ==================== AEFlowInterface 实现 ====================
+    # startFlow / addFlow / receive_llm_response 由 AEFlowInterfaceImpl 提供（实例方法继承）。
 
     def set_delegate(self, delegate: "AEFlowDelegate") -> None:
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
-
-    def startFlow(self, flowInput: AEFlowInput) -> bool:
-        """启动 flow（转调 AEFlowInterfaceImpl）。"""
-        return AEFlowInterfaceImpl.startFlow(self, flowInput)
-
-    def receive_llm_response(self, data: dict) -> None:
-        """接收输入数据（map），按 ident 路由（转调 AEFlowInterfaceImpl）。"""
-        AEFlowInterfaceImpl.receive_llm_response(self, data)
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """

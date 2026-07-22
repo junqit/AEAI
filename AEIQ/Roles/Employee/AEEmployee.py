@@ -9,7 +9,6 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
-from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Tools.Scrips import AEScript
@@ -54,6 +53,7 @@ class AEEmployee(AERole):
             flowInput: flow 输入数据（content 即工作组下发的子任务）
         """
         if not super().startFlow(flowInput):
+            logger.warning("[AEEmployee:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
             return
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()
@@ -250,7 +250,7 @@ class AEEmployee(AERole):
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("脚本执行结果")})
                 script_flow = AEScript(flowOutput=flowOutput)
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
-                AEFlowInterfaceImpl.addFlow(self, script_flow)
+                self.addFlow(script_flow)
                 logger.info(
                     "[AEEmployee:%s] 添加 AEScript 子 flow: title=%r type=%r",
                     self.ident, script_flow.title, script_flow.type,

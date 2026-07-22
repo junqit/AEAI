@@ -9,7 +9,6 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
-from WorkFlows.AEFlowInterfaceImpl import AEFlowInterfaceImpl
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
@@ -49,6 +48,7 @@ class AEWorkGroup(AERole):
             flowInput: flow 输入数据（content 即本工作组负责的维度目标）
         """
         if not super().startFlow(flowInput):
+            logger.warning("[AEWorkGroup:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
             return
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()
@@ -158,7 +158,7 @@ class AEWorkGroup(AERole):
                 # employee 完成回程 ident 填本 workgroup.ident，路由回本 workgroup
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("员工结论")})
                 employee = AEEmployee(flowOutput=flowOutput)
-                AEFlowInterfaceImpl.addFlow(self, employee)
+                self.addFlow(employee)
                 task = spec.get("task", "") or spec.get(AE_TITLE, "")
                 logger.info(
                     "[AEWorkGroup:%s] 添加 AEEmployee 子 flow: title=%r task=%r",
