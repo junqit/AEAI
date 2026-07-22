@@ -54,9 +54,9 @@ class AEWorkGroup(AERole):
         self.requestRoleInformation()
 
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        """接收角色信息（title/responsibility/rolePrompt）后，请求生成问题优化提示（requestOptimizeInput）。"""
         result = super().receiveRoleInfomation(data)
-        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+        # 角色信息生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
         self.requestOptimizeInput()
         return result
 

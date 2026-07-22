@@ -38,8 +38,9 @@ if TYPE_CHECKING:
 
 class AEFlowFunctional(AEFunctional):
     """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称与能力范围，传入 map
+    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称、能力范围与角色 prompt，传入 map
     receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
+    receiveSupplement = "receiveSupplement"                # 接收 LLM 判定是否需补充新 employee 任务及任务列表，传入 map
 
 
 class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowInterfaceImpl):

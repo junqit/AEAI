@@ -74,6 +74,9 @@ class AEFlowInfo:
         # LLM 基于 title+能力 生成的问题优化提示：由 receiveOptimizeInput 赋值
         self.optimizePromptResult: str = ""
 
+        # LLM 基于 title+responsibility 生成的"可包装所有问题的角色 prompt"：由 receiveRolePrompt 赋值
+        self.rolePrompt: str = ""
+
         # 最终结果：complete 阶段由 flow_receive_complete 赋值，持有本 flow 的最终输出数据
         self.outResult: Optional[dict] = None
 

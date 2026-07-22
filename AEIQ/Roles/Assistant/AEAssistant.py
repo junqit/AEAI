@@ -51,9 +51,9 @@ class AEAssistant(AERole):
         return f"{info.title}：{info.responsibility}"
 
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """接收 title/responsibility 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        """接收角色信息（title/responsibility/rolePrompt）后，请求生成问题优化提示（requestOptimizeInput）。"""
         result = super().receiveRoleInfomation(data)
-        # title/responsibility 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+        # 角色信息生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
         self.requestOptimizeInput()
         return result
 
@@ -84,7 +84,7 @@ class AEAssistant(AERole):
         # 指令：列举不同维度的目标，每个目录独立可交单独工作组完成
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务必须可独立完成、无任何耦合。",
+            AE_CONTENT: f"根据{AE_USER_QUESTION_PREFIX}，结合自身能力与职业，给出专业的任务维度分离，每个任务单维度可垂直完成，不依赖横向信息。",
         })
         # 走 addWorkGroups：回包交 self.addWorkGroups(任务列表) 创建并启动各工作组
         flow_out = self.flowOutput(AEAssistantFunction.addWorkGroups)

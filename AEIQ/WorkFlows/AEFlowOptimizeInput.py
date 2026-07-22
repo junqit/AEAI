@@ -18,15 +18,15 @@ class AEFlowOptimizeInput(AEFlowInfo):
     """AEFlow 父类：问题优化相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。"""
 
     def requestOptimizeInput(self) -> None:
-        """组装并发送 LLM 请求：仅带自身名称(title)与能力(responsibility)，
-        让 LLM 据此生成一段「问题优化提示」——该提示用于引导 LLM 对用户输入的问题做进一步优化。
+        """组装并发送 LLM 请求：以 role_brief 作为系统提示，以 rolePrompt 作为「提的问题」
+        （针对 AE_USER_QUESTION_PREFIX 的优化指令），让 LLM 据此生成一段「问题优化提示」。
 
-        - messages: system(role_brief，含身份与能力) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(优化与扩展指令)
+        - messages: system(role_brief，含身份与能力) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(rolePrompt 作为针对用户问题的提问指令；为空时回退默认指令)
         - out_schema: {AE_ANSWER: 问题优化提示 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 optimizePromptResult（不完成 flow）
 
-        注：本步依据 title + 能力，并以单独 system 消息（带 AE_USER_QUESTION_PREFIX 前缀）传入用户问题，
-        生成更贴切的「问题优化提示」；该提示留待后续步骤用于进一步优化。
+        注：rolePrompt 由 requestRoleInformation 一并生成，是本角色针对用户问题（AE_USER_QUESTION_PREFIX）
+        所提的提问/优化指令；未生成 rolePrompt 的 flow（如 AERefiner）回退到默认指令。
         """
         from WorkFlows.AEFlow import AEFlowFunctional  # 懒导入避免循环
         messages = []
@@ -40,13 +40,15 @@ class AEFlowOptimizeInput(AEFlowInfo):
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
             })
+        # rolePrompt 作为针对 AE_USER_QUESTION_PREFIX 的提问指令；为空时回退默认指令
+        default_instruction = (
+            f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做优化，不可扩展、不可改变原意思"
+            "（更清晰、更完整、更易于理解），使问题更契合你的专业能力与约束范围。"
+            "体现你的专业角色，不得超出你的能力与职责边界。"
+        )
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做优化，不可扩展、不可改变原意思"
-                "（更清晰、更完整、更易于理解），使问题更契合你的专业能力与约束范围。"
-                "体现你的专业角色，不得超出你的能力与职责边界。"
-            ),
+            AE_CONTENT: self.rolePrompt or default_instruction,
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveOptimizeInput)
         flow_out.set_llm_out({AE_ANSWER: llm_generate("优化后的问题")})

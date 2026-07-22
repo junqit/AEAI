@@ -16,10 +16,10 @@ import logging
 from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 
-from .AEFlowOutput import AE_LLM_OUT
+from .AEFlowOutput import AE_LLM_OUT, AEFlowOutput
 from .AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
-from Context.Context.AELLMPayload import AELLMPayload
+from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 
@@ -170,23 +170,106 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         收到经 receive_flow_complete 路由到自身、确认由本 flow 处理的结果数据。
 
         - 有 default 子 flow：启动下一个 default 子 flow（异步执行）
-        - 仅当所有子 flow 均已完成时，才进入 _summarize_to_llm 汇总；否则等待剩余子 flow，
-          不在每次子完成时都执行汇总逻辑。
+        - 仅当所有子 flow 均已完成时，先进入 _request_supplement 询问是否需补充新 employee 任务：
+          需要则 addFlow 并启动 employee（等待其完成后再回到本判断）；不需要则触发 _summarize_to_llm 汇总。
+          否则等待剩余子 flow，不在每次子完成时都执行补充/汇总逻辑。
 
         Args:
             out_schema: 结果数据（含 AE_ANSWER 字段）
         """
         answer = out_schema.get(AE_ANSWER) if isinstance(out_schema, dict) else None
-        # 先判断是否全部完成并汇总，再 startFlow 下一个子 flow。顺序不可颠倒：
+        # 先判断是否全部完成并询问补充，再 startFlow 下一个子 flow。顺序不可颠倒：
         # 脚本等同步完成的子 flow 会让 startFlow 嵌套触发后续 receive_flow_result；
         # 若先 startFlow 再判断，递归回溯时每层都会重复判断 all(complete)（此时已全完成）
-        # 导致重复汇总。先判断、再 startFlow，则只有最后一个子 flow 完成时汇总一次。
+        # 导致重复补充/汇总。先判断、再 startFlow，则只有最后一个子 flow 完成时触发一次。
         if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
-            self._summarize_to_llm()
+            self._request_supplement()
             return
         next_flow = self.nextFlow()
         if next_flow is not None:
             next_flow.startFlow(AEFlowInput(content=answer or ""))
+
+    def _request_supplement(self) -> None:
+        """所有子 flow 完成后，询问 LLM 是否需要补充新 employee 任务以更完整地达成目标。
+
+        - messages: system(role_brief) / system(目标，AE_USER_QUESTION_PREFIX 前缀，取 optimizePromptResult 或 input.content) / assistant(各子 flow outResult_summary) / user(询问指令)
+        - out_schema: {tasks 数组占位}，由 LLM 填充：需要补充则列任务，已充分则空数组 []
+        - 走 receiveSupplement：回包后若 tasks 非空则 addFlow 并启动 employee；为空则 _summarize_to_llm 汇总
+        """
+        from WorkFlows.AEFlow import AEFlowFunctional  # 懒导入避免循环
+        messages = []
+        role_brief = self.role_brief()
+        if len(role_brief) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        # 目标：优先用优化后的问题，回退到输入内容
+        goal = self.optimizePromptResult or (self.input.content if self.input is not None else "")
+        if len(goal) > 0:
+            messages.append({
+                AE_ROLE: AEConentRole.SYSTEM.value,
+                AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{goal}",
+            })
+        # 各子 flow 的回答作为 assistant 消息
+        for f in self._flows.values():
+            if f.outResult is not None:
+                try:
+                    messages.append({
+                        AE_ROLE: AEConentRole.ASSISTANT.value,
+                        AE_CONTENT: f.outResult_summary(),
+                    })
+                except Exception as e:
+                    logger.error("[AEFlow:%s] _supplement 子 flow[%s] outResult_summary 异常: %s", self.ident, f.ident, e, exc_info=True)
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: (
+                "请根据以上目标与各子 flow 的回答，判断是否还有未充分覆盖的维度需要补充新员工任务。"
+                "若需要补充，在 tasks 中列出补充任务（每项为可独立完成的任务内容字符串）；"
+                "若现有回答已充分覆盖目标，返回空数组 []。"
+            ),
+        })
+        logger.info("[AEFlow:%s][%s] _request_supplement: 子 flow 全部完成 %d/%d，询问是否补充 employee",
+                    self.ident, self.title, len(self._flows), len(self._flows))
+        flow_out = self.flowOutput(AEFlowFunctional.receiveSupplement)
+        flow_out.set_llm_out({"tasks": [llm_generate("补充任务内容，可独立完成")]})
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.send_llm_payload(payload)
+
+    def receiveSupplement(self, data: dict) -> bool:
+        """接收 LLM 判定的补充任务：非空则为每项 addFlow 一个 employee 并启动；为空则进入 _summarize_to_llm 汇总。
+
+        补充的 employee 完成后会再次触发 receive_flow_result 的 all(complete) 判断，形成"补充→完成→再问"
+        循环，直到 LLM 判定无需补充（tasks 为空）才汇总。
+
+        Args:
+            data: 回包内层 llm_out，形如 {"tasks": [<任务内容>, ...]}；空数组表示无需补充
+
+        Returns:
+            bool: 当前数据处理是否完成（True=已处理）
+        """
+        tasks = data.get("tasks") if isinstance(data, dict) else None
+        if tasks is None and isinstance(data, dict):
+            tasks = data.get(AE_ANSWER)
+        if isinstance(tasks, str):
+            tasks = [tasks] if tasks.strip() else []
+        elif not isinstance(tasks, list):
+            tasks = []
+        if not tasks:
+            logger.info("[AEFlow:%s][%s] 无需补充 employee，进入汇总", self.ident, self.title)
+            self._summarize_to_llm()
+            return True
+        # 需要补充：为每个任务创建 employee，addFlow 并启动（完成回程路由回本 flow）
+        from Roles.Employee.AEEmployee import AEEmployee  # 懒导入避免循环
+        for task in tasks:
+            content = task if isinstance(task, str) else str(task or "")
+            emp = AEEmployee(
+                flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("员工结论")}),
+            )
+            self.addFlow(emp)
+            emp.startFlow(AEFlowInput(content=content))
+            logger.info(
+                "[AEFlow:%s][%s] 补充 employee: ident=%s | 任务内容=%s",
+                self.ident, self.title, emp.ident, content,
+            )
+        return True
 
     def _summarize_to_llm(self) -> None:
         """收集所有子 flow 的 outResult 放入 messages，交 LLM 做结构性整合输出。

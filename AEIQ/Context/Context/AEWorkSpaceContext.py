@@ -21,10 +21,13 @@ class AEWorkSpaceContext(AEBaseContext):
     def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        # 注入只读约束：所有目录下的内容只可读取，不可修改
+        # 注入只读约束 + 本地信息不足时优先联网取数：所有目录下的内容只可读取，不可修改
         payload.messages.insert(0, {
             AE_ROLE: AEConentRole.SYSTEM.value,
-            AE_CONTENT: "所有目录下的内容只可读取，不可进行任何修改、删除或写入操作。",
+            AE_CONTENT: (
+                "所有目录下的内容只可读取，不可进行任何修改、删除或写入操作。"
+                "本地信息不完整时，优先使用脚本程序获取网络实时数据进行分析。"
+            ),
         })
         # env_param prompt 注入由基类 AEBaseContext.receive_flow_llm_request 处理
         super().receive_flow_llm_request(payload)
