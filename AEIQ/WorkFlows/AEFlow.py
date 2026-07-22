@@ -18,7 +18,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_TITLE, AE_ANSWER, AE_funcationkey
 from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
-from .AEFlowInterfaceImpl import AEFlowInterfaceImpl
+from .AEFlowInterface import AEFlowInterfaceImpl
 from .AEFlowOptimizeInput import AEFlowOptimizeInput
 from .AEFlowInformation import AEFlowInformation
 from .AEFlowInput import AEFlowInput
@@ -179,13 +179,17 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
     # ==================== 私有方法 ====================
 
     def outResult_summary(self) -> str:
-        """组装优化后的问题（optimizePromptResult）与 outResult（回答）为总结内容。
+        """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
 
-        形如「{AE_USER_QUESTION_PREFIX}{optimizePromptResult} 我的回答：{answer}」；
-        优化后的问题为空时仅返回「我的回答：{answer}」。
+        - 有 optimizePromptResult（角色 flow 经 receiveOptimizeInput 设置）：
+          「{AE_USER_QUESTION_PREFIX}{optimizePromptResult} 我的回答：{answer}」
+        - 无 optimizePromptResult（如 AEScript，不经问题优化）：回退到 title 作为上下文，
+          「{title} 我的回答：{answer}」，避免只剩裸「我的回答：{answer}」丢失上下文。
         """
         answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
         question = self.optimizePromptResult or ""
         if question:
             return f"{AE_USER_QUESTION_PREFIX}{question} 我的回答：{answer}"
+        if self.title:
+            return f"{self.title} 我的回答：{answer}"
         return f"我的回答：{answer}"

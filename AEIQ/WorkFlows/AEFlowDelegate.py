@@ -189,14 +189,16 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             next_flow.startFlow(AEFlowInput(content=answer or ""))
 
     def _summarize_to_llm(self) -> None:
-        """汇总所有子 flow 的 outResult 放入 messages，交 LLM 生成最终答案。
+        """收集所有子 flow 的 outResult 放入 messages，交 LLM 做结构性整合输出。
 
-        仅在所有子 flow 全部 complete 时由 receive_flow_result 调用，故进入本方法即意味着
-        可直接汇总发送。重复汇总的根因（子 flow 多发汇总导致其 flow_receive_complete 多次
-        触发、反复通知本层）已在 AEFlow.flow_receive_complete 用 status==complete 幂等闸阻断。
+        注意：并非"提炼最终结论"，而是把各子 flow 的全部信息结构性整合、保留细节、
+        去冗余去重后输出（见下方 user 指令）。仅在所有子 flow 全部 complete 时由
+        receive_flow_result 调用，故进入本方法即可直接发送。重复触发的根因（子 flow
+        多发导致其 flow_receive_complete 多次通知本层）已在 AEFlow.flow_receive_complete
+        用 status==complete 幂等闸阻断。
         """
         logger.info(
-            "[AEFlow:%s][%s] _summarize_to_llm: 子 flow 全部完成 %d/%d，发送汇总",
+            "[AEFlow:%s][%s] _summarize_to_llm: 子 flow 全部完成 %d/%d，发送结构性整合请求",
             self.ident, self.title, len(self._flows), len(self._flows),
         )
         flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
@@ -219,7 +221,10 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 logger.warning("[AEFlow:%s] _summarize 子 flow[%s] outResult is None, 跳过, status=%s", self.ident, f.ident, f.status)
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: "请根据以上提供的信息进行汇总，输出最终结论。",
+            AE_CONTENT: (
+                "请将以上各子 flow 的结果进行结构性整合输出：保留全部细节，不得简化、概括或丢弃任何信息；"
+                "对冗余、重复的内容去重；以结构化形式呈现完整信息，而非提炼最终结论。"
+            ),
         })
 
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
