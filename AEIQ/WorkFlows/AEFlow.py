@@ -5,7 +5,7 @@ AEFlow - Flow 基类，多继承 AEFlowOptimizeInput / AEFlowInformation，
 方法分区：
   - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
     flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
-  - AEFlowDelegate 实现（转调 AEFlowDelegateImpl）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
+  - AEFlowDelegate 实现（继承 AEFlowDelegateImpl 实例方法）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
   - 私有方法：outResult_summary
 
 问题优化（requestOptimizeInput 等）、角色信息（requestRoleInformation / receiveRoleInfomation）
@@ -42,8 +42,8 @@ class AEFlowFunctional(AEFunctional):
     receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
 
 
-class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
-    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）；AEFlowDelegate 协议实现转调 AEFlowDelegateImpl 静态方法"""
+class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl):
+    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）/ AEFlowDelegateImpl（delegate 协议方法实例实现）"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         # ----- AEFlowInfo 属性 -----
@@ -125,6 +125,10 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
         """
         status=complete：收到结果数据，置本 flow 状态为 complete，赋值最终结果，并通过 delegate.receive_flow_complete 通知返回。
 
+        幂等保护：已 complete 的 flow 不再重复置位 / 重复通知 delegate。自身多发汇总时每个
+        回包都会回调本方法，若不加判断会向父 flow 重复发送完成事件，触发父层重复汇总
+        （"已完成 4/4 仍发多次"的根因）。首次完成即固定 outResult 并通知，后续回包忽略。
+
         Args:
             out_schema: 完成回包内层 llm_out（含 ident / reply）
             event: 完成事件（AEFlowCompletEvent.default / startFlow / error），透传给 delegate.receive_flow_complete
@@ -132,6 +136,8 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
+        if self.status == AEFlowStatus.complete:
+            return True
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
@@ -173,19 +179,9 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation):
         }
         self.delegate.receive_flow_llm_request(payload)
 
-    # ==================== AEFlowDelegate 实现（转调 AEFlowDelegateImpl 静态方法，传入 self）====================
-
-    def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
-        """发送 AELLMPayload 调用 LLM（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.receive_flow_llm_request(self, payload)
-
-    def receive_add_flow(self, flow: "AEFlowInterface") -> None:
-        """添加下一个待执行的子 flow（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.receive_add_flow(self, flow)
-
-    def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
-        """Flow 完成通知（转调 AEFlowDelegateImpl）。"""
-        AEFlowDelegateImpl.receive_flow_complete(self, result, event)
+    # ==================== AEFlowDelegate 实现 ====================
+    # receive_flow_llm_request / receive_add_flow / receive_flow_complete /
+    # receive_flow_result / _summarize_to_llm 均由 AEFlowDelegateImpl 提供（实例方法继承）。
 
     # ==================== 私有方法 ====================
 
