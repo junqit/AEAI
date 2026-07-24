@@ -116,8 +116,8 @@ class AEAssistant(AERole):
             wg.startFlow(AEFlowInput(content=content))
             # 打印工作组信息：ident、任务内容、回包目标 assistant.ident
             logger.info(
-                "[addWorkGroups] 工作组已创建并启动：ident=%s | 路由回 assistant.ident=%s | 任务内容=%s",
-                getattr(wg, "ident", ""), self.ident, content,
+                "[%s][%s][d=%s] 工作组已创建并启动: 任务内容=%s",
+                type(self).__name__, self.title, self.deepth, content,
             )
         return True
 
@@ -128,7 +128,7 @@ class AEAssistant(AERole):
             flowInput: flow 输入数据（content 即用户问题 / 领域描述）
         """
         if not super().startFlow(flowInput):
-            logger.warning("[AEAssistant:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()

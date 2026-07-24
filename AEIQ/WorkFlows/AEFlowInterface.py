@@ -94,8 +94,8 @@ class AEFlowInterfaceImpl:
         """
         if self.status != AEFlowStatus.default:
             logger.warning(
-                "[AEFlow:%s][%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
-                self.ident, self.title, self.status,
+                "[%s][%s][d=%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
+                type(self).__name__, self.title, self.deepth, self.status,
             )
             return False
         self.input = flowInput
@@ -106,8 +106,10 @@ class AEFlowInterfaceImpl:
         """添加子 flow。
 
         添加前把 sub_flow.delegate 设置为当前 flow（弱引用）；以 sub_flow.ident 为 key 存入有序 map。
+        子 flow 的 deepth 设为当前 flow.deepth + 1。
         """
         sub_flow.set_delegate(self)
+        sub_flow.deepth = self.deepth + 1
         self._flows[sub_flow.ident] = sub_flow
 
     def receive_llm_response(self, data: dict) -> None:
@@ -122,7 +124,7 @@ class AEFlowInterfaceImpl:
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
         """
         if not isinstance(data, dict):
-            logger.error("[AEFlow:%s] 收到的数据非 map，无法解析: %r", self.ident, data)
+            logger.error("[%s][%s][d=%s] 收到的数据非 map，无法解析: %r", type(self).__name__, self.title, self.deepth, data)
             return
 
         # 取 ident
@@ -141,6 +143,6 @@ class AEFlowInterfaceImpl:
 
         # ident 既非自身、也未命中子 flow：打印错误日志
         logger.error(
-            "[AEFlow:%s][%s] ident=%r 无法命中（既非自身也未匹配子 flow），忽略: %r",
-            self.ident, self.title, ident, data,
+            "[%s][%s][d=%s] 无法命中（既非自身也未匹配子 flow），忽略: %r",
+            type(self).__name__, self.title, self.deepth, data,
         )

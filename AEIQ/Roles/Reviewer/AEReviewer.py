@@ -40,7 +40,7 @@ class AEReviewer(AERole):
             flowInput: flow 输入数据（content 即待审查的产出及验收标准）
         """
         if not super().startFlow(flowInput):
-            logger.warning("[AEReviewer:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
         messages = []
         role_brief = self.role_brief()

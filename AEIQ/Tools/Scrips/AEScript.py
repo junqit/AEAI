@@ -63,17 +63,17 @@ class AEScript(AEFlow):
             runner = get_runner(self.type)
             stdout = runner.run(self.script)
             # 成功
-            logger.info("[AEScript:%s] 脚本执行成功(type=%s)", self.ident, self.type)
+            logger.info("[%s][%s][d=%s] 脚本执行成功(type=%s)", type(self).__name__, self.title, self.deepth, self.type)
             self._complete(stdout)
         except Exception as e:
             self._last_error = str(e)
-            logger.error("[AEScript:%s] 脚本执行失败(type=%s, retry=%d/%d): %s",
-                         self.ident, self.type, self._retry_count, self.MAX_RETRIES, e)
+            logger.error("[%s][%s][d=%s] 脚本执行失败(type=%s, retry=%d/%d): %s",
+                         type(self).__name__, self.title, self.deepth, self.type, self._retry_count, self.MAX_RETRIES, e)
             if self._retry_count < self.MAX_RETRIES:
                 self._retry_count += 1
                 self._request_script_fix(self._last_error)
             else:
-                logger.warning("[AEScript:%s] 重试次数用完(%d)，以空结果完成", self.ident, self.MAX_RETRIES)
+                logger.warning("[%s][%s][d=%s] 重试次数用完(%d)，以空结果完成", type(self).__name__, self.title, self.deepth, self.MAX_RETRIES)
                 self._complete("")
 
     def _complete(self, stdout: str) -> None:
@@ -107,7 +107,7 @@ class AEScript(AEFlow):
         flow_out = self.flowOutput("receiveScriptFix")
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        logger.info("[AEScript:%s] 请求 LLM 修正脚本(retry=%d/%d)", self.ident, self._retry_count, self.MAX_RETRIES)
+        logger.info("[%s][%s][d=%s] 请求 LLM 修正脚本(retry=%d/%d)", type(self).__name__, self.title, self.deepth, self._retry_count, self.MAX_RETRIES)
         self.send_llm_payload(payload)
 
     def receiveScriptFix(self, data: dict) -> bool:
@@ -116,6 +116,6 @@ class AEScript(AEFlow):
         if fixed is None and isinstance(data, str):
             fixed = data
         self.script = (fixed or "").strip()
-        logger.info("[AEScript:%s] 收到修正脚本(retry=%d)，重新执行", self.ident, self._retry_count)
+        logger.info("[%s][%s][d=%s] 收到修正脚本(retry=%d)，重新执行", type(self).__name__, self.title, self.deepth, self._retry_count)
         self._run_script()
         return True

@@ -83,6 +83,9 @@ class AEFlowInfo:
         # ----- 执行状态 -----
         self.status: AEFlowStatus = AEFlowStatus.default
 
+        # Flow 层级深度：根 flow 为 0，每 addFlow 一层 +1
+        self.deepth: int = 1
+
     @property
     def ident(self) -> str:
         """flow 标识（只读）"""

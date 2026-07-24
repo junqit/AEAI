@@ -87,15 +87,15 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
             out_schema: 从输入 map 中解析出的 out_schema 数据（含 AE_funcationkey / llm_out 字段）
         """
         if not isinstance(out_schema, dict):
-            logger.error("[AEFlow:%s] out_schema 非 map，忽略: %r", self.ident, out_schema)
+            logger.error("[%s][%s][d=%s] out_schema 非 map，忽略: %r", type(self).__name__, self.title, self.deepth, out_schema)
             return
         command = out_schema.get(AE_funcationkey)
         # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
         inner = out_schema.get(AE_LLM_OUT)
         if not self.excutor.contains(command):
             logger.error(
-                "[AEFlow:%s][%s] out_schema 内 funcationkey=%r 无效或缺失，忽略: %r",
-                self.ident, self.title, command, out_schema,
+                "[%s][%s][d=%s] out_schema 内 funcationkey=%r 无效或缺失，忽略: %r",
+                type(self).__name__, self.title, self.deepth, command, out_schema,
             )
             return
         # inner 直接传入；target 在注册时已绑定为 self，temporary 执行后由 excutor 自动清除

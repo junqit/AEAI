@@ -48,7 +48,7 @@ class AEWorkGroup(AERole):
             flowInput: flow 输入数据（content 即本工作组负责的维度目标）
         """
         if not super().startFlow(flowInput):
-            logger.warning("[AEWorkGroup:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()
@@ -81,7 +81,7 @@ class AEWorkGroup(AERole):
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
         confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
         if confirm:
-            logger.info("[AEWorkGroup:%s] 收到需确认信息:\n%s", self.ident, confirm)
+            logger.info("[%s][%s][d=%s] 收到需确认信息:\n%s", type(self).__name__, self.title, self.deepth, confirm)
             return result
         # 收到最优问题后，请求创建多个 employee
         self.requestEmployees(self.optimizePromptResult)
@@ -145,8 +145,8 @@ class AEWorkGroup(AERole):
             specs = result
         else:
             logger.warning(
-                "[AEWorkGroup:%s] AE_ANSWER 非数组，跳过 employee 创建，收到数据: %r",
-                self.ident, result,
+                "[%s][%s][d=%s] AE_ANSWER 非数组，跳过 employee 创建，收到数据: %r",
+                type(self).__name__, self.title, self.deepth, result,
             )
             specs = []
         # 为每个 spec 创建 AEEmployee 并加入 self._flows
@@ -161,11 +161,11 @@ class AEWorkGroup(AERole):
                 self.addFlow(employee)
                 task = spec.get("task", "") or spec.get(AE_TITLE, "")
                 logger.info(
-                    "[AEWorkGroup:%s] 添加 AEEmployee 子 flow: title=%r task=%r",
-                    self.ident, spec.get(AE_TITLE, ""), task,
+                    "[%s][%s][d=%s] 添加 AEEmployee 子 flow: title=%r task=%r",
+                    type(self).__name__, self.title, self.deepth, spec.get(AE_TITLE, ""), task,
                 )
             except Exception as e:
-                logger.warning("[AEWorkGroup:%s] 跳过非法 employee spec=%r: %s", self.ident, spec, e)
+                logger.warning("[%s][%s][d=%s] 跳过非法 employee spec=%r: %s", type(self).__name__, self.title, self.deepth, spec, e)
         # 启动首个 employee 执行（其余由 receive_flow_result 在前一个完成后逐个推进）
         first_employee = self.nextFlow()
         if first_employee is not None:
@@ -174,7 +174,7 @@ class AEWorkGroup(AERole):
             if specs and isinstance(specs[0], dict):
                 first_task = specs[0].get("task", "") or specs[0].get(AE_TITLE, "")
             first_employee.startFlow(AEFlowInput(content=first_task))
-            logger.info("[AEWorkGroup:%s] 启动首个 AEEmployee: title=%r", self.ident, getattr(first_employee, AE_TITLE, ""))
+            logger.info("[%s][%s][d=%s] 启动首个 AEEmployee: title=%r", type(self).__name__, self.title, self.deepth, getattr(first_employee, AE_TITLE, ""))
         else:
-            logger.warning("[AEWorkGroup:%s] 无可执行的 AEEmployee", self.ident)
+            logger.warning("[%s][%s][d=%s] 无可执行的 AEEmployee", type(self).__name__, self.title, self.deepth)
         return True

@@ -69,7 +69,7 @@ class AEFlowOptimizeInput(AEFlowInfo):
             prompt = data
         self.optimizePromptResult = prompt or ""
         logger.info(
-            "[AEFlow:%s][%s] 收到问题优化提示:\n%s",
-            self.ident, self.title, self.optimizePromptResult,
+            "[%s][%s][d=%s] 收到问题优化提示:\n%s",
+            type(self).__name__, self.title, self.deepth, self.optimizePromptResult,
         )
         return True

@@ -21,18 +21,14 @@ class AEWorkSpaceContext(AEBaseContext):
     def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        # 注入只读约束 + 本地文件性质 + 实时数据须联网获取
-        payload.messages.insert(0, {
-            AE_ROLE: AEConentRole.SYSTEM.value,
-            AE_CONTENT: (
-                "所有目录下的内容只可读取，不可进行任何修改、删除或写入操作。\n"
-                "本地文件系统仅含工程文件（代码 / 配置 / 文档等），不含任何网络实时数据。\n"
-                "凡涉及外部实时或动态数据——如新闻资讯、天气、股价行情、汇率、赛事比分、"
-                "热搜榜单、物流状态、实时价格等——一律通过编写脚本联网获取，"
-                "严禁尝试读取本地文件来获取这类数据（本地根本没有）。\n"
-                "本地信息不完整时，优先使用脚本程序获取网络实时数据进行分析。"
-            ),
-        })
+        # 注入只读约束 + 本地文件性质说明
+        # payload.messages.insert(0, {
+        #     AE_ROLE: AEConentRole.SYSTEM.value,
+        #     AE_CONTENT: (
+        #         "所有目录下的内容只可读取，不可进行任何修改、删除或写入操作。\n"
+        #         "本地文件系统仅含工程文件（代码 / 配置 / 文档等），不含任何网络实时数据。"
+        #     ),
+        # })
         # env_param prompt 注入由基类 AEBaseContext.receive_flow_llm_request 处理
         super().receive_flow_llm_request(payload)
 

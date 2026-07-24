@@ -15,11 +15,14 @@ from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_
 
 logger = logging.getLogger(__name__)
 
-# 执行能力共用的实时数据提醒：本地无实时数据，须脚本联网获取
+# 脚本生成时的只读约束 + 本地文件性质 + 实时数据引导
 _REALTIME_DATA_NOTE = (
-    "本地文件系统仅含工程文件（代码/配置/文档），不含任何网络实时数据。"
-    "凡涉及资讯、新闻、头条、热点、天气、股价、汇率、赛事比分、实时价格等外部动态数据，"
-    "必须通过编写脚本联网获取，严禁尝试读取本地文件来获取这类数据。"
+    "所有目录下的内容只可读取，不可进行任何修改、删除或写入操作。\n"
+    "本地文件系统仅含工程文件（代码 / 配置 / 文档等），不含任何网络实时数据。\n"
+    "凡涉及外部实时或动态数据——如新闻资讯、天气、股价行情、汇率、赛事比分、"
+    "热搜榜单、物流状态、实时价格等——一律通过编写脚本联网获取，"
+    "严禁尝试读取本地文件来获取这类数据（本地根本没有）。\n"
+    "本地信息不完整时，优先使用脚本程序获取网络实时数据进行分析。"
 )
 
 
@@ -61,7 +64,7 @@ class AETaskMixin:
             result = data
         result = (result or "").strip().lower()
         self._questionType = result
-        logger.info("[%s] 问题类型判定: result=%s", self.ident, result)
+        logger.info("[%s][%s][d=%s] 问题类型判定: result=%s", type(self).__name__, self.title, self.deepth, result)
         if result == "script":
             self.requestScripts(self.optimizePromptResult)
             return True
@@ -139,7 +142,7 @@ class AETaskMixin:
         if isinstance(result, list):
             specs = result
         else:
-            logger.warning("[%s] AE_ANSWER 非数组，跳过脚本生成，收到数据: %r", self.ident, result)
+            logger.warning("[%s][%s][d=%s] AE_ANSWER 非数组，跳过脚本生成，收到数据: %r", type(self).__name__, self.title, self.deepth, result)
             specs = []
         for spec in specs:
             if not isinstance(spec, dict):
@@ -149,14 +152,14 @@ class AETaskMixin:
                 script_flow = AEScript(flowOutput=flowOutput)
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
                 self.addFlow(script_flow)
-                logger.info("[%s] 添加 AEScript 子 flow: title=%r type=%r",
-                            self.ident, script_flow.title, script_flow.type)
+                logger.info("[%s][%s][d=%s] 添加 AEScript 子 flow: title=%r type=%r",
+                            type(self).__name__, self.title, self.deepth, script_flow.title, script_flow.type)
             except (ValueError, TypeError) as e:
-                logger.warning("[%s] 跳过非法脚本 spec=%r: %s", self.ident, spec, e)
+                logger.warning("[%s][%s][d=%s] 跳过非法脚本 spec=%r: %s", type(self).__name__, self.title, self.deepth, spec, e)
         first_script = self.nextFlow()
         if first_script is not None:
             first_script.startFlow(AEFlowInput(content=""))
-            logger.info("[%s] 启动首个 AEScript 执行: title=%r", self.ident, first_script.title)
+            logger.info("[%s][%s][d=%s] 启动首个 AEScript 执行: title=%r", type(self).__name__, self.title, self.deepth, first_script.title)
         else:
-            logger.warning("[%s] 无可执行的 AEScript", self.ident)
+            logger.warning("[%s][%s][d=%s] 无可执行的 AEScript", type(self).__name__, self.title, self.deepth)
         return True

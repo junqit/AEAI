@@ -53,7 +53,7 @@ class AERoleExcutor(AERole, AEExpertMixin, AEWorkGroupMixin, AEEmployeeMixin, AE
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，串行 requestRoleInformation → requestOptimizeInput 后执行。"""
         if not super().startFlow(flowInput):
-            logger.warning("[AERoleExcutor:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
         self.requestRoleInformation()
 
@@ -71,9 +71,9 @@ class AERoleExcutor(AERole, AEExpertMixin, AEWorkGroupMixin, AEEmployeeMixin, AE
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
         confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
         if confirm:
-            logger.info("[AERoleExcutor:%s] 收到需确认信息:\n%s", self.ident, confirm)
+            logger.info("[%s][%s][d=%s] 收到需确认信息:\n%s", type(self).__name__, self.title, self.deepth, confirm)
             return True
         self.optimizePromptResult = result or ""
-        logger.info("[AERoleExcutor:%s] 收到优化后的问题:\n%s", self.ident, self.optimizePromptResult)
+        logger.info("[%s][%s][d=%s] 收到优化后的问题:\n%s", type(self).__name__, self.title, self.deepth, self.optimizePromptResult)
         self.requestDecompose()
         return True

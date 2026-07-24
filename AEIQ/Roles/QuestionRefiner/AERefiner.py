@@ -59,11 +59,11 @@ class AERefiner(AERole):
             result = data
         self._refinedQuestion = result or ""
         logger.info(
-            "[AEFlow:%s][%s] 收到优化后的问题:\n%s",
-            self.ident, self.title, self._refinedQuestion,
+            "[%s][%s][d=%s] 收到优化后的问题:\n%s",
+            type(self).__name__, self.title, self.deepth, self._refinedQuestion,
         )
         if self.delegate is None:
-            logger.warning("[AERefiner:%s] delegate 未设置，无法添加 AERoleExcutor", self.ident)
+            logger.warning("[%s][%s][d=%s] delegate 未设置，无法添加 AERoleExcutor", type(self).__name__, self.title, self.deepth)
             return True
         # 直接创建 AERoleExcutor，完成回程路由回 delegate（父 flow）；顶层设为 expert，自上而下逐层分解
         delegate_ident = self.delegate.ident
@@ -90,7 +90,7 @@ class AERefiner(AERole):
             flowInput: flow 输入数据（content 即用户原始问题）
         """
         if not super().startFlow(flowInput):
-            logger.warning("[AERefiner:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
 
         self.requestOptimizeInput()

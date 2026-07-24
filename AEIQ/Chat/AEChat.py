@@ -42,11 +42,11 @@ class AEChat(AEFlow):
         - 仅当基类 startFlow 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
         """
         if not super().startFlow(flowInput):
-            logger.warning("[AEChat:%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
             return
         next_flow = self.nextFlow()
         if next_flow is None:
-            logger.warning("[AEChat:%s] startFlow 失败：无 default 状态子 flow 可启动", self.ident)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动", type(self).__name__, self.title, self.deepth)
             return
         next_flow.startFlow(flowInput)
 
