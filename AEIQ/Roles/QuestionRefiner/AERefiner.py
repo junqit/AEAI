@@ -1,7 +1,8 @@
 """
 AERefiner - 问题精炼 Flow，继承 AERole。
 
-将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题。
+将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题，随后直接创建一个
+AERoleExcutor 作为后续执行 flow（跳过角色选择），经 delegate 添加并以 startFlow 事件启动。
 """
 import logging
 
@@ -10,20 +11,15 @@ from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, ROLE_PARAMS
-from Roles.AEBaseRole import AERole
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole
+from Roles.AERole import AERole
+from Roles.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
 
 
-class AERefinerFunctional(AEFunctional):
-    """问题精炼 Flow 专属回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    roleChoice = "roleChoice"                            # 接收 LLM 选择的问题解决角色 type，传入 map
-
-
 class AERefiner(AERole):
-    """问题精炼 Flow：改写用户问题，输出 answer。"""
+    """问题精炼 Flow：改写用户问题，输出 answer，并直接派发 AERoleExcutor 执行。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         super().__init__(flowOutput=flowOutput, ident=ident)
@@ -42,8 +38,6 @@ class AERefiner(AERole):
         )
         # 问题转换后的内容（精炼后的问题）：由 receiveOptimizeInput 从回包提取并存储
         self._refinedQuestion: str = ""
-        # LLM 选择的问题解决角色 type（expert / workgroup / employee / reviewer）：由 roleChoice 接收并存储
-        self._roleChoiceType: str = ""
 
     def outResult_summary(self) -> str:
         """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回精炼后的问题。"""
@@ -51,10 +45,8 @@ class AERefiner(AERole):
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收优化后的问题：存入 _refinedQuestion 并打印，再交 LLM 选择负责解决问题的角色。
-
-        覆写基类：优化后的问题即精炼后的问题，存入 self._refinedQuestion 供 requestRoleChoice
-        使用；打印后调用 requestRoleChoice 进入角色选择步骤。
+        """接收优化后的问题：存入 _refinedQuestion，直接创建 AERoleExcutor 经 delegate 添加并以
+        startFlow 事件启动（跳过角色选择），由 delegate 据事件 startFlow 该执行 flow。
 
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <优化后的问题>}；若直接为字符串则视为问题
@@ -70,81 +62,20 @@ class AERefiner(AERole):
             "[AEFlow:%s][%s] 收到优化后的问题:\n%s",
             self.ident, self.title, self._refinedQuestion,
         )
-        # 收到优化后的问题后，交 LLM 选择负责解决问题的角色人选
-        self.requestRoleChoice()
-        return True
-
-    def requestRoleChoice(self) -> None:
-        """组装角色选择 LLM 请求：以 AEFlowRole 各角色的 type / title / responsibility 拼 system 消息，
-        由 LLM 选出最适合解决本问题的角色，返回 type。
-
-        - messages: system(角色清单 + 选择指令) / user(精炼后的问题)
-        - out_schema: {type 占位}，由 LLM 填充所选角色 type
-        - 走 roleChoice：回包后写入 self._roleChoiceType（不完成 flow）
-        """
-        # 以 AEFlowRole 各角色的 type / title / responsibility 组装可选角色清单
-        role_lines = []
-        for role, info in ROLE_PARAMS.items():
-            role_lines.append(f"- type: {role.value}；职称：{info.title}；职责：{info.responsibility}")
-        role_text = "\n".join(role_lines)
-        system_content = (
-            "你是一名「角色选择器」。请根据用户问题，从下列角色中选择最适合负责解决该问题的人选，"
-            "仅返回所选角色的 type 字段值（expert / workgroup / employee / reviewer 之一），"
-            "不要输出任何其他内容。\n"
-            f"可选角色：\n{role_text}"
-        )
-        messages = [
-            {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: system_content},
-            {AE_ROLE: AEConentRole.USER.value, AE_CONTENT: f"用户问题：{self._refinedQuestion}"},
-        ]
-        flow_out = self.flowOutput(AERefinerFunctional.roleChoice)
-        flow_out.set_llm_out({"type": llm_generate("所选角色的 type，取值之一：expert / workgroup / employee / reviewer")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
-
-    # 角色 type -> 角色 Flow 类的创建移至基类 AERole.createRoleFlow（懒导入避免循环）
-
-    def roleChoice(self, data) -> bool:
-        """接收 LLM 选择的问题解决角色 type：存储后据 type 创建角色 flow，
-        通过 delegate.receive_add_flow 添加为下一个 flow，再调用 self.flow_receive_complete 完成 refiner。
-
-        Args:
-            data: 回包内层 llm_out，形如 {"type": <expert / workgroup / employee / reviewer>}；
-                  若直接为字符串则视为 type 值
-
-        Returns:
-            bool: 当前数据处理是否完成（True=已处理）
-        """
-        if isinstance(data, dict):
-            self._roleChoiceType = data.get("type") or ""
-        elif isinstance(data, str):
-            self._roleChoiceType = data.strip()
-        else:
-            self._roleChoiceType = ""
-        logger.info(
-            "[AEFlow:%s][%s] 收到角色选择: data=%r, type=%r",
-            self.ident, self.title, data, self._roleChoiceType,
-        )
-
-        # 根据角色 type 创建对应角色 flow，交 delegate 添加为下一个 flow，再通知 delegate 完成
-        delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
-        role_flow = self.createRoleFlow(self._roleChoiceType, delegate_ident)
-        if role_flow is None:
-            logger.warning(
-                "[AERefiner:%s] 创建角色 flow 失败，type=%r，跳过添加与完成通知",
-                self.ident, self._roleChoiceType,
-            )
-            return True
         if self.delegate is None:
-            logger.warning(
-                "[AERefiner:%s] delegate 未设置，无法添加角色 flow / 通知完成，type=%r",
-                self.ident, self._roleChoiceType,
-            )
+            logger.warning("[AERefiner:%s] delegate 未设置，无法添加 AERoleExcutor", self.ident)
             return True
-        self.delegate.receive_add_flow(role_flow)
-        # 完成 refiner 自身：置 complete、写 outResult，并以 startFlow 事件向上通知，delegate 据此 startFlow role_flow
+        # 直接创建 AERoleExcutor，完成回程路由回 delegate（父 flow）；顶层设为 expert，自上而下逐层分解
+        delegate_ident = self.delegate.ident
+        excutor = AERoleExcutor(
+            flowOutput=AEFlowOutput({AE_IDENT: delegate_ident, AE_ANSWER: llm_generate("任务结论")}),
+        )
+        excutor.role = AEFlowRole.expert
+        self.delegate.receive_add_flow(excutor)
+        # 完成 refiner 自身：置 complete、写 outResult，并以 startFlow 事件向上通知，
+        # delegate 据此 startFlow 该 AERoleExcutor（input 取精炼后的问题）
         self.flow_receive_complete(
-            {AE_IDENT: role_flow.ident, AE_ANSWER: self._refinedQuestion},
+            {AE_IDENT: excutor.ident, AE_ANSWER: self._refinedQuestion},
             AEFlowCompletEvent.startFlow,
         )
         return True

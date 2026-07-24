@@ -21,7 +21,7 @@ from .AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 
 if TYPE_CHECKING:
     from .AEFlowInterface import AEFlowInterface
@@ -183,18 +183,23 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         # 若先 startFlow 再判断，递归回溯时每层都会重复判断 all(complete)（此时已全完成）
         # 导致重复补充/汇总。先判断、再 startFlow，则只有最后一个子 flow 完成时触发一次。
         if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
-            self._request_supplement()
+            # 补充子任务数量上限：达到上限不再询问补充，直接汇总
+            if self._supplement_count >= self.MAX_SUPPLEMENT:
+                logger.info("[AEFlow:%s][%s] 补充已达上限 %d，进入汇总", self.ident, self.title, self.MAX_SUPPLEMENT)
+                self._summarize_to_llm()
+            else:
+                self._request_supplement()
             return
         next_flow = self.nextFlow()
         if next_flow is not None:
             next_flow.startFlow(AEFlowInput(content=answer or ""))
 
     def _request_supplement(self) -> None:
-        """所有子 flow 完成后，询问 LLM 是否需要补充新 employee 任务以更完整地达成目标。
+        """所有子 flow 完成后，询问 LLM 是否需要补充一个新任务以更完整地达成目标。
 
         - messages: system(role_brief) / system(目标，AE_USER_QUESTION_PREFIX 前缀，取 optimizePromptResult 或 input.content) / assistant(各子 flow outResult_summary) / user(询问指令)
-        - out_schema: {tasks 数组占位}，由 LLM 填充：需要补充则列任务，已充分则空数组 []
-        - 走 receiveSupplement：回包后若 tasks 非空则 addFlow 并启动 employee；为空则 _summarize_to_llm 汇总
+        - out_schema: {task 占位}，由 LLM 填充：需要补充则给出一个任务描述，已充分则留空
+        - 走 receiveSupplement：回包后若 task 非空则 addFlow 一个 AERoleExcutor 并以 task 为输入启动；为空则 _summarize_to_llm 汇总
         """
         from WorkFlows.AEFlow import AEFlowFunctional  # 懒导入避免循环
         messages = []
@@ -221,67 +226,72 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "请根据以上目标与各子 flow 的回答，判断是否还有未充分覆盖的维度需要补充新员工任务。"
-                "若需要补充，在 tasks 中列出补充任务（每项为可独立完成的任务内容字符串）；"
-                "若现有回答已充分覆盖目标，返回空数组 []。"
+                "请根据以上目标与各子任务的回答，判断是否还有未充分覆盖需要补充一个新任务。"
+                "若需要补充，在 task 中给出该任务的内容描述（可独立完成）；"
+                "若现有回答已充分覆盖目标，task 留空。"
+                f"（本 flow 最多补充 {self.MAX_SUPPLEMENT} 个子任务，当前已补充 {self._supplement_count} 个，"
+                f"剩余 {self.MAX_SUPPLEMENT - self._supplement_count} 个额度）"
             ),
         })
-        logger.info("[AEFlow:%s][%s] _request_supplement: 子 flow 全部完成 %d/%d，询问是否补充 employee",
-                    self.ident, self.title, len(self._flows), len(self._flows))
+        logger.info("[AEFlow:%s][%s] _request_supplement: 子 flow 全部完成 %d/%d，询问是否补充任务（已补充 %d/%d）",
+                    self.ident, self.title, len(self._flows), len(self._flows),
+                    self._supplement_count, self.MAX_SUPPLEMENT)
         flow_out = self.flowOutput(AEFlowFunctional.receiveSupplement)
-        flow_out.set_llm_out({"tasks": [llm_generate("补充任务内容，可独立完成")]})
+        flow_out.set_llm_out({"task": llm_generate("补充任务内容描述，可独立完成；无需补充则留空")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
     def receiveSupplement(self, data: dict) -> bool:
-        """接收 LLM 判定的补充任务：非空则为每项 addFlow 一个 employee 并启动；为空则进入 _summarize_to_llm 汇总。
+        """接收 LLM 判定的补充任务：非空则 addFlow 一个 AERoleExcutor（以任务描述为输入）并启动；
+        为空则进入 _summarize_to_llm 汇总。
 
-        补充的 employee 完成后会再次触发 receive_flow_result 的 all(complete) 判断，形成"补充→完成→再问"
-        循环，直到 LLM 判定无需补充（tasks 为空）才汇总。
+        补充的 AERoleExcutor 完成后会再次触发 receive_flow_result 的 all(complete) 判断，形成"补充→完成→再问"
+        循环，直到 LLM 判定无需补充（task 为空）才汇总。
 
         Args:
-            data: 回包内层 llm_out，形如 {"tasks": [<任务内容>, ...]}；空数组表示无需补充
+            data: 回包内层 llm_out，形如 {"task": <任务描述>}；空字符串表示无需补充
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        tasks = data.get("tasks") if isinstance(data, dict) else None
-        if tasks is None and isinstance(data, dict):
-            tasks = data.get(AE_ANSWER)
-        if isinstance(tasks, str):
-            tasks = [tasks] if tasks.strip() else []
-        elif not isinstance(tasks, list):
-            tasks = []
-        if not tasks:
-            logger.info("[AEFlow:%s][%s] 无需补充 employee，进入汇总", self.ident, self.title)
+        task = data.get("task") if isinstance(data, dict) else None
+        if task is None and isinstance(data, str):
+            task = data
+        task = (task or "").strip() if isinstance(task, str) else ""
+        if not task:
+            logger.info("[AEFlow:%s][%s] 无需补充任务，进入汇总", self.ident, self.title)
             self._summarize_to_llm()
             return True
-        # 需要补充：为每个任务创建 employee，addFlow 并启动（完成回程路由回本 flow）
-        from Roles.Employee.AEEmployee import AEEmployee  # 懒导入避免循环
-        for task in tasks:
-            content = task if isinstance(task, str) else str(task or "")
-            emp = AEEmployee(
-                flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("员工结论")}),
-            )
-            self.addFlow(emp)
-            emp.startFlow(AEFlowInput(content=content))
-            logger.info(
-                "[AEFlow:%s][%s] 补充 employee: ident=%s | 任务内容=%s",
-                self.ident, self.title, emp.ident, content,
-            )
+        # 需要补充：创建一个 AERoleExcutor（role 取本 flow 下一层；无 role 属性或已最底层时回退 employee），
+        # addFlow 并以任务描述为输入启动（完成回程路由回本 flow）
+        from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环
+        from Roles.AERoleType import roles_below, AEFlowRole  # 懒导入避免循环
+        self._supplement_count += 1
+        _below = roles_below(getattr(self, "role", None))
+        supplement_role = _below[0] if _below else AEFlowRole.employee
+        excutor = AERoleExcutor(
+            flowOutput=AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("任务结论")}),
+        )
+        excutor.role = supplement_role
+        self.addFlow(excutor)
+        excutor.startFlow(AEFlowInput(content=task))
+        logger.info(
+            "[AEFlow:%s][%s] 补充 AERoleExcutor(role=%s): ident=%s | 任务内容=%s（已补充 %d/%d）",
+            self.ident, self.title, supplement_role.value, excutor.ident, task, self._supplement_count, self.MAX_SUPPLEMENT,
+        )
         return True
 
     def _summarize_to_llm(self) -> None:
-        """收集所有子 flow 的 outResult 放入 messages，交 LLM 做结构性整合输出。
+        """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论。
 
-        注意：并非"提炼最终结论"，而是把各子 flow 的全部信息结构性整合、保留细节、
-        去冗余去重后输出（见下方 user 指令）。仅在所有子 flow 全部 complete 时由
-        receive_flow_result 调用，故进入本方法即可直接发送。重复触发的根因（子 flow
-        多发导致其 flow_receive_complete 多次通知本层）已在 AEFlow.flow_receive_complete
-        用 status==complete 幂等闸阻断。
+        注意：需总结但不得丢掉重点信息——保留所有重点与关键细节，不得遗漏或弱化要点，
+        仅对冗余重复内容去重（见下方 user 指令）。仅在所有子 flow 全部 complete 时由
+        receive_flow_result（经 _request_supplement 判定无需补充后）调用，故进入本方法即可
+        直接发送。重复触发的根因（子 flow 多发导致其 flow_receive_complete 多次通知本层）
+        已在 AEFlow.flow_receive_complete 用 status==complete 幂等闸阻断。
         """
         logger.info(
-            "[AEFlow:%s][%s] _summarize_to_llm: 子 flow 全部完成 %d/%d，发送结构性整合请求",
+            "[AEFlow:%s][%s] _summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
             self.ident, self.title, len(self._flows), len(self._flows),
         )
         flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
@@ -305,8 +315,9 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "请将以上各子 flow 的结果进行结构性整合输出：保留全部细节，不得简化、概括或丢弃任何信息；"
-                "对冗余、重复的内容去重；以结构化形式呈现完整信息，而非提炼最终结论。"
+                "请对以上各子任务的结果进行总结，形成最终结论；"
+                "总结时必须保留所有重点信息与关键细节，不得遗漏或弱化要点，也不能为精简而丢掉重要信息；"
+                "仅对冗余、重复的内容去重。"
             ),
         })
 

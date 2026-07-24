@@ -9,7 +9,7 @@ import logging
 
 from .AEFlowInfo import AEFlowInfo, AE_ANSWER
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
 
 logger = logging.getLogger(__name__)
 

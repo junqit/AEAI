@@ -24,7 +24,7 @@ from .AEFlowInformation import AEFlowInformation
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AE_USER_QUESTION_PREFIX
 from Tools.Excutor import AERuntimeExcutor
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -38,7 +38,8 @@ if TYPE_CHECKING:
 
 class AEFlowFunctional(AEFunctional):
     """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称、能力范围与角色 prompt，传入 map
+    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称、能力范围，传入 map
+    receiveRolePrompt = "receiveRolePrompt"                # 接收 LLM 基于 title+能力 生成的 rolePrompt，传入 map
     receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
     receiveSupplement = "receiveSupplement"                # 接收 LLM 判定是否需补充新 employee 任务及任务列表，传入 map
 
@@ -58,6 +59,11 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
         # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
         # 默认不注册任何方法，由业务子类自行 add_default / add_temporary 添加
         self.excutor = AERuntimeExcutor()
+        # 补充子任务计数（_request_supplement 循环最多补充 MAX_SUPPLEMENT 个）
+        self._supplement_count = 0
+
+    # 补充子任务数量上限
+    MAX_SUPPLEMENT = 0
 
     # ==================== AEFlowInterface 实现 ====================
     # startFlow / addFlow / receive_llm_response 由 AEFlowInterfaceImpl 提供（实例方法继承）。

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
-from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
 from WorkFlows.AEFlowOutput import AE_LLM_OUT
 from WorkFlows.AEFlow import AE_IDENT
 

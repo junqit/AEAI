@@ -22,23 +22,29 @@ class AEDirectoryContext(AEBaseContext):
     # 各环境参数类型的描述文本（prompt 静态部分）
     # 实际环境信息（OS / 脚本版本 / 已装库等）由 build_env_param_prompt 在描述之后追加，
     # 故描述中以“下方”指代随后拼接的真实探测信息，并要求据此确认可运行性。
+    # 共用标注：环境信息仅在编写/执行软件程序（脚本）时参考，其他场景忽略。
+    _ENV_PARAM_NOTE = "注：以下环境信息仅在需编写或执行软件程序（脚本/命令）时参考，其他场景可忽略。\n"
     ENV_PARAM_DESC: Dict[AEEnvParamType, str] = {
         AEEnvParamType.system: (
-            "【系统环境】下方为当前主机实际探测到的操作系统、硬件架构与系统级工具信息。"
+            _ENV_PARAM_NOTE
+            + "【系统环境】下方为当前主机实际探测到的操作系统、硬件架构与系统级工具信息。"
             "据此确认所涉及的程序、脚本、工具在当前系统下可运行"
         ),
         AEEnvParamType.python: (
-            "【Python 环境】下方为当前实际可用的 Python 解释器版本、路径与已安装第三方库。"
+            _ENV_PARAM_NOTE
+            + "【Python 环境】下方为当前实际可用的 Python 解释器版本、路径与已安装第三方库。"
             "所生成代码须确认仅使用下方已列出的解释器与库、可在当前环境下直接运行；"
             "缺失所需库时按安装申请规则申请安装，不得直接引用未安装的依赖。"
         ),
         AEEnvParamType.ruby: (
-            "【Ruby 环境】下方为当前实际可用的 Ruby 解释器版本、路径与已安装 gem 库。"
+            _ENV_PARAM_NOTE
+            + "【Ruby 环境】下方为当前实际可用的 Ruby 解释器版本、路径与已安装 gem 库。"
             "所生成代码须确认仅使用下方已列出的解释器与库、可在当前环境下直接运行；"
             "缺失所需库时按安装申请规则申请安装，不得直接引用未安装的依赖。"
         ),
         AEEnvParamType.shell: (
-            "【Shell 环境】下方为当前系统实际可用的 shell（如 zsh）及版本。"
+            _ENV_PARAM_NOTE
+            + "【Shell 环境】下方为当前系统实际可用的 shell（如 zsh）及版本。"
             "所生成命令须确认可在当前 shell 环境下直接执行；"
             "所有文件与目录操作须限定在当前工作目录内。"
         ),
@@ -230,5 +236,5 @@ class AEDirectoryContext(AEBaseContext):
         """组装完整的 role prompt，返回 {role: content} 结构"""
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
-        from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+        from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
         return {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt}

@@ -58,7 +58,7 @@ class AEContextCenter(AEContextDelegate):
         # 获取 DirectoryContext，注入 payload 携带的环境参数（env_params）prompt
         directory = self.find_by_type(AEContextType.directory)
         if directory is not None:
-            from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
+            from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
             for env_param in reversed(list(payload.env_params)):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:

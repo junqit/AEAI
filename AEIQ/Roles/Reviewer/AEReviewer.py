@@ -9,8 +9,8 @@ from WorkFlows.AEFlow import AEFlowFunctional
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERole import AEConentRole, AE_ROLE, AE_CONTENT
-from Roles.AEBaseRole import AERole
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
+from Roles.AERole import AERole
 
 logger = logging.getLogger(__name__)
 

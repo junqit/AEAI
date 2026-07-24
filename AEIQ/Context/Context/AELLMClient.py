@@ -52,7 +52,7 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         return _build_failure_envelope(payload)
 
 
-def _build_failure_envelope(payload: AELLMPayload, reason: str = "llm 生成失败") -> dict:
+def _build_failure_envelope(payload: AELLMPayload, reason: str = "") -> dict:
     """LLM 失败 / 不可解析时，把原数据结构内 AE_ANSWER 置为失败原因，返回完整信封。
 
     复用 payload.fill_content 的回填逻辑：最内层含 AE_ANSWER 的 dict 直接替换其值；

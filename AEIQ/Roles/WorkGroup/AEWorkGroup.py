@@ -11,8 +11,8 @@ from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
-from Roles.AEBaseRole import AERole
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
+from Roles.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +53,10 @@ class AEWorkGroup(AERole):
         # 先请求 LLM 生成自身工作名称与能力范围（回包走 receiveRoleInfomation，再发送实际任务）
         self.requestRoleInformation()
 
-    def receiveRoleInfomation(self, data: dict) -> bool:
-        """接收角色信息（title/responsibility/rolePrompt）后，请求生成问题优化提示（requestOptimizeInput）。"""
-        result = super().receiveRoleInfomation(data)
-        # 角色信息生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+    def receiveRolePrompt(self, data: dict) -> bool:
+        """接收 rolePrompt 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        result = super().receiveRolePrompt(data)
+        # rolePrompt 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
         self.requestOptimizeInput()
         return result
 

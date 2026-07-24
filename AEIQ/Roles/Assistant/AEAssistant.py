@@ -10,8 +10,8 @@ from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERole import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
-from Roles.AEBaseRole import AERole
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
+from Roles.AERole import AERole
 from Roles.WorkGroup.AEWorkGroup import AEWorkGroup
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -50,10 +50,10 @@ class AEAssistant(AERole):
         info = get_role_param(AEFlowRole.expert)
         return f"{info.title}：{info.responsibility}"
 
-    def receiveRoleInfomation(self, data: dict) -> bool:
-        """接收角色信息（title/responsibility/rolePrompt）后，请求生成问题优化提示（requestOptimizeInput）。"""
-        result = super().receiveRoleInfomation(data)
-        # 角色信息生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
+    def receiveRolePrompt(self, data: dict) -> bool:
+        """接收 rolePrompt 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        result = super().receiveRolePrompt(data)
+        # rolePrompt 生成后，交 LLM 生成问题优化提示（回包走 receiveOptimizeInput）
         self.requestOptimizeInput()
         return result
 
