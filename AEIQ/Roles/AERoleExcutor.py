@@ -35,6 +35,8 @@ class AERoleExcutorFunction(AEFunctional):
     """角色执行 Flow 专属回包功能性方法名。"""
     receiveDecompose = "receiveDecompose"
     receiveQuestionType = "receiveQuestionType"
+    receiveTaskAnalysis = "receiveTaskAnalysis"
+    receiveTaskPlan = "receiveTaskPlan"
     receiveScripts = "receiveScripts"
 
 

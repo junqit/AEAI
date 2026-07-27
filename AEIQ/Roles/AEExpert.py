@@ -76,6 +76,7 @@ class AEExpertMixin:
         注：requestDecompose 已在发请求前判断 below 是否为空，为空则直接 requestQuestionType
         不会发拆解请求，故本方法无需重复判断 below。
         role 必须在 roles_below(self.role) 范围内，不在则报错跳过该子任务。
+        若全部子任务都被跳过（0 个 subFlow 创建），回退到 requestQuestionType 直接执行。
         """
         from Roles.AERoleType import roles_below
         from Roles.AERoleExcutor import AERoleExcutor
@@ -88,6 +89,7 @@ class AEExpertMixin:
             self.requestQuestionType()
             return True
         below_set = set(roles_below(self.role))
+        created = 0
         for spec in tasks:
             if isinstance(spec, str):
                 content = spec
@@ -95,6 +97,9 @@ class AEExpertMixin:
             elif isinstance(spec, dict):
                 content = spec.get("task") or spec.get(AE_TITLE) or ""
                 role_str = (spec.get("role") or "").strip()
+                # 兼容 LLM 返回 "type: task" 格式，去掉 "type:" 前缀
+                if role_str.lower().startswith("type:"):
+                    role_str = role_str.split(":", 1)[1].strip()
                 try:
                     role_enum = AEFlowRole(role_str)
                 except ValueError:
@@ -113,6 +118,11 @@ class AEExpertMixin:
             sub.role = role_enum
             self.addFlow(sub)
             sub.startFlow(AEFlowInput(content=content))
+            created += 1
             logger.info("[%s][%s][d=%s] 创建 subFlow(role=%s, 可继续拆解=%s): 子任务=%s",
                         type(self).__name__, self.title, self.deepth, role_enum.value, has_next, content)
+        # 全部子任务被跳过，无 subFlow 创建 → 回退直接执行
+        if created == 0:
+            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，回退直接执行", type(self).__name__, self.title, self.deepth)
+            self.requestQuestionType()
         return True
