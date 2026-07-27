@@ -12,7 +12,7 @@ AEFlowFunctional 在方法内懒导入以避免循环导入。
 """
 import logging
 
-from .AEFlowInfo import AEFlowInfo, AE_TITLE, AE_ANSWER
+from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_TITLE, AE_ANSWER
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
 
@@ -66,21 +66,23 @@ class AEFlowInformation(AEFlowInfo):
         """接收 LLM 生成的工作名称与能力范围，写入 title / responsibility（不完成 flow），
         随后请求生成 rolePrompt（requestRolePrompt）。
 
-        title 与 responsibility 均非空时返回 True；任一为空返回 False。
+        title 与 responsibility 均非空时返回 True 并请求 rolePrompt；任一为空时以 default 事件
+        携带错误原因调 flow_receive_complete 完成本 flow（避免卡死），同样返回 True。
 
         Args:
             data: 回包内层 llm_out，形如 {AE_TITLE: <工作名称>, "responsibility": <能力范围>}
 
         Returns:
-            bool: title 与 responsibility 均有值时 True，否则 False
+            bool: 始终 True（已处理：或继续链路，或错误兜底完成）
         """
         if not isinstance(data, dict):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get("responsibility", "") or ""
         if not self.title or not self.responsibility:
-            logger.warning("[%s][%s][d=%s] title 或 responsibility 为空，返回 False", type(self).__name__, self.title, self.deepth)
-            return False
+            logger.warning("[%s][%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色信息（title/responsibility）生成失败"})
+            return True
         # title / responsibility 就绪后，请求生成 rolePrompt
         self.requestRolePrompt()
         return True

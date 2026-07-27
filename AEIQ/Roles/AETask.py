@@ -215,6 +215,9 @@ class AETaskMixin:
                 "  - type：python / shell / ruby 之一\n\n"
                 "要求：\n"
                 "- 脚本可无人值守自动执行，禁止 input()/gets/read 等交互输入，参数硬编码或用环境变量\n"
+                "- 脚本在只读沙箱中执行，禁止任何文件写入（创建/修改/删除/重命名文件或目录、"
+                "open(... 'w'/'a')、shell 的 > / >> 重定向等）；需保存中间结果一律改用 stdout 输出，"
+                "写文件会被沙箱拒绝导致脚本失败\n"
                 "- 双引号须转义为 \\\"\n"
                 + (f"- {approach_hint}\n" if approach_hint else "")
                 + "- 需联网获取数据时优先使用爬虫方式（如 requests + BeautifulSoup / lxml），"
@@ -262,7 +265,8 @@ class AETaskMixin:
             first_script.startFlow(AEFlowInput(content=""))
             logger.info("[%s][%s][d=%s] 启动首个 AEScript: title=%r", type(self).__name__, self.title, self.deepth, first_script.title)
         else:
-            logger.warning("[%s][%s][d=%s] 无可执行的 AEScript", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的脚本任务（脚本生成失败或为空）"})
         return True
 
     # ==================== 辅助 ====================

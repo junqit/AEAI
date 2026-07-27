@@ -176,5 +176,6 @@ class AEWorkGroup(AERole):
             first_employee.startFlow(AEFlowInput(content=first_task))
             logger.info("[%s][%s][d=%s] 启动首个 AEEmployee: title=%r", type(self).__name__, self.title, self.deepth, getattr(first_employee, AE_TITLE, ""))
         else:
-            logger.warning("[%s][%s][d=%s] 无可执行的 AEEmployee", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][%s][d=%s] 无可执行的 AEEmployee，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的员工任务（任务生成失败或为空）"})
         return True

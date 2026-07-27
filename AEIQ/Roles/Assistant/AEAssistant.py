@@ -107,6 +107,11 @@ class AEAssistant(AERole):
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
+        if not isinstance(tasks, list) or len(tasks) == 0:
+            logger.warning("[%s][%s][d=%s] tasks 非数组或为空，以错误完成本 flow 避免卡死: %r",
+                           type(self).__name__, self.title, self.deepth, tasks)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的工作组任务（任务生成失败或为空）"})
+            return True
         for task in tasks:
             content = task if isinstance(task, str) else str(task or "")
             wg = AEWorkGroup(
