@@ -58,10 +58,6 @@ class AERefiner(AERole):
         if result is None and isinstance(data, str):
             result = data
         self._refinedQuestion = result or ""
-        logger.info(
-            "[%s][%s][d=%s] 收到优化后的问题:\n%s",
-            type(self).__name__, self.title, self.deepth, self._refinedQuestion,
-        )
         if self.delegate is None:
             logger.warning("[%s][%s][d=%s] delegate 未设置，无法添加 AERoleExcutor", type(self).__name__, self.title, self.deepth)
             return True

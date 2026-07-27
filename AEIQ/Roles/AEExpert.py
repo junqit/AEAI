@@ -25,7 +25,6 @@ class AEExpertMixin:
         from Roles.AERoleExcutor import AERoleExcutorFunction
         below = roles_below(self.role)
         if not below:
-            logger.info("[%s][%s][d=%s] role=%s 已为最底层，转执行类型判定", type(self).__name__, self.title, self.deepth, self.role.value)
             self.requestQuestionType()
             return
         messages = []
@@ -50,10 +49,12 @@ class AEExpertMixin:
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"请将{AE_USER_QUESTION_PREFIX}这一目标与任务拆解为可独立完成的子任务，"
-                "并为每个子任务从上述下层角色中选择最合适的执行层级。"
-                "在 tasks 中列出，每项含 title（任务标题）、task（任务内容，可独立完成）、role（从上述 type 中选）；"
-                "若该目标已足够原子、无需进一步拆解，返回空数组 []。"
+                f"请根据{AE_USER_QUESTION_PREFIX}这一目标与任务，结合你的专业能力判断："
+                "该任务是否需要拆解？以最小代价解决问题为原则——"
+                "若目标简单可直接执行，无需拆解，返回空数组 []；"
+                "若确需拆解，在 tasks 中列出子任务，每项含 title（任务标题）、task（任务内容，可独立完成）、role（从上述下层角色中选最合适的执行层级）。"
+                "拆解层数和子任务数量应尽可能少，避免过度拆解。"
+                "无需创建总结性或整合性的任务——每个子任务完成后，当前工作流会自动对全部子任务结果进行统计汇总。"
             ),
         })
         logger.info("[%s][%s][d=%s] role=%s → 拆解，可选下层: %s", type(self).__name__, self.title, self.deepth, self.role.value, [r.value for r in below])
@@ -70,49 +71,48 @@ class AEExpertMixin:
 
     def receiveDecompose(self, data: dict) -> bool:
         """接收 LLM 拆解出的子任务及所选层级：按每项 role 创建 AERoleExcutor subFlow 并启动；
-        为空或已到最底层则转 requestQuestionType 走脚本/直接作答。
+        为空则转 requestQuestionType 走脚本/直接作答。
+
+        注：requestDecompose 已在发请求前判断 below 是否为空，为空则直接 requestQuestionType
+        不会发拆解请求，故本方法无需重复判断 below。
+        role 必须在 roles_below(self.role) 范围内，不在则报错跳过该子任务。
         """
         from Roles.AERoleType import roles_below
-        below = roles_below(self.role)
-        if not below:
-            self.requestQuestionType()
-            return True
+        from Roles.AERoleExcutor import AERoleExcutor
         tasks = data.get("tasks") if isinstance(data, dict) else None
         if tasks is None and isinstance(data, str):
             tasks = [tasks] if tasks.strip() else []
         elif not isinstance(tasks, list):
             tasks = []
         if not tasks:
-            logger.info("[%s][%s][d=%s] 目标已原子，转执行类型判定", type(self).__name__, self.title, self.deepth)
             self.requestQuestionType()
             return True
-        below_set = set(below)
-        default_role = below[0]
-        from Roles.AERoleExcutor import AERoleExcutor
+        below_set = set(roles_below(self.role))
         for spec in tasks:
             if isinstance(spec, str):
                 content = spec
-                role_enum = default_role
+                role_enum = None
             elif isinstance(spec, dict):
                 content = spec.get("task") or spec.get(AE_TITLE) or ""
                 role_str = (spec.get("role") or "").strip()
                 try:
                     role_enum = AEFlowRole(role_str)
                 except ValueError:
-                    role_enum = default_role
+                    role_enum = None
             else:
                 continue
-            if role_enum not in below_set:
-                logger.warning("[%s][%s][d=%s] 子任务 role=%r 不在可选下层内，回退 %s",
-                               type(self).__name__, self.title, self.deepth, role_enum.value, default_role.value)
-                role_enum = default_role
+            if role_enum is None or role_enum not in below_set:
+                logger.error("[%s][%s][d=%s] 子任务 role 非法或不在可选下层内，跳过: spec=%r",
+                             type(self).__name__, self.title, self.deepth, spec)
+                continue
             content = str(content or "")
+            has_next = bool(roles_below(role_enum))
             sub = AERoleExcutor(
                 flowOutput=AEFlowOutput({AE_IDENT: self.ident, "reply": llm_generate("任务结论")}),
             )
             sub.role = role_enum
             self.addFlow(sub)
             sub.startFlow(AEFlowInput(content=content))
-            logger.info("[%s][%s][d=%s] 创建 subFlow(role=%s): 子任务=%s",
-                        type(self).__name__, self.title, self.deepth, role_enum.value, content)
+            logger.info("[%s][%s][d=%s] 创建 subFlow(role=%s, 可继续拆解=%s): 子任务=%s",
+                        type(self).__name__, self.title, self.deepth, role_enum.value, has_next, content)
         return True

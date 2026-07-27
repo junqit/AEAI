@@ -58,6 +58,8 @@ class AEFlowOptimizeInput(AEFlowInfo):
     def receiveOptimizeInput(self, data: dict) -> bool:
         """接收 LLM 生成的问题优化提示（不完成 flow，仅存储供后续使用）。
 
+        成功时打印一次完整摘要（title / responsibility / 原始问题 / 优化后的问题 / rolePrompt）。
+
         Args:
             data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的问题优化提示>}
 
@@ -68,8 +70,10 @@ class AEFlowOptimizeInput(AEFlowInfo):
         if prompt is None and isinstance(data, str):
             prompt = data
         self.optimizePromptResult = prompt or ""
+        original = self.input.content if self.input is not None else ""
         logger.info(
-            "[%s][%s][d=%s] 收到问题优化提示:\n%s",
-            type(self).__name__, self.title, self.deepth, self.optimizePromptResult,
+            "[%s][%s][d=%s] 优化完成:\n  title: %s\n  responsibility: %s\n  原始问题: %s\n  优化后的问题: %s\n  rolePrompt: %s",
+            type(self).__name__, self.title, self.deepth,
+            self.title, self.responsibility, original, self.optimizePromptResult, self.rolePrompt,
         )
         return True

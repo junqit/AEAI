@@ -64,16 +64,11 @@ class AERoleExcutor(AERole, AEExpertMixin, AEWorkGroupMixin, AEEmployeeMixin, AE
         return result
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收优化后的问题：存入 optimizePromptResult，再请求拆解（requestDecompose）。"""
-        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
-        if result is None and isinstance(data, str):
-            result = data
+        """接收优化后的问题：交基类存储 optimizePromptResult 并打印摘要，再请求拆解（requestDecompose）。"""
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
         confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
         if confirm:
-            logger.info("[%s][%s][d=%s] 收到需确认信息:\n%s", type(self).__name__, self.title, self.deepth, confirm)
             return True
-        self.optimizePromptResult = result or ""
-        logger.info("[%s][%s][d=%s] 收到优化后的问题:\n%s", type(self).__name__, self.title, self.deepth, self.optimizePromptResult)
+        super().receiveOptimizeInput(data)  # 基类存储 optimizePromptResult + 打印摘要
         self.requestDecompose()
         return True

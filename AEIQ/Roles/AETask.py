@@ -64,7 +64,6 @@ class AETaskMixin:
             result = data
         result = (result or "").strip().lower()
         self._questionType = result
-        logger.info("[%s][%s][d=%s] 问题类型判定: result=%s", type(self).__name__, self.title, self.deepth, result)
         if result == "script":
             self.requestScripts(self.optimizePromptResult)
             return True
@@ -117,7 +116,8 @@ class AETaskMixin:
                 "  - type：python / shell / ruby 之一\n\n"
                 "要求：\n"
                 "- 脚本可无人值守自动执行，禁止 input()/gets/read 等交互输入，参数硬编码或用环境变量\n"
-                "- 双引号须转义为 \\\""
+                "- 双引号须转义为 \\\"\n"
+                "- 需联网获取数据时，使用国内可访问的服务器地址，避免使用国内无法直接访问的境外 API"
             ),
         })
         flow_out = self.flowOutput(AERoleExcutorFunction.receiveScripts)

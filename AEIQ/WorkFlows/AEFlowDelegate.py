@@ -128,9 +128,10 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             event: 完成事件（AEFlowCompletEvent.default / startFlow / error）
         """
         ident = result.get(AE_IDENT) if isinstance(result, dict) else None
+        reply_len = len(result.get(AE_ANSWER, "")) if isinstance(result, dict) else 0
         logger.info(
-            "[recv][%s][%s][d=%s] receive_flow_complete event=%s result:\n%s",
-            type(self).__name__, self.title, self.deepth, event, json.dumps(result, ensure_ascii=False, indent=2, default=str),
+            "[recv][%s][%s][d=%s] receive_flow_complete event=%s reply_len=%d",
+            type(self).__name__, self.title, self.deepth, event, reply_len,
         )
         # startFlow：从 subFlows 按 ident 取出子 flow 并启动（input 取 result 的 AE_ANSWER）
         if event == AEFlowCompletEvent.startFlow:

@@ -134,9 +134,7 @@ class AERuntimeExcutor:
         exec(entry.script, namespace)
         # 获取方法执行结果并判断/打印
         result = namespace.get(AE_RESULT)
-        if result is True:
-            logger.info("[AERuntimeExcutor] funcident=%s 执行完成: result=%r", funcident, result)
-        else:
+        if result is not True:
             logger.warning("[AERuntimeExcutor] funcident=%s 执行未完成: result=%r", funcident, result)
         # temporary 执行后清除，避免残留
         if is_temporary:

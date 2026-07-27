@@ -175,7 +175,7 @@ class AEContextCenter(AEContextDelegate):
             return
 
         question = cont.ques if cont else None
-        logger.info("[AEContextCenter] handle_chat: 交 workspace receive_chat, question=%r", question.content if question else None)
+        logger.info("[AEContextCenter] handle_chat: 交 workspace receive_chat")
         context.receive_chat(question, req)
 
     def handle_chat_list(self, cont: AENetCont, req: AENetReqInfo) -> None:

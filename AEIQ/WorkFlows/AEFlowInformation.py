@@ -78,10 +78,6 @@ class AEFlowInformation(AEFlowInfo):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get("responsibility", "") or ""
-        logger.info(
-            "[%s][%s][d=%s] 收到角色信息:\ntitle=%r\nresponsibility=%r",
-            type(self).__name__, self.title, self.deepth, self.title, self.responsibility,
-        )
         if not self.title or not self.responsibility:
             logger.warning("[%s][%s][d=%s] title 或 responsibility 为空，返回 False", type(self).__name__, self.title, self.deepth)
             return False
@@ -137,5 +133,4 @@ class AEFlowInformation(AEFlowInfo):
         if prompt is None and isinstance(data, str):
             prompt = data
         self.rolePrompt = prompt or ""
-        logger.info("[%s][%s][d=%s] 收到 rolePrompt:\n%s", type(self).__name__, self.title, self.deepth, self.rolePrompt)
         return True

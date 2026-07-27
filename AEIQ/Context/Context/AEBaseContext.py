@@ -68,14 +68,14 @@ class AEBaseContext:
         Args:
             data: LLM 回复解析后的 JSON（含 ident 及 out_schema 填充结果）
         """
-        logger.info(f"Context {self.ident} 收到 LLM 回复数据: {data}")
+        logger.info(f"Context {self.ident} 收到 LLM 回复")
 
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
         """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，构建 input 后交 startFlow 启动
         （不等回，flow 内部异步流转）。
         """
-        logger.info("[Context:%s] receive_chat: question=%r, context_type=%s",
-                    self.ident, question.content if question else None, self.context_type)
+        logger.info("[Context:%s] receive_chat: context_type=%s",
+                    self.ident, self.context_type)
         if question is None:
             logger.error("[Context:%s] 收到的 AENetQues 为空，忽略", self.ident)
             return
