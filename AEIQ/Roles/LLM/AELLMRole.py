@@ -9,9 +9,7 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERoleType import (
-    AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param,
-)
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 from Roles.AERole import AERole
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -28,8 +26,7 @@ class AELLMRole(AERole):
 
     def roleDescription(self) -> str:
         """角色描述：返回本角色的职称与职责。"""
-        info = get_role_param(AEFlowRole.llm)
-        return f"{info.title}：{info.responsibility}"
+        return f"{self.title}：{self.responsibility}"
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，拼装 AELLMPayload 直接请求 LLM 作答（回包走 flow_receive_complete）。

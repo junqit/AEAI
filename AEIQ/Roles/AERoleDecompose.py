@@ -1,4 +1,4 @@
-"""AEExpert - 专家级拆解能力 mixin。
+"""AERoleDecompose - 角色拆解能力 mixin。
 
 提供 requestDecompose / receiveDecompose：按层级向下分解目标为子任务。
 AERoleExcutor 继承本 mixin 获得拆解能力（expert/workgroup/employee 共用）。
@@ -14,8 +14,8 @@ from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_
 logger = logging.getLogger(__name__)
 
 
-class AEExpertMixin:
-    """专家级拆解能力：按层级将目标分解为更小的角色子任务。"""
+class AERoleDecompose:
+    """角色拆解能力：按层级将目标分解为更小的角色子任务。"""
 
     def requestDecompose(self) -> None:
         """按层级向下分解：请求 LLM 将目标拆解为子任务，每个子任务可分配给当前角色以下任一层级。

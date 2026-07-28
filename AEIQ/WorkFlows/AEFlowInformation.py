@@ -15,7 +15,7 @@ import logging
 from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_TITLE, AE_ANSWER
 from .AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX, ROLE_PARAMS
 
 logger = logging.getLogger(__name__)
 
@@ -43,22 +43,19 @@ class AEFlowInformation(AEFlowInfo):
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
             })
-        # 生成角色信息时需遵守的角色要求（来自 roleDescription）
-        messages.append({
-            AE_ROLE: AEConentRole.SYSTEM.value,
-            AE_CONTENT: f"生成角色信息时需遵守以下角色要求：\n{self.roleDescription()}",
-        })
+
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"请根据{AE_USER_QUESTION_PREFIX}，生成你的工作名称与能力范围；"
-                "工作名称需体现专业领域与定位，能力范围需明确职责边界与禁止事项。"
+                f"根据{AE_USER_QUESTION_PREFIX}，生成工作名称与职责范围：\n"
+                "- 工作名称：体现专业领域与定位；\n"
+                "- 职责范围：明确职责边界与禁止事项。"
             ),
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveRoleInfomation)
         flow_out.set_llm_out({
             AE_TITLE: llm_generate("工作名称，体现专业领域与定位"),
-            "responsibility": llm_generate("能力范围，明确职责边界与禁止事项"),
+            "responsibility": llm_generate("职责范围，明确职责边界与禁止事项"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
@@ -114,8 +111,7 @@ class AEFlowInformation(AEFlowInfo):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "请根据以上工作名称与能力范围，生成一个将用户问题转化为目标的指令(rolePrompt)："
-                "该指令须体现你的职称与能力边界，用于把用户问题转化为明确、可执行的目标，"
-                "使该目标契合你的专业能力与职责边界；只输出指令文本本身，不要解释。"
+                "用于把用户问题转化为明确、可执行的目标，使该目标契合你的专业能力与职责边界；只输出指令文本本身，不要解释。"
             ),
         })
         flow_out = self.flowOutput(AEFlowFunctional.receiveRolePrompt)

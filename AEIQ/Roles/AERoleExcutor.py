@@ -2,7 +2,7 @@
 AERoleExcutor - 角色执行 Flow，继承 AERole + 4 个能力 mixin。
 
 能力 mixin（各自独立文件，AERoleExcutor 继承）：
-  - AEExpertMixin  (AEExpert.py)  ：拆解能力（requestDecompose / receiveDecompose）
+  - AERoleDecompose (AERoleDecompose.py)：拆解能力（requestDecompose / receiveDecompose）
   - AEWorkGroupMixin (AEWorkGroup.py)：工作组扩展（预留）
   - AEEmployeeMixin (AEEmployee.py)  ：员工扩展（预留）
   - AETaskMixin    (AETask.py)     ：执行能力（requestQuestionType / requestScripts / ...）
@@ -19,11 +19,12 @@ import logging
 
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import AEFlowRole
 from Roles.AERole import AERole
-from Roles.AEExpert import AEExpertMixin
+from Roles.AERoleDecompose import AERoleDecompose
 from Roles.AEWorkGroup import AEWorkGroupMixin
 from Roles.AEEmployee import AEEmployeeMixin
 from Roles.AETask import AETaskMixin
@@ -40,10 +41,10 @@ class AERoleExcutorFunction(AEFunctional):
     receiveScripts = "receiveScripts"
 
 
-class AERoleExcutor(AERole, AEExpertMixin, AEWorkGroupMixin, AEEmployeeMixin, AETaskMixin):
+class AERoleExcutor(AERole, AERoleDecompose, AEWorkGroupMixin, AEEmployeeMixin, AETaskMixin):
     """角色执行 Flow：继承 4 个能力 mixin，由 self.role 决定当前层级行为。
 
-    - expert/workgroup/employee：有下层可拆解 → requestDecompose（AEExpertMixin）
+    - expert/workgroup/employee：有下层可拆解 → requestDecompose（AERoleDecompose）
     - task：无下层 → requestQuestionType（AETaskMixin）
     """
 
@@ -53,24 +54,45 @@ class AERoleExcutor(AERole, AEExpertMixin, AEWorkGroupMixin, AEEmployeeMixin, AE
         self.role: AEFlowRole = AEFlowRole.employee
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input，串行 requestRoleInformation → requestOptimizeInput 后执行。"""
+        """启动：交基类置 input；基类未启动（非 default 状态）则错误完成，避免父 flow 等待卡死。"""
         if not super().startFlow(flowInput):
-            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成避免卡死",
+                           type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "flow 启动失败"},
+                AEFlowCompletEvent.error,
+            )
             return
         self.requestRoleInformation()
 
     def receiveRolePrompt(self, data: dict) -> bool:
-        """接收 rolePrompt 后，请求生成问题优化提示（requestOptimizeInput）。"""
+        """接收 rolePrompt：基类存储后 rolePrompt 仍为空则错误完成；否则请求生成问题优化提示。"""
         result = super().receiveRolePrompt(data)
+        if not result or not self.rolePrompt:
+            logger.warning("[%s][%s][d=%s] rolePrompt 为空，以错误完成本 flow 避免卡死",
+                           type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色提示生成失败"},
+                AEFlowCompletEvent.error,
+            )
+            return True
         self.requestOptimizeInput()
         return result
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收优化后的问题：交基类存储 optimizePromptResult 并打印摘要，再请求拆解（requestDecompose）。"""
+        """接收优化后的问题：confirm 则暂停；基类存储后 optimizePromptResult 仍为空则错误完成；否则请求拆解。"""
         confirm = data.get(AE_CONFIRM) if isinstance(data, dict) else None
         confirm = (confirm or "").strip() if isinstance(confirm, str) else ""
         if confirm:
             return True
-        super().receiveOptimizeInput(data)  # 基类存储 optimizePromptResult + 打印摘要
+        result = super().receiveOptimizeInput(data)  # 基类存储 optimizePromptResult + 打印摘要
+        if not result or not self.optimizePromptResult:
+            logger.warning("[%s][%s][d=%s] optimizePromptResult 为空，以错误完成本 flow 避免卡死",
+                           type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "问题优化失败"},
+                AEFlowCompletEvent.error,
+            )
+            return True
         self.requestDecompose()
-        return True
+        return result
