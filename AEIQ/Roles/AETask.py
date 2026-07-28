@@ -201,28 +201,24 @@ class AETaskMixin:
         # 执行方式对应的脚本生成指令
         approach = plan.get("approach", "").strip().lower()
         approach_hint = {
-            "local": "本任务为本地操作，直接使用文件读取、数据分析等脚本完成。",
-            "api": "本任务通过调用公开 API 获取数据，注意处理认证、错误重试与响应解析。",
-            "crawler": "本任务使用爬虫方式获取数据（requests + BeautifulSoup/lxml），注意多数网站需要登录，"
-                       "需处理 Cookie/Session/UA 伪装；使用国内可访问的地址。",
-            "hybrid": "本任务组合多种方式，按执行计划分步生成脚本。",
+            "local": "本任务为本地操作：读取文件、数据分析等。",
+            "api": "本任务调用公开 API 获取数据，注意认证与错误重试。",
+            "crawler": "本任务用爬虫抓取网页数据，注意多数网站需要登录，使用国内可访问的地址。",
+            "hybrid": "本任务组合多种方式，按计划分步生成脚本。",
         }.get(approach, "")
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "请根据以上分析与计划生成多个可独立执行的脚本任务，严格输出 JSON 数组，每项结构如下：\n"
-                "  - title：作用（字符串）\n"
-                "  - script：纯代码（字符串，不要包裹解释器调用命令）\n"
+                "请根据以上分析与计划生成多个可独立执行的脚本任务，严格输出 JSON 数组，每项含：\n"
+                "  - title：作用\n"
+                "  - script：纯代码，不要包裹解释器调用命令\n"
                 "  - type：python / shell / ruby 之一\n\n"
                 "要求：\n"
-                "- 脚本可无人值守自动执行，禁止 input()/gets/read 等交互输入，参数硬编码或用环境变量\n"
-                "- 脚本在只读沙箱中执行，禁止任何文件写入（创建/修改/删除/重命名文件或目录、"
-                "open(... 'w'/'a')、shell 的 > / >> 重定向等）；需保存中间结果一律改用 stdout 输出，"
-                "写文件会被沙箱拒绝导致脚本失败\n"
-                "- 双引号须转义为 \\\"\n"
+                "- 可无人值守执行，禁止交互输入（input/gets/read），参数硬编码或用环境变量\n"
+                "- 只读沙箱执行，禁止写文件（创建/修改/删除、open 写模式、> / >> 重定向等），中间结果用 stdout 输出\n"
+                "- 字符串内双引号须转义为 \\\"\n"
                 + (f"- {approach_hint}\n" if approach_hint else "")
-                + "- 需联网获取数据时优先使用爬虫方式（如 requests + BeautifulSoup / lxml），"
-                  "因多数网站需要登录，直接调用 API 可能失败；使用国内可访问的服务器地址，避免境外 API"
+                + "- 联网获取数据优先用爬虫，使用国内可访问的地址，避免境外 API"
             ),
         })
         flow_out = self.flowOutput(AERoleExcutorFunction.receiveScripts)

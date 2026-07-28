@@ -38,6 +38,7 @@ class AEFlowRole(Enum):
     employee = "employee"    # 员工
     task = "task"            # 原子任务（最底层执行单元，不再拆解）
     reviewer = "reviewer"    # 评审者
+    llm = "llm"              # LLM 直接作答（不拆解、不执行脚本，直接请求 LLM）
 
 
 # 角色层级有序表（从上到下）：expert > workgroup > employee > task
@@ -122,6 +123,15 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
             "执行一个原子性任务。"
             "调用模型或工具完成该任务的检索 / 分析 / 生成 / 转换等环节，"
             "产出可被上游直接整合的结构化结果；不再向下拆解。"
+        ),
+    ),
+    AEFlowRole.llm: AERoleParamInfo(
+        role=AEFlowRole.llm,
+        title="LLM 作答",
+        responsibility=(
+            "直接接收问题并调用 LLM 作答。"
+            "不做拆解、不执行脚本，仅以 LLM 自身知识给出结论；"
+            "适用于无需外部数据或工具的简单问题。"
         ),
     ),
 }

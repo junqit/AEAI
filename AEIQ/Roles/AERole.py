@@ -40,12 +40,14 @@ class AERole(AEFlow):
         from Roles.Employee.AEEmployee import AEEmployee
         from Roles.AETask import AETask
         from Roles.Reviewer.AEReviewer import AEReviewer
+        from Roles.LLM.AELLMRole import AELLMRole
         mapping = {
             AEFlowRole.expert.value: AEAssistant,
             AEFlowRole.workgroup.value: AEWorkGroup,
             AEFlowRole.employee.value: AEEmployee,
             AEFlowRole.task.value: AETask,
             AEFlowRole.reviewer.value: AEReviewer,
+            AEFlowRole.llm.value: AELLMRole,
         }
         flow_cls = mapping.get(role_type)
         if flow_cls is None:
