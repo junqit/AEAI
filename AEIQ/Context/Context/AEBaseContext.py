@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
     from .AELLMPayload import AELLMPayload
+    from WorkFlows.AEFlowInfo import AEFlowInfo
 
 
 class AEBaseContext:
@@ -105,9 +106,13 @@ class AEBaseContext:
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 
-    def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
-        """AEFlowDelegate: flow 完成通知。event=default 时组装 AENetRsp 经 delegate 发送给客户端。"""
-        flow_ident = result.get(AE_IDENT) if isinstance(result, dict) else None
+    def receive_flow_complete(self, result: "AEFlowInfo", event: "AEFlowCompletEvent") -> None:
+        """AEFlowDelegate: flow 完成通知。event=default 时组装 AENetRsp 经 delegate 发送给客户端。
+
+        result 为完成 flow 实例，其 outResult 为结果数据 dict（含 ident / AE_ANSWER）。
+        """
+        out = result.outResult if isinstance(result.outResult, dict) else {}
+        flow_ident = out.get(AE_IDENT)
         if event != AEFlowCompletEvent.default:
             return
         # complete：找到所属 chat，回填 req 组装 response 发送
@@ -128,7 +133,7 @@ class AEBaseContext:
                 space=self.space,
             ),
             req=chat.req,
-            rsp={AE_ANSWER: result.get(AE_ANSWER)} if isinstance(result, dict) else None,
+            rsp={AE_ANSWER: out.get(AE_ANSWER)},
         )
         self.send_response(rsp)
 

@@ -16,6 +16,7 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Tools.Scrips import AEScript
@@ -266,7 +267,7 @@ class AETaskMixin:
             logger.info("[%s][%s][d=%s] 启动首个 AEScript: title=%r", type(self).__name__, self.title, self.deepth, first_script.title)
         else:
             logger.warning("[%s][%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的脚本任务（脚本生成失败或为空）"})
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的脚本任务（脚本生成失败或为空）"}, AEFlowCompletEvent.error)
         return True
 
     # ==================== 辅助 ====================

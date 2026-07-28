@@ -17,7 +17,7 @@ from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 
 from .AEFlowOutput import AE_LLM_OUT, AEFlowOutput
-from .AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
+from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_TITLE, AE_ANSWER, AEFlowStatus
 from .AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
@@ -49,12 +49,12 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
-    def receive_flow_complete(self, result: dict, event: 'AEFlowCompletEvent') -> None:
+    def receive_flow_complete(self, result: AEFlowInfo, event: 'AEFlowCompletEvent') -> None:
         """
-        Flow 完成通知：result 为完成 flow 的元信息（map），event 为完成事件。
+        Flow 完成通知：result 为完成 flow 实例（AEFlowInfo），event 为完成事件。
 
         Args:
-            result: 完成 flow 的元信息 map（含 ident）
+            result: 完成 flow 实例；其 outResult 为结果数据 dict（含 ident）
             event: 完成事件（AEFlowCompletEvent.default / startFlow）
         """
         ...
@@ -78,6 +78,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     _flows / delegate / nextFlow / flowOutput / role_brief / send_llm_payload 等均由
     AEFlow 及其基类提供）。
     """
+
+    # ==================== 协议方法实现（AEFlowDelegate）====================
 
     def receive_add_flow(self, next_flow) -> None:
         """添加下一个待执行的子 flow：将其作为子 flow 加入（addFlow），成为 nextFlow 候选。
@@ -114,30 +116,32 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         }
         self.delegate.receive_flow_llm_request(payload)
 
-    def receive_flow_complete(self, result: dict, event: "AEFlowCompletEvent") -> None:
+    def receive_flow_complete(self, result: AEFlowInfo, event: "AEFlowCompletEvent") -> None:
         """
         Flow 完成通知：按 event 区分处理。
 
         - default：按 result.ident 路由结果数据（ident 命中自身 → receive_flow_result；
           命中子 flow → 转发给该子 flow 的 receive_flow_result）。
         - startFlow：从 subFlows 按 result.ident 取出子 flow 并 startFlow（input 取 result 的 AE_ANSWER）。
-        - error：完成但出错，仅记录，不路由、不启动。
+        - error：完成但出错，仍按 ident 路由结果推进 flow（与 default 同路径，额外告警），
+          避免父 flow 因收不到回包而 all(complete) 永不成立、整条卡死。
 
         Args:
-            result: 完成 flow 的结果数据（含 ident）
+            result: 完成 flow 实例（AEFlowInfo）；其 outResult 为结果数据 dict（含 ident）
             event: 完成事件（AEFlowCompletEvent.default / startFlow / error）
         """
-        ident = result.get(AE_IDENT) if isinstance(result, dict) else None
-        reply_len = len(result.get(AE_ANSWER, "")) if isinstance(result, dict) else 0
+        out = result.outResult if isinstance(result.outResult, dict) else {}
+        ident = out.get(AE_IDENT)
+        reply_len = len(out.get(AE_ANSWER, ""))
         logger.info(
-            "[recv][%s][%s][d=%s] receive_flow_complete event=%s reply_len=%d",
+            "[%s][%s][d=%s] receive_flow_complete event=%s reply_len=%d",
             type(self).__name__, self.title, self.deepth, event, reply_len,
         )
-        # startFlow：从 subFlows 按 ident 取出子 flow 并启动（input 取 result 的 AE_ANSWER）
+        # startFlow：从 subFlows 按 ident 取出子 flow 并启动（input 取 out 的 AE_ANSWER）
         if event == AEFlowCompletEvent.startFlow:
             sub = self._flows.get(ident) if ident is not None else None
             if sub is not None:
-                answer = result.get(AE_ANSWER) if isinstance(result, dict) else None
+                answer = out.get(AE_ANSWER)
                 sub.startFlow(AEFlowInput(content=answer or ""))
                 return
             logger.warning(
@@ -145,26 +149,27 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 type(self).__name__, self.title, self.deepth,
             )
             return
-        # error：完成但出错，仅记录，不路由、不启动
+        # error：完成但出错——仍按 ident 路由结果推进 flow（落入下方 default 路由），仅额外告警
         if event == AEFlowCompletEvent.error:
             logger.warning(
-                "[%s][%s][d=%s] error 事件，忽略结果",
+                "[%s][%s][d=%s] error 事件，按结果路由推进 flow",
                 type(self).__name__, self.title, self.deepth,
             )
-            return
-        # default：按 ident 路由结果数据——命中自身 → 交 receive_flow_result
+        # default / error：按 ident 路由结果数据——命中自身 → 交 receive_flow_result
         if ident == self.ident:
-            self.receive_flow_result(result)
+            self.receive_flow_result(out)
             return
         # ident 命中子 flow：转发结果数据给该子 flow
         sub = self._flows.get(ident) if ident is not None else None
         if sub is not None:
-            sub.receive_flow_result(result.get(AE_LLM_OUT))
+            sub.receive_flow_result(out.get(AE_LLM_OUT))
             return
         logger.warning(
             "[%s][%s][d=%s] 既非自身也未命中子 flow，忽略: %r",
             type(self).__name__, self.title, self.deepth, result,
         )
+
+    # ==================== 完成结果路由与聚合 ====================
 
     def receive_flow_result(self, out_schema: "Optional[dict]") -> None:
         """
@@ -194,6 +199,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         next_flow = self.nextFlow()
         if next_flow is not None:
             next_flow.startFlow(AEFlowInput(content=answer or ""))
+
+    # ==================== 子任务补充 ====================
 
     def _request_supplement(self) -> None:
         """所有子 flow 完成后，询问 LLM 是否需要补充一个新任务以更完整地达成目标。
@@ -281,6 +288,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             type(self).__name__, self.title, self.deepth, supplement_role.value, task, self._supplement_count, self.MAX_SUPPLEMENT,
         )
         return True
+
+    # ==================== 结果汇总 ====================
 
     def _summarize_to_llm(self) -> None:
         """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论。

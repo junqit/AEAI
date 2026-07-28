@@ -19,7 +19,14 @@ logger = logging.getLogger(__name__)
 
 # macOS sandbox-exec 全只读 profile：默认允许一切，仅拒绝所有文件写入类操作
 # （file-write* 覆盖 file-write / file-write-data / file-write-unlink / file-write-rename 等）
-_READ_ONLY_SANDBOX_PROFILE = "(version 1)\n(allow default)\n(deny file-write*)\n"
+# 例外：/dev/null 是丢弃池而非真实文件，脚本常见的 2>/dev/null、>/dev/null 静默输出需放开，
+# 否则沙箱会以 Operation not permitted 拒绝并导致脚本失败。
+_READ_ONLY_SANDBOX_PROFILE = (
+    "(version 1)\n"
+    "(allow default)\n"
+    "(deny file-write*)\n"
+    '(allow file-write* (literal "/dev/null"))\n'
+)
 
 # 平台/沙箱不可用告警只打印一次，避免每次执行刷屏
 _sandbox_unavailable_warned = False

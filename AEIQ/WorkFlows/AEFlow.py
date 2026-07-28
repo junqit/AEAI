@@ -141,7 +141,8 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            self.delegate.receive_flow_complete(out_schema, event)
+            # 传完成 flow 实例（self）；其 outResult 已置为 out_schema，下游经 result.outResult 取负载
+            self.delegate.receive_flow_complete(self, event)
         return True
 
     def nextFlow(self) -> "Optional[AEFlowInterface]":

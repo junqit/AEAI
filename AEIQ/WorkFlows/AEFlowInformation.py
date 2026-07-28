@@ -13,6 +13,7 @@ AEFlowFunctional 在方法内懒导入以避免循环导入。
 import logging
 
 from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_TITLE, AE_ANSWER
+from .AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
 
@@ -81,7 +82,7 @@ class AEFlowInformation(AEFlowInfo):
         self.responsibility = data.get("responsibility", "") or ""
         if not self.title or not self.responsibility:
             logger.warning("[%s][%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色信息（title/responsibility）生成失败"})
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色信息（title/responsibility）生成失败"}, AEFlowCompletEvent.error)
             return True
         # title / responsibility 就绪后，请求生成 rolePrompt
         self.requestRolePrompt()

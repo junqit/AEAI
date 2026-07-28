@@ -9,6 +9,7 @@ import logging
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER, AE_CONFIRM
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole, get_role_param
@@ -177,5 +178,5 @@ class AEWorkGroup(AERole):
             logger.info("[%s][%s][d=%s] 启动首个 AEEmployee: title=%r", type(self).__name__, self.title, self.deepth, getattr(first_employee, AE_TITLE, ""))
         else:
             logger.warning("[%s][%s][d=%s] 无可执行的 AEEmployee，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的员工任务（任务生成失败或为空）"})
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的员工任务（任务生成失败或为空）"}, AEFlowCompletEvent.error)
         return True

@@ -1,7 +1,7 @@
-import json
 import logging
 
 import httpx
+from json_repair import repair_json
 
 from .AELLMPayload import AELLMPayload
 from WorkFlows.AEFlowInfo import AE_ANSWER
@@ -76,13 +76,18 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _parse_content_json(reply: str):
-    """解析 LLM 回包为填充内容（dict / list）；失败返回 None。"""
+    """解析 LLM 回包为填充内容（dict / list）；失败返回 None。
+
+    用 json_repair 容错解析：LLM 常产出字符串值内裸换行、非法转义（如正则 \\d）、
+    尾逗号等不合规 JSON，json_repair 可修复后直接返回解析对象，避免解析失败回填
+    空信封导致下游 flow 拿到空结果。
+    """
     if not reply:
         return None
     stripped = _strip_code_fence(reply)
     try:
-        return json.loads(stripped)
-    except (ValueError, TypeError) as e:
+        return repair_json(stripped, return_objects=True)
+    except Exception as e:
         logger.error("内容 JSON 解析失败: %s\nreply(前2000字符)=%s", e, reply[:2000])
         return None
 
