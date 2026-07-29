@@ -29,6 +29,8 @@ class AEScript(AEFlow):
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
     MAX_RETRIES = 3  # 脚本执行失败后的最大重试次数
+    # stdout 最大长度（超出截断），防止大输出（如读取大文件）经 outResult_summary 撑爆上层 summarize 的 LLM 请求体
+    MAX_STDOUT_LEN = 20000
 
     script: str = ""
     type: str = ""
@@ -66,9 +68,9 @@ class AEScript(AEFlow):
             logger.info("[%s][%s][d=%s] 脚本执行成功(type=%s)", type(self).__name__, self.title, self.deepth, self.type)
             self._complete(stdout)
         except Exception as e:
-            self._last_error = str(e)
-            logger.error("[%s][%s][d=%s] 脚本执行失败(type=%s, retry=%d/%d): %s",
-                         type(self).__name__, self.title, self.deepth, self.type, self._retry_count, self.MAX_RETRIES, e)
+            self._last_error = str(e)  # 完整错误（含 stdout/stderr）供 LLM 修正脚本使用
+            logger.error("[%s][%s][d=%s] 脚本执行失败(type=%s, retry=%d/%d)",
+                         type(self).__name__, self.title, self.deepth, self.type, self._retry_count, self.MAX_RETRIES)
             if self._retry_count < self.MAX_RETRIES:
                 self._retry_count += 1
                 self._request_script_fix(self._last_error)
@@ -77,7 +79,9 @@ class AEScript(AEFlow):
                 self._complete("")
 
     def _complete(self, stdout: str) -> None:
-        """以执行结果完成本 flow，回传父 flow。"""
+        """以执行结果完成本 flow，回传父 flow。stdout 过长则截断，防止撑爆上层 summarize 的 LLM 请求体。"""
+        if isinstance(stdout, str) and len(stdout) > self.MAX_STDOUT_LEN:
+            stdout = stdout[:self.MAX_STDOUT_LEN] + f"\n...（已截断，原始长度 {len(stdout)} 字符）"
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
         self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: stdout})
 

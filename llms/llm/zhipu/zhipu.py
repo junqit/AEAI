@@ -139,6 +139,13 @@ class AEZhipuModel:
                     return result
 
                 last_error = f"status={response.status_code}, error={response.text[:200]}"
+                # 4xx 客户端错误（除 429 限流外）不可重试——请求体过大(413)/参数错误(400)等，重试无意义
+                if 400 <= response.status_code < 500 and response.status_code != 429:
+                    logger.error(
+                        "❌ Zhipu API 不可重试的客户端错误 - status=%s, error=%s",
+                        response.status_code, response.text[:200],
+                    )
+                    return f"请求失败（不可重试）: {last_error}"
                 logger.warning(
                     "⚠️ Zhipu 调用失败将重试 - status=%s, attempt=%d/%d, %.1fs 后重试, error=%s",
                     response.status_code, attempt, MAX_RETRY, backoff, response.text[:200],

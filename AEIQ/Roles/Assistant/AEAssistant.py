@@ -120,11 +120,6 @@ class AEAssistant(AERole):
             )
             self.addFlow(wg)
             wg.startFlow(AEFlowInput(content=content))
-            # 打印工作组信息：ident、任务内容、回包目标 assistant.ident
-            logger.info(
-                "[%s][%s][d=%s] 工作组已创建并启动: 任务内容=%s",
-                type(self).__name__, self.title, self.deepth, content,
-            )
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:

@@ -110,6 +110,14 @@ class AEFlowInterfaceImpl:
         """
         sub_flow.set_delegate(self)
         sub_flow.deepth = self.deepth + 1
+
+        _pr = getattr(self, "role", None)
+        _sr = getattr(sub_flow, "role", None)
+        logger.info(
+            "[%s][d=%s][role=%s] addFlow [%s][d=%s][role=%s]",
+            self.title, self.deepth, _pr.value if _pr else None,
+            sub_flow.title, sub_flow.deepth, _sr.value if _sr else None,
+        )
         self._flows[sub_flow.ident] = sub_flow
 
     def receive_llm_response(self, data: dict) -> None:

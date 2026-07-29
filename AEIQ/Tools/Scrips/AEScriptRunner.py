@@ -94,6 +94,7 @@ class AEScriptRunner:
                 stdin=subprocess.DEVNULL,
             )
         if result.returncode != 0:
+            logger.info("[%s] 脚本执行结果: 失败 returncode=%d", self.interpreter, result.returncode)
             raise RuntimeError(
                 f"{self.interpreter} 执行失败(returncode={result.returncode})\n"
                 f"  stdout: {result.stdout.strip()}\n"
@@ -101,7 +102,7 @@ class AEScriptRunner:
             )
         # 确保 stdout 为字符串
         stdout = result.stdout if isinstance(result.stdout, str) else str(result.stdout or "")
-        print(f"[{self.interpreter}] 脚本执行结果:\n{stdout}")
+        logger.info("[%s] 脚本执行结果: 成功", self.interpreter)
         return stdout
 
     def run_script(self, script: AEScript, timeout: Optional[float] = None) -> str:

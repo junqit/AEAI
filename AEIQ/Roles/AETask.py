@@ -133,8 +133,6 @@ class AETaskMixin:
                 script_flow = AEScript(flowOutput=flowOutput)
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
                 self.addFlow(script_flow)
-                logger.info("[%s][%s][d=%s] 添加 AEScript: title=%r type=%r",
-                            type(self).__name__, self.title, self.deepth, script_flow.title, script_flow.type)
             except (ValueError, TypeError) as e:
                 logger.warning("[%s][%s][d=%s] 跳过非法脚本 spec=%r: %s", type(self).__name__, self.title, self.deepth, spec, e)
         first_script = self.nextFlow()

@@ -111,7 +111,6 @@ class AERoleDecompose:
                              type(self).__name__, self.title, self.deepth, spec)
                 continue
             content = str(content or "")
-            has_next = bool(roles_below(role_enum))
             sub = AERoleExcutor(
                 flowOutput=AEFlowOutput({AE_IDENT: self.ident, "reply": llm_generate("任务结论")}),
             )
@@ -119,8 +118,6 @@ class AERoleDecompose:
             self.addFlow(sub)
             sub.startFlow(AEFlowInput(content=content))
             created += 1
-            logger.info("[%s][%s][d=%s] 创建 subFlow(role=%s, 可继续拆解=%s): 子任务=%s",
-                        type(self).__name__, self.title, self.deepth, role_enum.value, has_next, content)
         # 全部子任务被跳过，无 subFlow 创建 → 回退直接执行
         if created == 0:
             logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，回退直接执行", type(self).__name__, self.title, self.deepth)

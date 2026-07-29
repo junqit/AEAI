@@ -90,10 +90,6 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             next_flow: 待添加的子 flow
         """
         self.addFlow(next_flow)
-        logger.info(
-            "[%s][%s][d=%s] receive_add_flow 添加子 flow",
-            type(self).__name__, self.title, self.deepth,
-        )
 
     def receive_flow_llm_request(self, payload: "AELLMPayload") -> None:
         """

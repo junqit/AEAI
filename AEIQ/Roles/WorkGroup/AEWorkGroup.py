@@ -160,11 +160,6 @@ class AEWorkGroup(AERole):
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("员工结论")})
                 employee = AEEmployee(flowOutput=flowOutput)
                 self.addFlow(employee)
-                task = spec.get("task", "") or spec.get(AE_TITLE, "")
-                logger.info(
-                    "[%s][%s][d=%s] 添加 AEEmployee 子 flow: title=%r task=%r",
-                    type(self).__name__, self.title, self.deepth, spec.get(AE_TITLE, ""), task,
-                )
             except Exception as e:
                 logger.warning("[%s][%s][d=%s] 跳过非法 employee spec=%r: %s", type(self).__name__, self.title, self.deepth, spec, e)
         # 启动首个 employee 执行（其余由 receive_flow_result 在前一个完成后逐个推进）
