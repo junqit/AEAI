@@ -70,7 +70,6 @@ class AEGeminiProvider(AEBaseProvider):
                 logger.warning("⚠️ Gemini 模型未返回有效响应")
                 return "Gemini 模型未返回有效响应"
 
-            logger.info(f"✅ Gemini 回复生成成功 - response_length={len(response)}")
             return response
 
         except Exception as e:

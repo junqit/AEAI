@@ -6,7 +6,6 @@ key 与接口访问参照 claude_provider：复用同一内部网关与同一 au
 通过 Anthropic 兼容的 /v1/messages 接口访问，仅模型名替换为智谱 GLM 系列。
 """
 import requests
-import json
 import time
 import logging
 from typing import Optional, List, Dict, Any
@@ -123,11 +122,7 @@ class AEZhipuModel:
         if system_text:
             payload["system"] = system_text
 
-        # 结构性打印 payload 数据
-        logger.info(
-            "📤 Zhipu 发送 payload:\n%s",
-            json.dumps(payload, ensure_ascii=False, indent=2),
-        )
+        # 请求/响应内容由 AEBaseProvider.generate 统一打印，模型层不再输出
 
         # 最多重试 10 次（429 限流 / 5xx / 网络异常等），全部失败则返回失败
         MAX_RETRY = 10
@@ -141,7 +136,6 @@ class AEZhipuModel:
                 if response.status_code == 200:
                     result = response.json()
                     logger.info(f"✅ Zhipu API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200, attempt={attempt}")
-                    logger.debug(f"📄 响应内容: {str(result)[:500]}...")
                     return result
 
                 last_error = f"status={response.status_code}, error={response.text[:200]}"

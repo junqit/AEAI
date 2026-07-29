@@ -36,6 +36,15 @@ class AEChat(AEFlow):
         """覆写：Chat 不向 LLM 声明身份与能力，返回空字符串。"""
         return ""
 
+    def _summarize_user_instruction(self) -> str:
+        """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。"""
+        return (
+            "请结合以上信息，以自然、人性化的口吻直接回答用户的问题，像在与人对话一样："
+            "语言流畅亲切、通俗易懂，避免机械罗列或生硬的总结腔；"
+            "务必保留所有关键事实与重要细节，不得遗漏或弱化要点，仅对冗余重复的内容去重；"
+            "不要提及内部的拆解、角色、任务等执行过程，直接给出对用户有用的最终回答。"
+        )
+
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动 chat flow：交基类置 input 并切到 processing，随后启动首个子 flow。
 

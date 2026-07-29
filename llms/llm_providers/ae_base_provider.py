@@ -1,6 +1,7 @@
 """
 AE Base Provider - LLM 提供商基类
 """
+import json
 import logging
 from abc import ABC, abstractmethod
 from AEQuestion import AEQuestion
@@ -19,13 +20,13 @@ class AEBaseProvider(ABC):
         self.is_loaded = False
 
     def generate(self, question: AEQuestion, level: AEAiLevel) -> str:
-        messages = question.messages or []
-        roles = [m.get("role", "?") for m in messages if isinstance(m, dict)]
-        logger.info("[%s] 发送 level=%s msg_count=%d roles=%s",
-                    self.name, getattr(level, "name", level), len(messages), roles)
+        # 打印完整的请求 messages（JSON）与回复内容，统一在此处输出；各 provider 内不再打印
+        logger.info("[%s] 发送 level=%s messages=%s",
+                    self.name, getattr(level, "name", level),
+                    json.dumps(question.messages, ensure_ascii=False, indent=2))
         result = self._generate(question, level)
-        result_len = len(result) if isinstance(result, str) else len(str(result))
-        logger.info("[%s] 接收 result_len=%d", self.name, result_len)
+        logger.info("[%s] 接收 result=%s",
+                    self.name, result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2))
         return result
 
     @abstractmethod

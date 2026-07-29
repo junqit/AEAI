@@ -133,11 +133,8 @@ class AEGeminiModel:
                 max_tokens=max_tokens
             )
 
-            logger.info(f"📄 响应内容: {response}")
+            # 响应内容由 AEBaseProvider.generate 统一打印，模型层不再输出
             parsed = self.parse_output(text=response.strip())
-            logger.info(f"🧠 思考过程: {parsed['think'][:200]}..." if len(parsed['think']) > 200 else f"🧠 思考过程: {parsed['think']}")
-            logger.info(f"📄 响应解析内容: {parsed['answer']}")
-
             return parsed["answer"]
 
         except Exception as e:

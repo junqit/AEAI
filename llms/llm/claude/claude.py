@@ -128,7 +128,6 @@ class AEClaudeModel:
             if response.status_code == 200:
                 result = response.json()
                 logger.info(f"✅ Claude API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200")
-                logger.debug(f"📄 响应内容: {str(result)[:500]}...")
                 return result
             else:
                 error_msg = f"请求失败: {response.status_code}"

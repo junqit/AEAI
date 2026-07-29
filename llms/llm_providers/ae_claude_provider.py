@@ -67,7 +67,6 @@ class AEClaudeProvider(AEBaseProvider):
 
             # 5. 解析响应
             parsed_result = self._parse_response(result)
-            logger.info(f"✅ Claude 回复生成成功 - response_length={len(parsed_result) if parsed_result else 0}")
             return parsed_result
 
         except Exception as e:

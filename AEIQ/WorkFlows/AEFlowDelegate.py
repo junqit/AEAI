@@ -324,12 +324,16 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 logger.warning("[%s][%s][d=%s] _summarize 子 flow outResult is None, 跳过, status=%s", type(self).__name__, self.title, self.deepth, f.status)
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                "请对以上各子任务的结果进行总结，形成最终结论；"
-                "总结时必须保留所有重点信息与关键细节，不得遗漏或弱化要点，也不能为精简而丢掉重要信息；"
-                "仅对冗余、重复的内容去重。"
-            ),
+            AE_CONTENT: self._summarize_user_instruction(),
         })
 
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
+
+    def _summarize_user_instruction(self) -> str:
+        """汇总 user 指令（子类可覆写以定制口吻，如 AEChat 面向用户的人性化回答）。"""
+        return (
+            "请对以上各子任务的结果进行总结，形成最终结论；"
+            "总结时必须保留所有重点信息与关键细节，不得遗漏或弱化要点，也不能为精简而丢掉重要信息；"
+            "仅对冗余、重复的内容去重。"
+        )
