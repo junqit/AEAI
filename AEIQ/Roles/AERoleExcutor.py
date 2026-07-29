@@ -36,8 +36,6 @@ class AERoleExcutorFunction(AEFunctional):
     """角色执行 Flow 专属回包功能性方法名。"""
     receiveDecompose = "receiveDecompose"
     receiveQuestionType = "receiveQuestionType"
-    receiveTaskAnalysis = "receiveTaskAnalysis"
-    receiveTaskPlan = "receiveTaskPlan"
     receiveScripts = "receiveScripts"
 
 
@@ -51,7 +49,7 @@ class AERoleExcutor(AERole, AERoleDecompose, AEWorkGroupMixin, AEEmployeeMixin, 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         super().__init__(flowOutput=flowOutput, ident=ident)
         self._questionType: str = ""
-        self.role: AEFlowRole = AEFlowRole.employee
+        self.role = AEFlowRole.employee
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input；基类未启动（非 default 状态）则错误完成，避免父 flow 等待卡死。"""

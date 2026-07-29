@@ -11,6 +11,7 @@ from typing import Optional
 from WorkFlows.AEFlow import AEFlow, AEFlowCompletEvent
 from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import (
@@ -30,6 +31,12 @@ class AERole(AEFlow):
     """角色 Flow 基类。"""
 
     roleParamInfo: Optional[AERoleParamInfo] = None
+
+    def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
+        super().__init__(flowOutput=flowOutput, ident=ident, flowInput=flowInput)
+        # 角色层级：None 表示未归属分解层级（如 AERefiner 入口，_request_role_select 据此选全部角色）；
+        # AERoleExcutor 由派发方（refiner / decompose / supplement）显式设置具体层级。
+        self.role: Optional[AEFlowRole] = None
 
     @classmethod
     def createRoleFlow(cls, role_type: str, ident: str):
@@ -83,7 +90,7 @@ class AERole(AEFlow):
         - 已配置 role：仅从其二级角色（roles_below(self.role)）中选，不得选 llm。
         选择须确保能切实解决用户的问题或目标，不得给出无法解决或拒绝的答案。
         """
-        cur_role = getattr(self, "role", None)
+        cur_role = self.role
         if cur_role is None:
             candidates = list(ROLE_PARAMS.keys())
             allow_llm = True
@@ -136,7 +143,7 @@ class AERole(AEFlow):
 
     def receiveRoleSelect(self, data: dict) -> bool:
         """接收 LLM 选定的角色：llm 或非法或越界 → 直接作答；合法人员角色 → 按该角色派发 AERoleExcutor。"""
-        cur_role = getattr(self, "role", None)
+        cur_role = self.role
         allow_llm = cur_role is None
         allowed_roles = list(ROLE_PARAMS.keys()) if allow_llm else roles_below(cur_role)
         role_str = data.get("role") if isinstance(data, dict) else None

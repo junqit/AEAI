@@ -19,9 +19,13 @@ class AEBaseProvider(ABC):
         self.is_loaded = False
 
     def generate(self, question: AEQuestion, level: AEAiLevel) -> str:
-        logger.info(f"[{self.name}] 发送 - messages={question.messages}")
+        messages = question.messages or []
+        roles = [m.get("role", "?") for m in messages if isinstance(m, dict)]
+        logger.info("[%s] 发送 level=%s msg_count=%d roles=%s",
+                    self.name, getattr(level, "name", level), len(messages), roles)
         result = self._generate(question, level)
-        logger.info(f"[{self.name}] 接收 - result={result[:200] if isinstance(result, str) else str(result)[:200]}")
+        result_len = len(result) if isinstance(result, str) else len(str(result))
+        logger.info("[%s] 接收 result_len=%d", self.name, result_len)
         return result
 
     @abstractmethod
