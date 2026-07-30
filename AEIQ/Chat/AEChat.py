@@ -2,6 +2,42 @@
 AEChat - 聊天 Flow，继承 AEFlow。
 
 接收 AENetQues 网络消息并处理（构建 LLM 请求、驱动子 flow 等）。
+
+【整体流程设计目标】
+当前实现仅含 AERefiner（问题精炼）→ AERoleExcutor（角色拆解/执行）两个子 flow，
+属于过渡方案，无法从根本上保证问题被完整解决。完整流程应按以下 7 个阶段串联，
+每阶段有明确的输入、方法与产物，逐阶段收敛，最终产出可验证的结论并沉淀知识：
+
+  1. 获取并确认上下文
+     方法：收集信息、提出澄清问题、检索知识
+     输入：用户问题、历史上下文、文档
+     产物：完整的问题描述
+  2. 理解并定义问题
+     方法：提炼目标、识别约束、定义成功标准
+     输入：上下文
+     产物：Problem Statement
+  3. 分析原因 / 拆解任务
+     方法：Root Cause Analysis、Task Planning
+     输入：Problem Statement
+     产物：子任务列表、假设
+  4. 制定解决方案
+     方法：生成多个方案并评估 Trade-off
+     输入：子任务
+     产物：Execution Plan
+  5. 执行
+     方法：调用 Tool、API、Code、Search、Database
+     输入：Execution Plan
+     产物：执行结果
+  6. 验证结果
+     方法：自检、测试、事实校验、是否满足目标
+     输入：执行结果
+     产物：Pass / Fail
+  7. 总结沉淀
+     方法：总结经验、更新 Memory、生成文档
+     输入：全流程
+     产物：Knowledge、Memory
+
+阶段 6 验证失败应回流至 3/4 重新拆解或调整方案，形成闭环，而非直接产出。
 """
 import logging
 from typing import Optional
@@ -17,7 +53,12 @@ logger = logging.getLogger(__name__)
 
 
 class AEChat(AEFlow):
-    """聊天 Flow：由 context 构建 input 后交 startFlow 启动"""
+    """聊天 Flow：由 context 构建 input 后交 startFlow 启动。
+
+    TODO：当前仅 AERefiner → AERoleExcutor 两个子 flow（过渡实现），后续应重构为
+    上述 7 阶段流水线（上下文确认 → 问题定义 → 拆解 → 方案 → 执行 → 验证 → 沉淀），
+    以根本性保证问题被完整解决并形成可验证闭环。
+    """
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
         super().__init__(flowOutput=flowOutput, ident=ident)

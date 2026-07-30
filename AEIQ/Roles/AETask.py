@@ -14,7 +14,6 @@ from WorkFlows.AEFlowOutput import AEFlowOutput
 from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
 from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
-from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Tools.Scrips import AEScript
 from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
 
@@ -74,15 +73,9 @@ class AETaskMixin:
     # ==================== Script Generator ====================
 
     def requestDirectAnswer(self) -> None:
-        """无需脚本时，直接请求 LLM 对优化后的问题给出结论。"""
-        messages = self._build_base_messages()
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: f"请直接回答{AE_USER_QUESTION_PREFIX}，给出准确、完整的结论。",
-        })
-        flow_out = self.flowOutput(AEFunctional.flow_receive_complete)
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        """无需脚本时，委派 AELLMRole 直接作答（AELLMRole 自带角色信息/问题优化后请求 LLM）。"""
+        # AERole 基类 _request_direct_answer：创建 AELLMRole 子 flow 经 delegate 添加并以 startFlow 事件启动
+        self._request_direct_answer()
 
     def requestScripts(self, question: str) -> None:
         """请求 LLM 生成对应的脚本任务。"""
