@@ -1,7 +1,7 @@
 """
 AERefiner - 问题精炼 Flow，继承 AERole。
 
-将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题，再经 AERole._request_role_select
+将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题，再经 AERole.requestRoleSelect
 让 LLM 选择解决角色：选人员角色（expert/workgroup/employee/task）则派发 AERoleExcutor（该角色）；
 选 llm 则直接作答。角色选择/派发逻辑由 AERole 基类提供，本类仅做问题精炼与触发。
 """
@@ -50,7 +50,7 @@ class AERefiner(AERole):
             bool: 当前数据处理是否完成（True=已处理）
         """
         super().receiveOptimizeInput(data)  # 基类提取 AE_ANSWER 存入 optimizePromptResult + 打印摘要
-        self._request_role_select()  # 由 AERole 基类提供：未配置 role → 全部角色可选
+        self.requestRoleSelect()  # 由 AERole 基类提供：未配置 role → 全部角色可选
         return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:

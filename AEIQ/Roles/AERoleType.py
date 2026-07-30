@@ -94,8 +94,8 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         title="领域专家",
         responsibility=(
             "统筹规划，对最终产出收口。"
-            "负责整体目标分解、维度划分与最终结论整合，确保产出完整、准确、可交付；"
-            "不介入单一维度的具体执行。"
+            "可做：整体目标分解、维度划分、最终结论整合，确保产出完整、准确、可交付。"
+            "不可做：不介入单一维度的具体执行，不越权直接承担员工/任务级工作。"
         ),
     ),
     AEFlowRole.workgroup: AERoleParamInfo(
@@ -103,8 +103,8 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         title="工作组",
         responsibility=(
             "完成单一维度目标，可由多名员工协作。"
-            "承接专家分配的某一维度目标，拆解为可独立执行的员工任务并整合本维度结论；"
-            "不跨维度规划，不对其他工作组的工作负责。"
+            "可做：承接专家分配的某一维度目标，拆解为可独立执行的员工任务并整合本维度结论。"
+            "不可做：不跨维度规划，不对其他工作组的工作负责，不越权做整体收口。"
         ),
     ),
     AEFlowRole.employee: AERoleParamInfo(
@@ -112,8 +112,8 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         title="员工",
         responsibility=(
             "完成单一流水线工作。"
-            "调用模型或工具执行流水线各环节（检索 / 分析 / 生成 / 转换等），"
-            "产出可被上游直接整合的结构化结果；不跨流水线、不跨维度决策。"
+            "可做：调用模型或工具执行本流水线各环节（检索 / 分析 / 生成 / 转换等），产出可被上游直接整合的结构化结果。"
+            "不可做：不跨流水线、不跨维度规划或决策，不修改其他流水线的产出，不越权分配任务或调度他人。"
         ),
     ),
     AEFlowRole.task: AERoleParamInfo(
@@ -121,7 +121,17 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         title="原子任务",
         responsibility=(
             "执行一个原子性任务。"
-            "产出可被上游直接整合的结构化结果；不再向下拆解。"
+            "可做：调用模型或工具完成检索 / 分析 / 生成 / 转换等环节，产出可被上游直接整合的结构化结果。"
+            "不可做：不再向下拆解，不规划或调度其他任务，不跨任务决策。"
+        ),
+    ),
+    AEFlowRole.llm: AERoleParamInfo(
+        role=AEFlowRole.llm,
+        title="LLM 作答",
+        responsibility=(
+            "直接作答。"
+            "可做：仅凭 LLM 自身知识回答简单问题，给出准确、完整的结论。"
+            "不可做：不拆解任务、不执行脚本、不获取网络/实时数据，遇到需外部数据的问题应交由人员角色。"
         ),
     ),
 }
