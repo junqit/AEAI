@@ -50,6 +50,16 @@ class AEScript(AEFlow):
             raise ValueError(f"AEScript.type 非法: {type!r}，应为 {self.VALID_TYPES} 之一")
         self.type = type_value
 
+    def outResult_summary(self) -> str:
+        """组装脚本作用与执行结果（stdout）为总结内容，供父 flow 汇总。
+
+        AEScript 非角色 flow（不经问题优化），故以 title（脚本用途）作为上下文。
+        """
+        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
+        if self.title:
+            return f"{self.title} 我的回答：{answer}"
+        return f"我的回答：{answer}"
+
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：执行脚本；失败则请求 LLM 修正后重试。"""
         if not super().startFlow(AEFlowInput(content="")):
@@ -110,7 +120,7 @@ class AEScript(AEFlow):
                 ),
             },
         ]
-        flow_out = self.flowOutput("receiveScriptFix")
+        flow_out = self.generateFlowOutput("receiveScriptFix")
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         logger.info("[%s][%s][d=%s] 请求 LLM 修正脚本(retry=%d/%d)", type(self).__name__, self.title, self.deepth, self._retry_count, self.MAX_RETRIES)

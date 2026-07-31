@@ -127,7 +127,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     ),
     AEFlowRole.llm: AERoleParamInfo(
         role=AEFlowRole.llm,
-        title="LLM 作答",
+        title="LLM AI 作答",
         responsibility=(
             "直接作答。"
             "可做：仅凭 LLM 自身知识回答简单问题，给出准确、完整的结论。"

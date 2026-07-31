@@ -1,32 +1,28 @@
 """
-AEFlow - Flow 基类，多继承 AEFlowOptimizeInput / AEFlowInformation，
-并实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
+AEFlow - Flow 基类，实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
 
 方法分区：
-  - AEFlowInterface 实现：set_delegate / startFlow / receive_llm_response /
-    flow_receive_llm / flow_receive_default|processing|complete / nextFlow / send_llm_payload
+  - AEFlowInterface 实现：set_delegate / flow_receive_default|processing|complete / nextFlow / send_llm_payload
+    （startFlow / addFlow / receive_llm_response / flow_receive_llm 由 AEFlowInterfaceImpl 提供）
   - AEFlowDelegate 实现（继承 AEFlowDelegateImpl 实例方法）：receive_flow_llm_request / receive_add_flow / receive_flow_complete
-  - 私有方法：outResult_summary
 
-问题优化（requestOptimizeInput 等）、角色信息（requestRoleInformation / receiveRoleInfomation）
-分别由父类 AEFlowOptimizeInput / AEFlowInformation 提供。
+本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）；角色相关信息（title/responsibility/
+roleGoal/rolePrompt 及 role_brief/outResult_summary/汇总拼消息）属 Roles.AERoleBase，不在本类。
+问题优化由 Roles.AERoleQuestionOptimize 提供；角色信息由 Roles.AERoleInformation 提供（AERoleBase 继承）。
 """
 import json
 import logging
+import uuid
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_TITLE, AE_ANSWER, AE_funcationkey
+from .AEFlowInfo import AEFlowInfo, AEFlowStatus, AE_IDENT, AE_ANSWER
 from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
 from .AEFlowInterface import AEFlowInterfaceImpl
-from .AEFlowOptimizeInput import AEFlowOptimizeInput
-from .AEFlowInformation import AEFlowInformation
 from .AEFlowInput import AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERoleType import AE_USER_QUESTION_PREFIX
 from Tools.Excutor import AERuntimeExcutor
-from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
 
 logger = logging.getLogger(__name__)
@@ -36,70 +32,43 @@ if TYPE_CHECKING:
     from .AEFlowInterface import AEFlowInterface
 
 
-class AEFlowFunctional(AEFunctional):
-    """Flow 通用回包功能性方法名（继承 AEFunctional 的 flow_receive_* 常量，可按需扩展）。"""
-    receiveRoleInfomation = "receiveRoleInfomation"        # 接收 LLM 生成的自身工作名称、能力范围，传入 map
-    receiveRolePrompt = "receiveRolePrompt"                # 接收 LLM 基于 title+能力 生成的 rolePrompt，传入 map
-    receiveOptimizeInput = "receiveOptimizeInput"          # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
-    receiveSupplement = "receiveSupplement"                # 接收 LLM 判定是否需补充新 employee 任务及任务列表，传入 map
-
-
-class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowInterfaceImpl):
-    """Flow 基类，多继承 AEFlowOptimizeInput（问题优化）/ AEFlowInformation（角色信息）/ AEFlowDelegateImpl（delegate 方法）/ AEFlowInterfaceImpl（接口方法 startFlow/addFlow/receive_llm_response）"""
+class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
+    """Flow 基类，多继承 AEFlowInfo（元信息：ident/input/output/status + generateFlowOutput）/ AEFlowDelegateImpl（delegate 方法）/ AEFlowInterfaceImpl（接口方法 startFlow/addFlow/receive_llm_response）"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
-        # ----- AEFlowInfo 属性 -----
-        # ident 可传入（默认空，为空则内部生成）；外部只读；
-        # output（本 flow 输出结构）创建时必传；input 可在初始化时传入（默认 None），未传时由 startFlow 设置
         super().__init__(flowOutput=flowOutput, ident=ident, flowInput=flowInput)
-        # delegate：AEFlowDelegate，Flow 内部信息向外流转的出口
         self.delegate: "Optional[AEFlowDelegate]" = None
-        # ----- 内部状态 -----
-        self._flows: "Dict[str, AEFlowInterface]" = {}  # 有序 map，key 为 flow.ident
-        # 方法执行器：管理 functional -> 脚本映射，区分 default / temporary；
-        # 默认不注册任何方法，由业务子类自行 add_default / add_temporary 添加
+        self._flows: "Dict[str, AEFlowInterface]" = {}
         self.excutor = AERuntimeExcutor()
-        # 补充子任务计数（_request_supplement 循环最多补充 MAX_SUPPLEMENT 个）
-        self._supplement_count = 0
-
-    # 补充子任务数量上限
-    MAX_SUPPLEMENT = 0
 
     # ==================== AEFlowInterface 实现 ====================
-    # startFlow / addFlow / receive_llm_response 由 AEFlowInterfaceImpl 提供（实例方法继承）。
 
     def set_delegate(self, delegate: "AEFlowDelegate") -> None:
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
-    def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
-        """
-        收到经 receive_llm_response 路由到自身、已解析出的 out_schema 数据。
-
-        按 out_schema 内的 AE_funcationkey 字段从 self.excutor 取对应脚本并执行；
-        该 key 由发送方 flowOutput 注册时随机生成，对应一个 flow_receive_* 方法。
-
-        out_schema 内无 AE_funcationkey 字段、或其值未在 excutor 内注册时，打印错误信息并忽略。
-        子类可经 excutor.add_default / add_temporary 自定义处理，或覆写各 flow_receive_* 方法；
-        temporary 注册执行后由 excutor 自动清除。
+    def registerFunctional(self, method: str) -> str:
+        """注册临时功能性方法。funcident 为随机字符串键，method 为方法名字符串。
 
         Args:
-            out_schema: 从输入 map 中解析出的 out_schema 数据（含 AE_funcationkey / llm_out 字段）
+            method: 方法名字符串（如 AEFunctional.flow_receive_*），executor 内部经 method_call 拼 script
+
+        Returns:
+            随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段
         """
-        if not isinstance(out_schema, dict):
-            logger.error("[%s][%s][d=%s] out_schema 非 map，忽略: %r", type(self).__name__, self.title, self.deepth, out_schema)
-            return
-        command = out_schema.get(AE_funcationkey)
-        # 真正交给业务处理的内容在 llm_out 下（out_schema 形如 {ident, title, funcationkey, llm_out: <内容>}）
-        inner = out_schema.get(AE_LLM_OUT)
-        if not self.excutor.contains(command):
-            logger.error(
-                "[%s][%s][d=%s] out_schema 内 funcationkey=%r 无效或缺失，忽略: %r",
-                type(self).__name__, self.title, self.deepth, command, out_schema,
-            )
-            return
-        # inner 直接传入；target 在注册时已绑定为 self，temporary 执行后由 excutor 自动清除
-        self.excutor.exec(command, inner)
+        funcident = uuid.uuid4().hex
+        self.excutor.add_temporary(funcident, method, self)
+        return funcident
+
+    def complete_with_error(self, message: str) -> None:
+        """以错误事件完成本 flow 并通知 delegate，避免错误 return 导致 flow 卡死（父 flow 的 all(complete) 永不成立）。
+
+        - out_schema 的 AE_IDENT 取父 flow（delegate）的 ident，使父 flow 收到完成回包后路由到自身 receive_flow_result。
+        """
+        self.flow_receive_complete(
+            {AE_IDENT: self.delegate.ident, AE_ANSWER: message},
+            AEFlowCompletEvent.error,
+        )
 
     def flow_receive_default(self, out_schema: "Optional[dict]") -> bool:
         """
@@ -137,11 +106,14 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
             bool: 当前数据处理是否完成（True=已处理）
         """
         if self.status == AEFlowStatus.complete:
+            logger.error(
+                "[%s][%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s outResult=%r",
+                type(self).__name__, self.ident, self.deepth, event, out_schema,
+            )
             return True
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            # 传完成 flow 实例（self）；其 outResult 已置为 out_schema，下游经 result.outResult 取负载
             self.delegate.receive_flow_complete(self, event)
         return True
 
@@ -161,7 +133,7 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
         """
         通过 delegate 发送 AELLMPayload（无返回值）。
 
-        校验 delegate 后，用 ident / title 包装 payload.out_schema 向上转发
+        校验 delegate 后，用 ident 包装 payload.out_schema 向上转发
         （回程按 ident 路由回本 flow）。
 
         Args:
@@ -172,32 +144,42 @@ class AEFlow(AEFlowOptimizeInput, AEFlowInformation, AEFlowDelegateImpl, AEFlowI
         """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # 外层信封：ident / title 用于回程路由，llm_out 包装内层内容
         payload.out_schema = {
             AE_IDENT: self.ident,
-            AE_TITLE: self.title,
             AE_LLM_OUT: payload.out_schema,
         }
         self.delegate.receive_flow_llm_request(payload)
 
-    # ==================== AEFlowDelegate 实现 ====================
-    # receive_flow_llm_request / receive_add_flow / receive_flow_complete /
-    # receive_flow_result / _summarize_to_llm 均由 AEFlowDelegateImpl 提供（实例方法继承）。
+    # ==================== 描述信息 hook（子类覆写提供更丰富描述；deepth 由调用方拼装）====================
 
-    # ==================== 私有方法 ====================
+    def flow_description(self) -> str:
+        """flow 描述信息（hook，非私有，可被子类覆写）：返回不含 deepth 的描述串，供日志等场景使用。
 
-    def outResult_summary(self) -> str:
-        """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
-
-        - 有 optimizePromptResult（角色 flow 经 receiveOptimizeInput 设置）：
-          「{AE_USER_QUESTION_PREFIX}{optimizePromptResult} 我的回答：{answer}」
-        - 无 optimizePromptResult（如 AEScript，不经问题优化）：回退到 title 作为上下文，
-          「{title} 我的回答：{answer}」，避免只剩裸「我的回答：{answer}」丢失上下文。
+        默认返回「类名[ident]」；子类（如 Roles.AERoleBase）覆写以追加角色等信息。
+        deepth 不在本方法内体现，由调用方（如 addFlow 日志）单独拼装。
         """
-        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
-        question = self.optimizePromptResult or ""
-        if question:
-            return f"{AE_USER_QUESTION_PREFIX}{question} 我的回答：{answer}"
-        if self.title:
-            return f"{self.title} 我的回答：{answer}"
-        return f"我的回答：{answer}"
+        return f"{type(self).__name__}[{self.ident}]"
+
+    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_user_instruction）====================
+
+    def summarize_extend_messages(self) -> list:
+        """汇总扩展 message（hook，非私有，可被子类覆写）：返回需追加到汇总 messages 头部的额外消息列表。
+
+        默认返回空列表——flow 内不体现 role 的任何信息；角色上下文等扩展消息由子类
+        （如 Roles.AERoleBase）覆写本方法提供。由 AEFlowDelegateImpl.summarize_to_llm 在拼装
+        汇总 messages 时调用（messages.extend(self.summarize_extend_messages())）。
+        """
+        return []
+
+    def summarize_user_instruction(self) -> str:
+        """汇总 user 指令（hook，非私有，可被子类覆写）：子类可覆写以定制口吻（如 Chat.AEChat 面向用户的人性化回答）。
+
+        由 AEFlowDelegateImpl.summarize_to_llm 在所有子 flow 完成后调用。
+        """
+        return (
+            "请对以上各子任务的结果进行总结，形成最终结论；"
+            "总结时必须保留所有重点信息与关键细节，不得遗漏或弱化要点，也不能为精简而丢掉重要信息；"
+            "仅对冗余、重复的内容去重。"
+        )
+
+    # ==================== AEFlowDelegate 实现 ====================

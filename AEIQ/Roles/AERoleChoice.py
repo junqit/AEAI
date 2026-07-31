@@ -1,14 +1,17 @@
 """
 AERoleChoice - 角色选择能力 mixin。
 
-提供 requestRoleSelect / receiveRoleSelect / _dispatch_role_executor / _request_direct_answer，
-由 AERole 继承获得"按问题选择角色并派发"的能力：选人员角色则派发 AERoleExcutor，选 llm 则派发 AELLMRole。
+提供 requestRoleSelect / receiveRoleSelect（据问题与各角色能力返回一个或多个任务，按 role 派发对应角色 flow；
+空则 requestDirectAnswer），
+由 AERoleExcutor 继承获得。入口（AERefiner, role=None）选全部角色，深层（role 已配置）选 roles_below。
+task 由 AETaskRole 经 _after_role_goal → requestScripts 直接处理，不经 requestRoleSelect。
 """
 import logging
 
 from WorkFlows.AEFlow import AEFlowCompletEvent
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowInput import AEFlowInput
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import (
@@ -20,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class AERoleFunction(AEFunctional):
-    """AERole 角色选择回包功能性方法名（继承 AEFunctional 基类）。"""
+    """AERoleBase 角色选择回包功能性方法名（继承 AEFunctional 基类）。"""
     receiveRoleSelect = "receiveRoleSelect"  # 接收 LLM 选定的角色，传入 map
 
 
@@ -28,9 +31,9 @@ class AERoleChoice:
     """角色选择能力 mixin：按问题选择角色并派发（AERoleExcutor 或 AELLMRole）。"""
 
     def requestRoleSelect(self) -> None:
-        """请求 LLM 选择解决当前问题/目标所需的角色，子类可直接调用。
+        """请求 LLM 据问题与各角色能力返回一个或多个执行任务（每项含 role），或空数组（llm 直接作答）。
 
-        - 当前未配置 role（self.role 为 None）：从全部角色（expert/workgroup/employee/task + llm 直答）中选；
+        - 当前未配置 role（self.role 为 None，入口 refiner）：从全部角色（expert/workgroup/employee/task + llm 直答）中选；
         - 已配置 role：仅从其二级角色（roles_below(self.role)）中选，不得选 llm。
         选择须确保能切实解决用户的问题或目标，不得给出无法解决或拒绝的答案。
         """
@@ -39,21 +42,27 @@ class AERoleChoice:
             candidates = list(ROLE_PARAMS.keys())  # 全部角色（含 llm 直答）
         else:
             candidates = roles_below(cur_role)  # 仅二级角色（不含 llm）
+            if not candidates:
+                # 无可选下层角色，以错误完成闭环
+                self.flow_receive_complete(
+                    {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可选下层角色"},
+                    AEFlowCompletEvent.error,
+                )
+                return
         messages = []
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        question = self.optimizePromptResult or (self.input.content if self.input is not None else "")
+        question = self.roleGoal or (self.input.content if self.input is not None else "")
         if len(question) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{question}"})
-        # 角色选择规则（system）：必须解决问题 + 网络请求类必选角色 + 复杂度分级
+        # 角色选择规则（system）：必须解决问题 + 网络请求类必选角色
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
                 "角色选择规则：\n"
                 "- 所选角色必须能够切实解决用户的问题或目标，不得给出无法解决或拒绝的答案；\n"
-                "- 若问题需要获取网络数据、实时数据、资讯等需通过网络请求的内容，必须选择角色（不得选 llm）；\n"
-                "- 复杂/需规划或多步骤的问题选高层级角色；仅需脚本或单步执行选 task/employee；简单知识问题选 llm。"
+                "- 若问题需要获取网络数据、实时数据、资讯等需通过网络请求的内容，必须选择角色（不得选 llm）。"
             ),
         })
         # 候选角色花名册（system）：candidates 已含 llm（当 cur_role 为 None 时）
@@ -72,78 +81,95 @@ class AERoleChoice:
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"请根据{AE_USER_QUESTION_PREFIX}的内容与复杂度，选择最适合解决此问题的角色，"
-                f"将选择结果填入 role 字段（填角色 type，如 {' / '.join(allowed)}）。"
+                f"请根据{AE_USER_QUESTION_PREFIX}这一目标与任务，结合各角色能力，在 tasks 中列出子任务（可一个或多个），每项含 title（任务标题）、task（任务内容，可独立完成）、role（从上述可选角色中选最合适的一个，如 {' / '.join(allowed)}）。\n"
+                "拆解层数和子任务数量应尽可能少，避免过度拆解。\n"
+                "无需创建总结性或整合性的任务——每个子任务完成后，当前工作流会自动对全部子任务结果进行统计汇总。"
             ),
         })
-        flow_out = self.flowOutput(AERoleFunction.receiveRoleSelect)
-        flow_out.set_llm_out({"role": llm_generate(" / ".join(allowed) + " 之一")})
+        flow_out = self.generateFlowOutput(AERoleFunction.receiveRoleSelect)
+        flow_out.set_llm_out({
+            "tasks": [{
+                AE_TITLE: llm_generate("任务标题"),
+                "task": llm_generate("任务内容，可独立完成"),
+                "role": llm_generate(f"执行角色 type，从可选角色中选，如 {' / '.join(allowed)}"),
+            }]
+        })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
+    def _instantiate_role_flow(self, role_enum: AEFlowRole, ident: str):
+        """按 role 映射实例化对应角色 flow（懒导入避免循环）。
+
+        注册表覆盖 ROLE_PARAMS 全部角色：expert/workgroup/employee→对应子类，
+        task→AETaskRole，llm→AELLMRole；未注册的 role 抛 KeyError。
+        """
+        from Roles.Defs.AELLMRole import AELLMRole
+        from Roles.Defs.AEExpertRole import AEExpertRole
+        from Roles.Defs.AEWorkgroupRole import AEWorkgroupRole
+        from Roles.Defs.AEEmployeeRole import AEEmployeeRole
+        from Roles.Defs.AETaskRole import AETaskRole
+        role_class = {
+            AEFlowRole.expert: AEExpertRole,
+            AEFlowRole.workgroup: AEWorkgroupRole,
+            AEFlowRole.employee: AEEmployeeRole,
+            AEFlowRole.task: AETaskRole,
+            AEFlowRole.llm: AELLMRole,
+        }
+        cls = role_class[role_enum]
+        return cls(flowOutput=AEFlowOutput({AE_IDENT: ident, AE_ANSWER: llm_generate("任务结论")}))
+
     def receiveRoleSelect(self, data: dict) -> bool:
-        """接收 LLM 选定的角色：llm 或非法或越界 → 直接作答；合法人员角色 → 按该角色派发 AERoleExcutor。"""
+        """接收 LLM 返回的一个或多个任务：空 → llm 直接作答；非空 → 每项按 role 派发对应角色 flow（兄弟 flow，各自 task 内容）。"""
         cur_role = self.role
         allow_llm = cur_role is None
         allowed_roles = list(ROLE_PARAMS.keys()) if allow_llm else roles_below(cur_role)
-        role_str = data.get("role") if isinstance(data, dict) else None
-        if role_str is None and isinstance(data, str):
-            role_str = data
-        role_str = (role_str or "").strip().lower()
-        if role_str == "llm":
-            if not allow_llm:
-                logger.warning("[%s][%s][d=%s] llm 不在可选范围，回退直接作答", type(self).__name__, self.title, self.deepth)
+        allowed_set = set(allowed_roles)
+        tasks = data.get("tasks") if isinstance(data, dict) else None
+        if tasks is None and isinstance(data, str):
+            tasks = [tasks] if tasks.strip() else []
+        elif not isinstance(tasks, list):
+            tasks = []
+        if not tasks:
+            logger.info("[%s][%s][d=%s] 返回空任务，llm 直接作答", type(self).__name__, self.title, self.deepth)
+            self.requestDirectAnswer()
+            return True
+        if self.delegate is None:
+            logger.warning("[%s][%s][d=%s] delegate 未设置，无法派发角色 flow，回退直接作答", type(self).__name__, self.title, self.deepth)
+            self.requestDirectAnswer()
+            return True
+        delegate_ident = self.delegate.ident
+        created = 0
+        for spec in tasks:
+            if isinstance(spec, str):
+                content = spec
+                role_enum = None
+            elif isinstance(spec, dict):
+                content = spec.get("task") or spec.get(AE_TITLE) or ""
+                role_str = (spec.get("role") or "").strip()
+                if role_str.lower().startswith("type:"):
+                    role_str = role_str.split(":", 1)[1].strip()
+                try:
+                    role_enum = AEFlowRole(role_str)
+                except ValueError:
+                    role_enum = None
             else:
-                logger.info("[%s][%s][d=%s] 选择 llm 直接作答", type(self).__name__, self.title, self.deepth)
-            self._request_direct_answer()
+                continue
+            if role_enum is None or role_enum not in allowed_set:
+                logger.warning("[%s][%s][d=%s] 子任务 role 非法或不在可选范围，跳过: spec=%r",
+                               type(self).__name__, self.title, self.deepth, spec)
+                continue
+            content = str(content or "")
+            sub = self._instantiate_role_flow(role_enum, delegate_ident)
+            self.delegate.receive_add_flow(sub)
+            sub.startFlow(AEFlowInput(content=content))
+            created += 1
+        if created == 0:
+            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，回退 llm 直接作答", type(self).__name__, self.title, self.deepth)
+            self.requestDirectAnswer()
             return True
-        try:
-            role_enum = AEFlowRole(role_str)
-        except ValueError:
-            logger.warning("[%s][%s][d=%s] 非法 role=%r，回退直接作答", type(self).__name__, self.title, self.deepth, role_str)
-            self._request_direct_answer()
-            return True
-        if role_enum not in allowed_roles:
-            logger.warning("[%s][%s][d=%s] role %s 不在可选范围 %s，回退直接作答",
-                           type(self).__name__, self.title, self.deepth, role_enum.value, [r.value for r in allowed_roles])
-            self._request_direct_answer()
-            return True
-        logger.info("[%s][%s][d=%s] 选择角色 %s，派发 AERoleExcutor", type(self).__name__, self.title, self.deepth, role_enum.value)
-        self._dispatch_role_executor(role_enum)
+        logger.info("[%s][%s][d=%s] 派发 %d 个角色 flow（兄弟 flow）", type(self).__name__, self.title, self.deepth, created)
+        self.flow_receive_complete(
+            {AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal},
+            AEFlowCompletEvent.default,
+        )
         return True
-
-    def _dispatch_role_executor(self, role: AEFlowRole) -> None:
-        """创建 AERoleExcutor（指定 role），经 delegate 添加并以 startFlow 事件启动，
-        由 delegate 据事件 startFlow 该执行 flow（input 取优化后的问题/目标）。"""
-        from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环
-        if self.delegate is None:
-            logger.warning("[%s][%s][d=%s] delegate 未设置，无法添加 AERoleExcutor", type(self).__name__, self.title, self.deepth)
-            return
-        delegate_ident = self.delegate.ident
-        excutor = AERoleExcutor(
-            flowOutput=AEFlowOutput({AE_IDENT: delegate_ident, AE_ANSWER: llm_generate("任务结论")}),
-        )
-        excutor.role = role
-        self.delegate.receive_add_flow(excutor)
-        # 完成自身：以 startFlow 事件向上通知，delegate 据此 startFlow 该 AERoleExcutor
-        self.flow_receive_complete(
-            {AE_IDENT: excutor.ident, AE_ANSWER: self.optimizePromptResult},
-            AEFlowCompletEvent.startFlow,
-        )
-
-    def _request_direct_answer(self) -> None:
-        """无需角色人员：创建 AELLMRole 子 flow 经 delegate 添加并以 startFlow 事件启动，
-        由 delegate 据事件 startFlow 该 AELLMRole（input 取优化后的问题），LLM 回包即完成该子 flow。"""
-        from Roles.LLM.AELLMRole import AELLMRole  # 懒导入避免循环
-        if self.delegate is None:
-            logger.warning("[%s][%s][d=%s] delegate 未设置，无法添加 AELLMRole", type(self).__name__, self.title, self.deepth)
-            return
-        delegate_ident = self.delegate.ident
-        llm_role = AELLMRole(
-            flowOutput=AEFlowOutput({AE_IDENT: delegate_ident, AE_ANSWER: llm_generate("llm回答")}),
-        )
-        self.delegate.receive_add_flow(llm_role)
-        self.flow_receive_complete(
-            {AE_IDENT: llm_role.ident, AE_ANSWER: self.optimizePromptResult},
-            AEFlowCompletEvent.startFlow,
-        )

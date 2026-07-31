@@ -42,12 +42,13 @@ AEChat - 聊天 Flow，继承 AEFlow。
 import logging
 from typing import Optional
 
-from WorkFlows.AEFlow import AEFlow, AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlow import AEFlow
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from Network.Core.AENetReq import AENetReqInfo
-from Roles.QuestionRefiner.AERefiner import AERefiner
-from Roles.Assistant.AEAssistant import AEAssistant
+from Roles.Defs.AERefiner import AERefiner
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,24 @@ class AEChat(AEFlow):
         refiner = AERefiner(flowOutput=refiner_output)
         self.addFlow(refiner)
 
-    def role_brief(self) -> str:
-        """覆写：Chat 不向 LLM 声明身份与能力，返回空字符串。"""
-        return ""
+    def complete_with_error(self, message: str) -> None:
+        """覆写：chat 为根 flow，所有错误须回调 complete 闭环。
 
-    def _summarize_user_instruction(self) -> str:
-        """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。"""
+        基类 complete_with_error 用 error 事件 + delegate.ident，但 context（本 chat 的 delegate）
+        仅对 default 事件发送响应，且 _chat_map 按 chat.ident 查找——故根 chat 错误需以 default 事件
+        完成并回带错误消息（AE_IDENT 取 self.ident），使 context 收到 complete 回调并向客户端发送错误响应，
+        避免会话永挂。
+        """
+        self.flow_receive_complete(
+            {AE_IDENT: self.ident, AE_ANSWER: message},
+            AEFlowCompletEvent.default,
+        )
+
+    def summarize_user_instruction(self) -> str:
+        """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
+
+        summarize_to_llm 由 AEFlowDelegateImpl 实现，AEChat 仅覆写本指令定制口吻。
+        """
         return (
             "请结合以上信息，以自然、人性化的口吻直接回答用户的问题，像在与人对话一样："
             "语言流畅亲切、通俗易懂，避免机械罗列或生硬的总结腔；"
@@ -90,13 +103,16 @@ class AEChat(AEFlow):
         """启动 chat flow：交基类置 input 并切到 processing，随后启动首个子 flow。
 
         - 仅当基类 startFlow 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
+        - 任一启动失败均以错误回调 complete 闭环，避免会话永挂
         """
         if not super().startFlow(flowInput):
-            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.complete_with_error("会话启动失败：当前状态非初始态")
             return
         next_flow = self.nextFlow()
         if next_flow is None:
-            logger.warning("[%s][%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.complete_with_error("会话启动失败：无可执行的子任务")
             return
         next_flow.startFlow(flowInput)
 

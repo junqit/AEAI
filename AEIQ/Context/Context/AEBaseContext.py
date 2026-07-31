@@ -8,7 +8,7 @@ from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
-from WorkFlows.AEFlow import AE_IDENT, AE_ANSWER
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
 from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput, AE_LLM_OUT

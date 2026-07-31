@@ -3,15 +3,15 @@ AEFlowInterface - Flow 接口协议 + AEFlowInterfaceImpl 实例实现（mixin�
 
 - AEFlowInterface（Protocol）：声明所有 Flow 需遵循的接口（ident / status / delegate /
   startFlow / addFlow / receive_llm_response / receive_flow_result）。
-- AEFlowInterfaceImpl（mixin）：提供 startFlow / addFlow / receive_llm_response 的实例实现，
-  由 AEFlow 继承获得（receive_flow_result 系列在 AEFlowDelegateImpl）。
+- AEFlowInterfaceImpl（mixin）：提供 startFlow / addFlow / receive_llm_response /
+  flow_receive_llm 的实例实现，由 AEFlow 继承获得（receive_flow_result 系列在 AEFlowDelegateImpl）。
   与 AEFlowDelegate.py（协议+实现同文件）组织方式一致。
 """
 import logging
 from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AE_IDENT, AEFlowStatus
+from .AEFlowInfo import AE_IDENT, AEFlowStatus, AE_funcationkey
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
@@ -81,8 +81,8 @@ class AEFlowInterface(Protocol):
 class AEFlowInterfaceImpl:
     """AEFlowInterface 协议方法实现（mixin），由 AEFlow 继承获得这些方法。
 
-    方法内以 self 引用所属 flow（status / input / _flows / ident / flow_receive_llm 等
-    均由 AEFlow 及其基类提供）。
+    方法内以 self 引用所属 flow（status / input / _flows / ident 等由 AEFlow 及其基类提供；
+    flow_receive_llm 另依赖 self.excutor / self.complete_with_error，由 AEFlow 提供）。
     """
 
     def startFlow(self, flowInput) -> bool:
@@ -95,7 +95,7 @@ class AEFlowInterfaceImpl:
         if self.status != AEFlowStatus.default:
             logger.warning(
                 "[%s][%s][d=%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
-                type(self).__name__, self.title, self.deepth, self.status,
+                type(self).__name__, self.ident, self.deepth, self.status,
             )
             return False
         self.input = flowInput
@@ -111,46 +111,78 @@ class AEFlowInterfaceImpl:
         sub_flow.set_delegate(self)
         sub_flow.deepth = self.deepth + 1
 
-        _pr = getattr(self, "role", None)
-        _sr = getattr(sub_flow, "role", None)
         logger.info(
-            "[%s][d=%s][role=%s] addFlow [%s][d=%s][role=%s]",
-            self.title, self.deepth, _pr.value if _pr else None,
-            sub_flow.title, sub_flow.deepth, _sr.value if _sr else None,
+            "[%s][d=%s] addFlow [%s][d=%s]",
+            self.flow_description(), self.deepth,
+            sub_flow.flow_description(), sub_flow.deepth,
         )
         self._flows[sub_flow.ident] = sub_flow
 
     def receive_llm_response(self, data: dict) -> None:
         """
-        接收输入数据（map），按其中的 ident 路由：
+        接收输入数据（map），按其中的 ident 路由；所有分支均需闭环（不得静默 return 致 flow 卡死）：
 
-          - ident == self.ident → 本层处理，交 flow_receive_llm
+          - data 非 map → 以错误完成本 flow 闭环（complete_with_error）
+          - ident == self.ident → 本层处理，交 flow_receive_llm（其内部对异常数据亦闭环）
           - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receive_llm_response）
-          - ident 既非自身、也未命中子 flow → 打印错误日志
+          - ident 既非自身、也未命中子 flow → 以错误完成本 flow 闭环（complete_with_error）
 
         data 约定为 receive_flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
         """
         if not isinstance(data, dict):
-            logger.error("[%s][%s][d=%s] 收到的数据非 map，无法解析: %r", type(self).__name__, self.title, self.deepth, data)
+            logger.error(
+                "[%s][%s][d=%s] 收到的数据非 map，无法解析，以错误完成本 flow 闭环: %r",
+                type(self).__name__, self.ident, self.deepth, data,
+            )
+            self.complete_with_error("LLM 回包非 map，无法解析")
             return
 
-        # 取 ident
         ident = data.get(AE_IDENT)
 
-        # ident 命中自身：本层处理（传整个 data）
         if ident == self.ident:
             self.flow_receive_llm(data)
             return
 
-        # ident 命中子 flow：转发内层 out_schema 给该子 flow（使用时再获取）
         sub = self._flows.get(ident) if ident is not None else None
         if sub is not None:
             sub.receive_llm_response(data.get(AE_LLM_OUT))
             return
 
-        # ident 既非自身、也未命中子 flow：打印错误日志
         logger.error(
-            "[%s][%s][d=%s] 无法命中（既非自身也未匹配子 flow），忽略: %r",
-            type(self).__name__, self.title, self.deepth, data,
+            "[%s][%s][d=%s] 无法命中（既非自身也未匹配子 flow），以错误完成本 flow 闭环: %r",
+            type(self).__name__, self.ident, self.deepth, data,
         )
+        self.complete_with_error(f"LLM 回包 ident 无法路由: {ident!r}")
+
+    def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
+        """
+        收到经 receive_llm_response 路由到自身、已解析出的 out_schema 数据。
+
+        按 out_schema 内的 AE_funcationkey 字段从 self.excutor 取对应脚本并执行；
+        该 key 由发送方 generateFlowOutput 注册时随机生成，对应一个 flow_receive_* 方法。
+
+        out_schema 内无 AE_funcationkey 字段、或其值未在 excutor 内注册时，以错误完成本 flow 闭环。
+        子类可经 excutor.add_default / add_temporary 自定义处理，或覆写各 flow_receive_* 方法；
+        temporary 注册执行后由 excutor 自动清除。
+
+        Args:
+            out_schema: 从输入 map 中解析出的 out_schema 数据（含 AE_funcationkey / llm_out 字段）
+        """
+        if not isinstance(out_schema, dict):
+            logger.error(
+                "[%s][%s][d=%s] out_schema 非 map，以错误完成本 flow 避免卡死: %r",
+                type(self).__name__, self.ident, self.deepth, out_schema,
+            )
+            self.complete_with_error("LLM 回包非 map，无法处理")
+            return
+        command = out_schema.get(AE_funcationkey)
+        inner = out_schema.get(AE_LLM_OUT)
+        if not self.excutor.contains(command):
+            logger.error(
+                "[%s][%s][d=%s] out_schema 内 funcationkey=%r 无效或缺失，以错误完成本 flow 避免卡死: %r",
+                type(self).__name__, self.ident, self.deepth, command, out_schema,
+            )
+            self.complete_with_error("LLM 回包 funcationkey 无效，无法路由处理")
+            return
+        self.excutor.exec(command, inner)

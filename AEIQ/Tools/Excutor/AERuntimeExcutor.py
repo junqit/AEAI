@@ -24,7 +24,7 @@ AE_RESULT = "__ae_result__"  # 方法执行结果（脚本内赋值，exec 读�
 class AEFunctional:
     """功能性方法名基类（普通类，定义方法名常量），供子类继承扩展。
 
-    子类（AEFlowFunctional / AEAssistantFunction）可直接访问下列常量，
+    子类（AERoleFunction / AERoleExcutorFunction 等）可直接访问下列常量，
     也可追加各自的方法名常量。值为字符串方法名，由 executor 经 method_call 拼成脚本调用。
     """
     flow_receive_default = "flow_receive_default"        # 回包置 default
