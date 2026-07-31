@@ -111,7 +111,7 @@ class AEScriptRunner:
 
 
 class AEPythonRunner(AEScriptRunner):
-    """Python 脚本执行器：python3 -c <script>"""
+    """Python 脚本执行器：python -c <script>"""
 
     interpreter = "python"
     flag = "-c"

@@ -59,7 +59,6 @@ class AEDirectoryContext(AEBaseContext):
 
     PACKAGE_COMMANDS = {
         "python": ["pip", "list", "--format=freeze"],
-        "python3": ["pip3", "list", "--format=freeze"],
         "ruby": ["gem", "list", "--no-versions"],
         "node": ["npm", "list", "-g", "--depth=0", "--parseable"],
         "perl": ["cpan", "-l"],

@@ -40,16 +40,16 @@ class AEWorkSpaceContext(AEBaseContext):
         - 剥掉 chat.ident 层，把内层 llm_out 传给 AEChat.receive_llm_response 继续向下传递
         """
         if not isinstance(data, dict):
-            logger.error(f"[WorkSpace:{self.ident}] LLM 回复非 map: {data!r}")
+            logger.error(f"[WorkSpace] LLM 回复非 map: {data!r}")
             return
         chat_ident = data.get(AE_IDENT)
         chat = self._chat_map.get(chat_ident)
         if chat is None:
-            logger.error(f"[WorkSpace:{self.ident}] _chat_map 内未找到 chat_ident={chat_ident!r}")
+            logger.error(f"[WorkSpace] _chat_map 内未找到 chat_ident={chat_ident!r}")
             return
         # 剥掉 chat.ident 层，传给 AEChat 继续路由到子 flow
         out_schema = data.get(AE_LLM_OUT)
         if not isinstance(out_schema, dict):
-            logger.error(f"[WorkSpace:{self.ident}] chat 内层 out_schema 非 map: {out_schema!r}")
+            logger.error(f"[WorkSpace] chat 内层 out_schema 非 map: {out_schema!r}")
             return
         chat.receive_llm_response(out_schema)

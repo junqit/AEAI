@@ -60,16 +60,6 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         self.excutor.add_temporary(funcident, method, self)
         return funcident
 
-    def complete_with_error(self, message: str) -> None:
-        """以错误事件完成本 flow 并通知 delegate，避免错误 return 导致 flow 卡死（父 flow 的 all(complete) 永不成立）。
-
-        - out_schema 的 AE_IDENT 取父 flow（delegate）的 ident，使父 flow 收到完成回包后路由到自身 receive_flow_result。
-        """
-        self.flow_receive_complete(
-            {AE_IDENT: self.delegate.ident, AE_ANSWER: message},
-            AEFlowCompletEvent.error,
-        )
-
     def flow_receive_default(self, out_schema: "Optional[dict]") -> bool:
         """
         status=default：收到结果数据，置本 flow 状态为 default。子类可覆写做业务处理。
@@ -158,7 +148,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         默认返回「类名[ident]」；子类（如 Roles.AERoleBase）覆写以追加角色等信息。
         deepth 不在本方法内体现，由调用方（如 addFlow 日志）单独拼装。
         """
-        return f"{type(self).__name__}[{self.ident}]"
+        return f"{type(self).__name__}"
 
     # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_user_instruction）====================
 

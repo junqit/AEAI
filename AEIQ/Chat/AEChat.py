@@ -74,19 +74,6 @@ class AEChat(AEFlow):
         refiner = AERefiner(flowOutput=refiner_output)
         self.addFlow(refiner)
 
-    def complete_with_error(self, message: str) -> None:
-        """覆写：chat 为根 flow，所有错误须回调 complete 闭环。
-
-        基类 complete_with_error 用 error 事件 + delegate.ident，但 context（本 chat 的 delegate）
-        仅对 default 事件发送响应，且 _chat_map 按 chat.ident 查找——故根 chat 错误需以 default 事件
-        完成并回带错误消息（AE_IDENT 取 self.ident），使 context 收到 complete 回调并向客户端发送错误响应，
-        避免会话永挂。
-        """
-        self.flow_receive_complete(
-            {AE_IDENT: self.ident, AE_ANSWER: message},
-            AEFlowCompletEvent.default,
-        )
-
     def summarize_user_instruction(self) -> str:
         """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
 
@@ -107,12 +94,12 @@ class AEChat(AEFlow):
         """
         if not super().startFlow(flowInput):
             logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成闭环", type(self).__name__, self.title, self.deepth)
-            self.complete_with_error("会话启动失败：当前状态非初始态")
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
             return
         next_flow = self.nextFlow()
         if next_flow is None:
             logger.warning("[%s][%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动，以错误完成闭环", type(self).__name__, self.title, self.deepth)
-            self.complete_with_error("会话启动失败：无可执行的子任务")
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return
         next_flow.startFlow(flowInput)
 

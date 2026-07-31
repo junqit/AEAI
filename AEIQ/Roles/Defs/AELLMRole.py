@@ -3,7 +3,7 @@ AELLMRole - LLM 直接作答角色 Flow，继承 AERoleExcutor。
 
 与 AERoleExcutor 共用前置优化链路（角色信息 → rolePrompt → 问题优化），区别在于
 最后一步不拆解、不执行脚本，而是直接请求 LLM 作答，回包经 flow_receive_complete 完成。
-_role()=llm；_after_role_goal 覆写为直接作答（替代默认的 requestRoleSelect）。
+_role()=llm；requestRoleSelect 覆写为直接作答（替代默认的 requestRoleSelect）。
 """
 from Context.Context.AELLMPayload import AELLMPayload
 from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole
@@ -22,17 +22,8 @@ class AELLMRole(AERoleExcutor):
         """角色描述：返回本角色的职称与职责。"""
         return f"{self.title}：{self.responsibility}"
 
-    def _after_role_goal(self) -> None:
-        """llm：直接请求 LLM 作答（不拆解、不执行脚本）。"""
-        self._request_direct_answer()
-
-    def _request_direct_answer(self) -> None:
-        """请求 LLM 对优化后的问题作答，回包经 flow_receive_complete 完成本 flow。
-
-        - messages: system(role_brief) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(作答指令)
-        - out_schema: 本 flow 的输出结构（output 已在构造时设置，由 LLM 填充）
-        - 回包 funcationkey=flow_receive_complete，LLM 填充 AE_ANSWER 后即完成本 flow
-        """
+    def requestRoleSelect(self) -> None:
+        """llm：不选角色，直接请求 LLM 作答（不拆解、不执行脚本）。回包经 flow_receive_complete 完成本 flow。"""
         messages = []
         role_brief = self.role_brief()
         if len(role_brief) > 0:

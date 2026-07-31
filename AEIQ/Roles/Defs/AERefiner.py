@@ -10,8 +10,9 @@ import logging
 
 from WorkFlows.AEFlowInput import AEFlowInput
 from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_ANSWER
-from Roles.AERoleType import AE_USER_QUESTION_PREFIX
+from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from Roles.AERoleType import AE_USER_QUESTION_PREFIX, AEFlowRole, ROLE_PARAMS
 from Roles.Defs.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,27 @@ class AERefiner(AERoleExcutor):
         """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回 outResult 的回答。"""
         answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
+
+    def receiveRoleSelect(self, data: dict) -> bool:
+        """覆写：按 role 创建兄弟 flow 加入 delegate，自身完成（delegate 编排全部兄弟 flow）。"""
+        tasks = data.get("tasks") if isinstance(data, dict) else None
+        if tasks is None and isinstance(data, str):
+            tasks = [tasks] if tasks.strip() else []
+        elif not isinstance(tasks, list):
+            tasks = []
+        delegate_ident = self.delegate.ident
+        if not tasks:
+            logger.warning("[%s][%s][d=%s] 返回空任务，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "未返回可执行任务"}, AEFlowCompletEvent.error)
+            return True
+        created = self._create_role_flows(tasks, is_subflow=False)
+        if created == 0:
+            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "全部子任务 role 非法被跳过"}, AEFlowCompletEvent.error)
+            return True
+        logger.info("[%s][%s][d=%s] 创建 %d 个兄弟 flow，自身完成", type(self).__name__, self.title, self.deepth, created)
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal}, AEFlowCompletEvent.default)
+        return True
 
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，随后请求问题优化（精炼）。

@@ -2,9 +2,9 @@
 AERoleChoice - 角色选择能力 mixin。
 
 提供 requestRoleSelect / receiveRoleSelect（据问题与各角色能力返回一个或多个任务，按 role 派发对应角色 flow；
-空则 requestDirectAnswer），
+空则以错误完成闭环），
 由 AERoleExcutor 继承获得。入口（AERefiner, role=None）选全部角色，深层（role 已配置）选 roles_below。
-task 由 AETaskRole 经 _after_role_goal → requestScripts 直接处理，不经 requestRoleSelect。
+task 由 AETaskRole 经 requestRoleSelect → requestScripts 直接处理，不经 requestRoleSelect。
 """
 import logging
 
@@ -118,28 +118,24 @@ class AERoleChoice:
         cls = role_class[role_enum]
         return cls(flowOutput=AEFlowOutput({AE_IDENT: ident, AE_ANSWER: llm_generate("任务结论")}))
 
-    def receiveRoleSelect(self, data: dict) -> bool:
-        """接收 LLM 返回的一个或多个任务：空 → llm 直接作答；非空 → 每项按 role 派发对应角色 flow（兄弟 flow，各自 task 内容）。"""
-        cur_role = self.role
-        allow_llm = cur_role is None
-        allowed_roles = list(ROLE_PARAMS.keys()) if allow_llm else roles_below(cur_role)
+    def _create_role_flows(self, roles: list, is_subflow: bool = True) -> int:
+        """根据角色任务列表创建角色 flow 并启动。
+
+        Args:
+            roles: 角色任务列表，每项含 role / task / title。
+            is_subflow: True → 加入自己的 _flows（self.addFlow，AE_IDENT=self.ident）；
+                        False → 加入 delegate 作为兄弟 flow（delegate.receive_add_flow，AE_IDENT=delegate.ident）。
+
+        Returns:
+            创建并启动的 flow 数量。
+        """
+        if not is_subflow and self.delegate is None:
+            return 0
+        target_ident = self.ident if is_subflow else self.delegate.ident
+        allowed_roles = list(ROLE_PARAMS.keys()) if self.role is None else roles_below(self.role)
         allowed_set = set(allowed_roles)
-        tasks = data.get("tasks") if isinstance(data, dict) else None
-        if tasks is None and isinstance(data, str):
-            tasks = [tasks] if tasks.strip() else []
-        elif not isinstance(tasks, list):
-            tasks = []
-        if not tasks:
-            logger.info("[%s][%s][d=%s] 返回空任务，llm 直接作答", type(self).__name__, self.title, self.deepth)
-            self.requestDirectAnswer()
-            return True
-        if self.delegate is None:
-            logger.warning("[%s][%s][d=%s] delegate 未设置，无法派发角色 flow，回退直接作答", type(self).__name__, self.title, self.deepth)
-            self.requestDirectAnswer()
-            return True
-        delegate_ident = self.delegate.ident
         created = 0
-        for spec in tasks:
+        for spec in roles:
             if isinstance(spec, str):
                 content = spec
                 role_enum = None
@@ -151,6 +147,7 @@ class AERoleChoice:
                 try:
                     role_enum = AEFlowRole(role_str)
                 except ValueError:
+                    logger.warning("[%s][%s][d=%s] 子任务 role 无法解析: %r", type(self).__name__, self.title, self.deepth, role_str)
                     role_enum = None
             else:
                 continue
@@ -159,17 +156,43 @@ class AERoleChoice:
                                type(self).__name__, self.title, self.deepth, spec)
                 continue
             content = str(content or "")
-            sub = self._instantiate_role_flow(role_enum, delegate_ident)
-            self.delegate.receive_add_flow(sub)
+            sub = self._instantiate_role_flow(role_enum, target_ident)
+            if is_subflow:
+                self.addFlow(sub)
+            else:
+                self.delegate.receive_add_flow(sub)
             sub.startFlow(AEFlowInput(content=content))
             created += 1
-        if created == 0:
-            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，回退 llm 直接作答", type(self).__name__, self.title, self.deepth)
-            self.requestDirectAnswer()
+        return created
+
+    def receiveRoleSelect(self, data: dict) -> bool:
+        """接收 LLM 返回的一个或多个任务：空 → 错误完成；非空 → 每项按 role 创建子 flow，等待全部完成后汇总。"""
+        tasks = data.get("tasks") if isinstance(data, dict) else None
+        if tasks is None and isinstance(data, str):
+            tasks = [tasks] if tasks.strip() else []
+        elif not isinstance(tasks, list):
+            tasks = []
+        if not tasks:
+            logger.warning("[%s][%s][d=%s] 返回空任务，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "未返回可执行任务"},
+                AEFlowCompletEvent.error,
+            )
             return True
-        logger.info("[%s][%s][d=%s] 派发 %d 个角色 flow（兄弟 flow）", type(self).__name__, self.title, self.deepth, created)
-        self.flow_receive_complete(
-            {AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal},
-            AEFlowCompletEvent.default,
-        )
+        if self.delegate is None:
+            logger.warning("[%s][%s][d=%s] delegate 未设置，以错误完成", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.ident, AE_ANSWER: "delegate 未设置"},
+                AEFlowCompletEvent.error,
+            )
+            return True
+        created = self._create_role_flows(tasks, is_subflow=True)
+        if created == 0:
+            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.ident, AE_ANSWER: "全部子任务 role 非法被跳过"},
+                AEFlowCompletEvent.error,
+            )
+            return True
+        logger.info("[%s][%s][d=%s] 创建 %d 个子 flow，等待完成后汇总", type(self).__name__, self.title, self.deepth, created)
         return True

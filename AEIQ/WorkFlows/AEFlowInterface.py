@@ -11,7 +11,8 @@ import logging
 from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AE_IDENT, AEFlowStatus, AE_funcationkey
+from .AEFlowInfo import AE_IDENT, AE_ANSWER, AEFlowStatus, AE_funcationkey
+from .AEFlowDelegate import AEFlowCompletEvent
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
@@ -82,7 +83,7 @@ class AEFlowInterfaceImpl:
     """AEFlowInterface 协议方法实现（mixin），由 AEFlow 继承获得这些方法。
 
     方法内以 self 引用所属 flow（status / input / _flows / ident 等由 AEFlow 及其基类提供；
-    flow_receive_llm 另依赖 self.excutor / self.complete_with_error，由 AEFlow 提供）。
+    flow_receive_llm 另依赖 self.excutor，由 AEFlow 提供）。
     """
 
     def startFlow(self, flowInput) -> bool:
@@ -122,10 +123,10 @@ class AEFlowInterfaceImpl:
         """
         接收输入数据（map），按其中的 ident 路由；所有分支均需闭环（不得静默 return 致 flow 卡死）：
 
-          - data 非 map → 以错误完成本 flow 闭环（complete_with_error）
+          - data 非 map → 以错误完成本 flow 闭环（flow_receive_complete + error 事件）
           - ident == self.ident → 本层处理，交 flow_receive_llm（其内部对异常数据亦闭环）
           - ident 命中 _flows 内子 flow → 转发内层 out_schema 给该子 flow（receive_llm_response）
-          - ident 既非自身、也未命中子 flow → 以错误完成本 flow 闭环（complete_with_error）
+          - ident 既非自身、也未命中子 flow → 以错误完成本 flow 闭环（flow_receive_complete + error 事件）
 
         data 约定为 receive_flow_llm_request 向上转发时的封装形态：{"ident": <目标 ident>, "llm_out": <...>}，
         每层路由消费一层 ident，逐层下传内层 out_schema；最内层叶子无 ident，由该层 flow 自己处理。
@@ -135,7 +136,7 @@ class AEFlowInterfaceImpl:
                 "[%s][%s][d=%s] 收到的数据非 map，无法解析，以错误完成本 flow 闭环: %r",
                 type(self).__name__, self.ident, self.deepth, data,
             )
-            self.complete_with_error("LLM 回包非 map，无法解析")
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法解析"}, AEFlowCompletEvent.error)
             return
 
         ident = data.get(AE_IDENT)
@@ -153,7 +154,7 @@ class AEFlowInterfaceImpl:
             "[%s][%s][d=%s] 无法命中（既非自身也未匹配子 flow），以错误完成本 flow 闭环: %r",
             type(self).__name__, self.ident, self.deepth, data,
         )
-        self.complete_with_error(f"LLM 回包 ident 无法路由: {ident!r}")
+        self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: f"LLM 回包 ident 无法路由: {ident!r}"}, AEFlowCompletEvent.error)
 
     def flow_receive_llm(self, out_schema: "Optional[dict]") -> None:
         """
@@ -174,7 +175,7 @@ class AEFlowInterfaceImpl:
                 "[%s][%s][d=%s] out_schema 非 map，以错误完成本 flow 避免卡死: %r",
                 type(self).__name__, self.ident, self.deepth, out_schema,
             )
-            self.complete_with_error("LLM 回包非 map，无法处理")
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法处理"}, AEFlowCompletEvent.error)
             return
         command = out_schema.get(AE_funcationkey)
         inner = out_schema.get(AE_LLM_OUT)
@@ -183,6 +184,6 @@ class AEFlowInterfaceImpl:
                 "[%s][%s][d=%s] out_schema 内 funcationkey=%r 无效或缺失，以错误完成本 flow 避免卡死: %r",
                 type(self).__name__, self.ident, self.deepth, command, out_schema,
             )
-            self.complete_with_error("LLM 回包 funcationkey 无效，无法路由处理")
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包 funcationkey 无效，无法路由处理"}, AEFlowCompletEvent.error)
             return
         self.excutor.exec(command, inner)

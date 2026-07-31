@@ -130,8 +130,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         ident = out.get(AE_IDENT)
         reply_len = len(out.get(AE_ANSWER, ""))
         logger.info(
-            "[%s][%s][d=%s] receive_flow_complete event=%s reply_len=%d",
-            type(self).__name__, self.ident, self.deepth, event, reply_len,
+            "[%s][d=%s] receive_flow_complete event=%s reply_len=%d",
+            type(self).__name__, self.deepth, event, reply_len,
         )
         if event == AEFlowCompletEvent.startFlow:
             sub = self._flows.get(ident) if ident is not None else None
@@ -140,14 +140,14 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 sub.startFlow(AEFlowInput(content=answer or ""))
                 return
             logger.warning(
-                "[%s][%s][d=%s] startFlow 未命中子 flow",
-                type(self).__name__, self.ident, self.deepth,
+                "[%s][d=%s] startFlow 未命中子 flow",
+                type(self).__name__, self.deepth,
             )
             return
         if event == AEFlowCompletEvent.error:
             logger.warning(
-                "[%s][%s][d=%s] error 事件，按结果路由推进 flow",
-                type(self).__name__, self.ident, self.deepth,
+                "[%s][d=%s] error 事件，按结果路由推进 flow",
+                type(self).__name__, self.deepth,
             )
         if ident == self.ident:
             self.receive_flow_result(out)
@@ -157,8 +157,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             sub.receive_flow_result(out.get(AE_LLM_OUT))
             return
         logger.warning(
-            "[%s][%s][d=%s] 既非自身也未命中子 flow，忽略: %r",
-            type(self).__name__, self.ident, self.deepth, result,
+            "[%s][d=%s] 既非自身也未命中子 flow，忽略: %r",
+            type(self).__name__, self.deepth, result,
         )
 
     # ==================== 完成结果路由与聚合触发 ====================
@@ -201,8 +201,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         """
         from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT  # 懒导入避免循环
         logger.info(
-            "[%s][%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
-            type(self).__name__, self.ident, self.deepth, len(self._flows), len(self._flows),
+            "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
+            type(self).__name__, self.deepth, len(self._flows), len(self._flows),
         )
         flow_out = self.generateFlowOutput(AEFunctional.flow_receive_complete)
         messages = []
@@ -216,9 +216,9 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                         AE_CONTENT: summary,
                     })
                 except Exception as e:
-                    logger.error("[%s][%s][d=%s] summarize 子 flow outResult_summary 异常: %s", type(self).__name__, self.ident, self.deepth, e, exc_info=True)
+                    logger.error("[%s][d=%s] summarize 子 flow outResult_summary 异常: %s", type(self).__name__, self.deepth, e, exc_info=True)
             else:
-                logger.warning("[%s][%s][d=%s] summarize 子 flow outResult is None, 跳过, status=%s", type(self).__name__, self.ident, self.deepth, f.status)
+                logger.warning("[%s][d=%s] summarize 子 flow outResult is None, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: self.summarize_user_instruction(),

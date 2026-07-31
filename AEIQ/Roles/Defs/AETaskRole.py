@@ -49,8 +49,8 @@ class AETaskRole(AERoleExcutor):
     def _role(cls):
         return AEFlowRole.task
 
-    def _after_role_goal(self) -> None:
-        """task：直接分解为脚本完成任务目标（必须完成；脚本为空时 receiveScripts 以错误完成闭环）。"""
+    def requestRoleSelect(self) -> None:
+        """task：不选角色，直接分解为脚本完成任务目标（必须完成；脚本为空时 receiveScripts 以错误完成闭环）。"""
         self.requestScripts(self.roleGoal)
 
     # ==================== task 执行能力（Script Generator）====================
@@ -81,7 +81,12 @@ class AETaskRole(AERoleExcutor):
         if result == "script":
             self.requestScripts(self.roleGoal)
             return True
-        self.requestDirectAnswer()
+        # 非 script：task 须通过脚本完成，不直答，以错误完成闭环
+        logger.warning("[%s][%s][d=%s] task 判定为非脚本（%r），以错误完成", type(self).__name__, self.title, self.deepth, result)
+        self.flow_receive_complete(
+            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "task 须通过脚本完成"},
+            AEFlowCompletEvent.error,
+        )
         return True
 
     def requestScripts(self, question: str) -> None:
@@ -94,6 +99,8 @@ class AETaskRole(AERoleExcutor):
                 "  - title：作用\n"
                 "  - script：纯代码，不要包裹解释器调用命令\n"
                 "  - type：python / shell / ruby 之一\n\n"
+                "执行环境：python 用 python -c、shell 用 sh -c、ruby 用 ruby -e，\n"
+                "脚本内容原样传入解释器，stdout 作为结果返回，30 秒超时，macOS 下全只读沙箱。\n\n"
                 "要求：\n"
                 "- 必须完成目标，不可不完成：脚本须切实解决目标问题，不得拒绝、推诿或遗漏关键环节\n"
                 "- 可无人值守执行，禁止交互输入（input/gets/read），参数硬编码或用环境变量\n"
