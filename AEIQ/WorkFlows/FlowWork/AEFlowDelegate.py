@@ -131,7 +131,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         reply_len = len(out.get(AE_ANSWER, ""))
         logger.info(
             "[%s][d=%s] receive_flow_complete event=%s reply_len=%d",
-            type(self).__name__, self.deepth, event, reply_len,
+            self.title, self.deepth, event, reply_len,
         )
         if event == AEFlowCompletEvent.startFlow:
             sub = self._flows.get(ident) if ident is not None else None
@@ -141,13 +141,13 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 return
             logger.warning(
                 "[%s][d=%s] startFlow 未命中子 flow",
-                type(self).__name__, self.deepth,
+                self.title, self.deepth,
             )
             return
         if event == AEFlowCompletEvent.error:
             logger.warning(
                 "[%s][d=%s] error 事件，按结果路由推进 flow",
-                type(self).__name__, self.deepth,
+                self.title, self.deepth,
             )
         if ident == self.ident:
             self.receive_flow_result(out)
@@ -158,7 +158,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             return
         logger.warning(
             "[%s][d=%s] 既非自身也未命中子 flow，忽略: %r",
-            type(self).__name__, self.deepth, result,
+            self.title, self.deepth, result,
         )
 
     # ==================== 完成结果路由与聚合触发 ====================

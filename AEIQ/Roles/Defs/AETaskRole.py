@@ -82,7 +82,7 @@ class AETaskRole(AERoleExcutor):
             self.requestScripts(self.roleGoal)
             return True
         # 非 script：task 须通过脚本完成，不直答，以错误完成闭环
-        logger.warning("[%s][%s][d=%s] task 判定为非脚本（%r），以错误完成", type(self).__name__, self.title, self.deepth, result)
+        logger.warning("[%s][d=%s] task 判定为非脚本（%r），以错误完成", self.title, self.deepth, result)
         self.flow_receive_complete(
             {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "task 须通过脚本完成"},
             AEFlowCompletEvent.error,
@@ -130,7 +130,7 @@ class AETaskRole(AERoleExcutor):
         if isinstance(result, list):
             specs = result
         else:
-            logger.warning("[%s][%s][d=%s] AE_ANSWER 非数组，跳过脚本生成", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] AE_ANSWER 非数组，跳过脚本生成", self.title, self.deepth)
             specs = []
         for spec in specs:
             if not isinstance(spec, dict):
@@ -141,13 +141,13 @@ class AETaskRole(AERoleExcutor):
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
                 self.addFlow(script_flow)
             except (ValueError, TypeError) as e:
-                logger.warning("[%s][%s][d=%s] 跳过非法脚本 spec=%r: %s", type(self).__name__, self.title, self.deepth, spec, e)
+                logger.warning("[%s][d=%s] 跳过非法脚本 spec=%r: %s", self.title, self.deepth, spec, e)
         first_script = self.nextFlow()
         if first_script is not None:
             first_script.startFlow(AEFlowInput(content=""))
-            logger.info("[%s][%s][d=%s] 启动首个 AEScript: title=%r", type(self).__name__, self.title, self.deepth, first_script.title)
+            logger.info("[%s][d=%s] 启动首个 AEScript: title=%r", self.title, self.deepth, first_script.title)
         else:
-            logger.warning("[%s][%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的脚本任务（脚本生成失败或为空）"}, AEFlowCompletEvent.error)
         return True
 

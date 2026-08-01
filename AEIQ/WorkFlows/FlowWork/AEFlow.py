@@ -97,7 +97,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """
         if self.status == AEFlowStatus.complete:
             logger.error(
-                "[%s][%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s outResult=%r",
+                "[%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s outResult=%r",
                 type(self).__name__, self.ident, self.deepth, event, out_schema,
             )
             return True
@@ -140,15 +140,11 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         }
         self.delegate.receive_flow_llm_request(payload)
 
-    # ==================== 描述信息 hook（子类覆写提供更丰富描述；deepth 由调用方拼装）====================
+    # ==================== 描述信息 hook（子类覆写提供更丰富描述）====================
 
     def flow_description(self) -> str:
-        """flow 描述信息（hook，非私有，可被子类覆写）：返回不含 deepth 的描述串，供日志等场景使用。
-
-        默认返回「类名[ident]」；子类（如 Roles.AERoleBase）覆写以追加角色等信息。
-        deepth 不在本方法内体现，由调用方（如 addFlow 日志）单独拼装。
-        """
-        return f"{type(self).__name__}"
+        """flow 描述信息（hook）：返回 [d=deepth]，子类覆写可追加 role / title。"""
+        return f"[d={self.deepth}]"
 
     # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_user_instruction）====================
 

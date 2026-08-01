@@ -93,12 +93,12 @@ class AEChat(AEIQFlow):
         - 任一启动失败均以错误回调 complete 闭环，避免会话永挂
         """
         if not super().startFlow(flowInput):
-            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
             return
         next_flow = self.nextFlow()
         if next_flow is None:
-            logger.warning("[%s][%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return
         next_flow.startFlow(flowInput)

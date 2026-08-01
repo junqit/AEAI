@@ -56,11 +56,14 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
     # ==================== 角色上下文 hook（供 summarize_to_llm 调用）====================
 
     def flow_description(self) -> str:
-        """覆写描述信息：在基类「类名[ident]」基础上追加角色职称，供日志等场景使用。"""
-        desc = super().flow_description()
+        """覆写：返回 [role][title][deepth]，不存在的项不输出。"""
+        parts = []
+        if self.role is not None:
+            parts.append(f"[{self.role.value}]")
         if self.title:
-            desc += f" {self.title}"
-        return desc
+            parts.append(f"[{self.title}]")
+        parts.append(f"[d={self.deepth}]")
+        return "".join(parts)
 
     def summarize_extend_messages(self) -> list:
         """覆写汇总扩展消息：把角色身份与能力范围（role_brief）作为 system 消息追加到汇总 messages 头部。

@@ -46,22 +46,22 @@ class AERefiner(AERoleExcutor):
 
     def receiveRoleSelect(self, data: dict) -> bool:
         """覆写：按 role 创建兄弟 flow 加入 delegate，自身完成（delegate 编排全部兄弟 flow）。"""
-        tasks = data.get("tasks") if isinstance(data, dict) else None
-        if tasks is None and isinstance(data, str):
-            tasks = [tasks] if tasks.strip() else []
-        elif not isinstance(tasks, list):
-            tasks = []
+        workflows = data.get("workflows") if isinstance(data, dict) else None
+        if workflows is None and isinstance(data, str):
+            workflows = [workflows] if workflows.strip() else []
+        elif not isinstance(workflows, list):
+            workflows = []
         delegate_ident = self.delegate.ident
-        if not tasks:
-            logger.warning("[%s][%s][d=%s] 返回空任务，以错误完成闭环", type(self).__name__, self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "未返回可执行任务"}, AEFlowCompletEvent.error)
+        if not workflows:
+            logger.warning("[%s][d=%s] 返回空工作流，以错误完成闭环", self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "未返回可执行工作流"}, AEFlowCompletEvent.error)
             return True
-        created = self._create_role_flows(tasks, is_subflow=False)
+        created = self._create_role_flows(workflows, is_subflow=False)
         if created == 0:
-            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，以错误完成闭环", type(self).__name__, self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "全部子任务 role 非法被跳过"}, AEFlowCompletEvent.error)
+            logger.warning("[%s][d=%s] 全部工作流 role 非法被跳过，以错误完成闭环", self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
             return True
-        logger.info("[%s][%s][d=%s] 创建 %d 个兄弟 flow，自身完成", type(self).__name__, self.title, self.deepth, created)
+        logger.info("[%s][d=%s] 创建 %d 个兄弟 flow，自身完成", self.title, self.deepth, created)
         self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal}, AEFlowCompletEvent.default)
         return True
 
@@ -71,6 +71,6 @@ class AERefiner(AERoleExcutor):
         跳过 AERoleExcutor.startFlow（其会 requestRoleInformation），直接走 requestOptimizeInput。
         """
         if not super(AERoleExcutor, self).startFlow(flowInput):
-            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.title, self.deepth)
             return
         self.requestOptimizeInput()

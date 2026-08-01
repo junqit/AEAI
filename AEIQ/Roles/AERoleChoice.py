@@ -81,16 +81,24 @@ class AERoleChoice:
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"请根据{AE_USER_QUESTION_PREFIX}这一目标与任务，结合各角色能力，在 tasks 中列出子任务（可一个或多个），每项含 title（任务标题）、task（任务内容，可独立完成）、role（从上述可选角色中选最合适的一个，如 {' / '.join(allowed)}）。\n"
-                "拆解层数和子任务数量应尽可能少，避免过度拆解。\n"
-                "无需创建总结性或整合性的任务——每个子任务完成后，当前工作流会自动对全部子任务结果进行统计汇总。"
+                f"目标：{AE_USER_QUESTION_PREFIX}\n\n"
+                f"请基于上述目标和可选角色的能力，拆解为可独立执行的工作流，输出 JSON 数组填入 workflows 字段。\n"
+                f"每个工作流包含：\n"
+                f"  - title：简短标题\n"
+                f"  - goal：该工作流的具体目标，必须可独立完成\n"
+                f"  - role：执行角色，从可选角色中选（{', '.join(allowed)}）\n\n"
+                f"要求：\n"
+                f"1. 所列工作流合起来必须完整解决目标，不得遗漏\n"
+                f"2. 每个工作流必须能独立完成，不依赖其他工作流的结果\n"
+                f"3. 工作流数量尽可能少，避免过度拆解\n"
+                f"4. 不需要创建总结或汇总类工作流，系统会自动汇总全部结果"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleFunction.receiveRoleSelect)
         flow_out.set_llm_out({
-            "tasks": [{
-                AE_TITLE: llm_generate("任务标题"),
-                "task": llm_generate("任务内容，可独立完成"),
+            "workflows": [{
+                AE_TITLE: llm_generate("标题"),
+                "goal": llm_generate("工作流目标，可独立完成且必须能解决目标"),
                 "role": llm_generate(f"执行角色 type，从可选角色中选，如 {' / '.join(allowed)}"),
             }]
         })
@@ -119,10 +127,10 @@ class AERoleChoice:
         return cls(flowOutput=AEFlowOutput({AE_IDENT: ident, AE_ANSWER: llm_generate("任务结论")}))
 
     def _create_role_flows(self, roles: list, is_subflow: bool = True) -> int:
-        """根据角色任务列表创建角色 flow 并启动。
+        """根据工作流列表创建角色 flow 并启动。
 
         Args:
-            roles: 角色任务列表，每项含 role / task / title。
+            roles: 工作流列表，每项含 role / goal / title。
             is_subflow: True → 加入自己的 _flows（self.addFlow，AE_IDENT=self.ident）；
                         False → 加入 delegate 作为兄弟 flow（delegate.receive_add_flow，AE_IDENT=delegate.ident）。
 
@@ -140,20 +148,20 @@ class AERoleChoice:
                 content = spec
                 role_enum = None
             elif isinstance(spec, dict):
-                content = spec.get("task") or spec.get(AE_TITLE) or ""
+                content = spec.get("goal") or spec.get(AE_TITLE) or ""
                 role_str = (spec.get("role") or "").strip()
                 if role_str.lower().startswith("type:"):
                     role_str = role_str.split(":", 1)[1].strip()
                 try:
                     role_enum = AEFlowRole(role_str)
                 except ValueError:
-                    logger.warning("[%s][%s][d=%s] 子任务 role 无法解析: %r", type(self).__name__, self.title, self.deepth, role_str)
+                    logger.warning("[%s][d=%s] 子任务 role 无法解析: %r", self.title, self.deepth, role_str)
                     role_enum = None
             else:
                 continue
             if role_enum is None or role_enum not in allowed_set:
-                logger.warning("[%s][%s][d=%s] 子任务 role 非法或不在可选范围，跳过: spec=%r",
-                               type(self).__name__, self.title, self.deepth, spec)
+                logger.warning("[%s][d=%s] 子任务 role 非法或不在可选范围，跳过: spec=%r",
+                               self.title, self.deepth, spec)
                 continue
             content = str(content or "")
             sub = self._instantiate_role_flow(role_enum, target_ident)
@@ -166,33 +174,33 @@ class AERoleChoice:
         return created
 
     def receiveRoleSelect(self, data: dict) -> bool:
-        """接收 LLM 返回的一个或多个任务：空 → 错误完成；非空 → 每项按 role 创建子 flow，等待全部完成后汇总。"""
-        tasks = data.get("tasks") if isinstance(data, dict) else None
-        if tasks is None and isinstance(data, str):
-            tasks = [tasks] if tasks.strip() else []
-        elif not isinstance(tasks, list):
-            tasks = []
-        if not tasks:
-            logger.warning("[%s][%s][d=%s] 返回空任务，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+        """接收 LLM 返回的一个或多个工作流：空 → 错误完成；非空 → 每项按 role 创建子 flow，等待全部完成后汇总。"""
+        workflows = data.get("workflows") if isinstance(data, dict) else None
+        if workflows is None and isinstance(data, str):
+            workflows = [workflows] if workflows.strip() else []
+        elif not isinstance(workflows, list):
+            workflows = []
+        if not workflows:
+            logger.warning("[%s][d=%s] 返回空工作流，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "未返回可执行任务"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "未返回可执行工作流"},
                 AEFlowCompletEvent.error,
             )
             return True
         if self.delegate is None:
-            logger.warning("[%s][%s][d=%s] delegate 未设置，以错误完成", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] delegate 未设置，以错误完成", self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.ident, AE_ANSWER: "delegate 未设置"},
                 AEFlowCompletEvent.error,
             )
             return True
-        created = self._create_role_flows(tasks, is_subflow=True)
+        created = self._create_role_flows(workflows, is_subflow=True)
         if created == 0:
-            logger.warning("[%s][%s][d=%s] 全部子任务 role 非法被跳过，以错误完成闭环", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] 全部工作流 role 非法被跳过，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.ident, AE_ANSWER: "全部子任务 role 非法被跳过"},
+                {AE_IDENT: self.ident, AE_ANSWER: "全部工作流 role 非法被跳过"},
                 AEFlowCompletEvent.error,
             )
             return True
-        logger.info("[%s][%s][d=%s] 创建 %d 个子 flow，等待完成后汇总", type(self).__name__, self.title, self.deepth, created)
+        logger.info("[%s][d=%s] 创建 %d 个子 flow，等待完成后汇总", self.title, self.deepth, created)
         return True

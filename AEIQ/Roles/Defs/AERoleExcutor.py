@@ -46,8 +46,8 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
     def startFlow(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input；基类未启动（非 default 状态）则错误完成，避免父 flow 等待卡死。"""
         if not super().startFlow(flowInput):
-            logger.warning("[%s][%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成避免卡死",
-                           type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成避免卡死",
+                           self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "flow 启动失败"},
                 AEFlowCompletEvent.error,
@@ -67,8 +67,8 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
         """接收角色目标：基类存储后 roleGoal 为空则错误完成；否则调 requestRoleSelect 推进。"""
         result = super().receiveOptimizeInput(data)  # AERoleQuestionOptimize 存储 roleGoal
         if not result or not self.roleGoal:
-            logger.warning("[%s][%s][d=%s] roleGoal 为空，以错误完成本 flow 避免卡死",
-                           type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] roleGoal 为空，以错误完成本 flow 避免卡死",
+                           self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "问题优化失败"},
                 AEFlowCompletEvent.error,

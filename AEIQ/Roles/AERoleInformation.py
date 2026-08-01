@@ -56,7 +56,7 @@ class AERoleInformation(AERoleInfo):
         self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get("responsibility", "") or ""
         if not self.title or not self.responsibility:
-            logger.warning("[%s][%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色信息（title/responsibility）生成失败"}, AEFlowCompletEvent.error)
             return True
         self.requestRolePrompt()
@@ -71,20 +71,22 @@ class AERoleInformation(AERoleInfo):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "请根据以上工作名称与能力范围，生成一个本角色专用的提问转化指令(rolePrompt)："
-                "用于把任意用户问题转化为契合你专业能力与职责边界的明确、可执行目标；"
-                "指令只与你的职称与能力范围有关，不得引用任何具体问题；只输出指令文本本身，不要解释。"
+                "根据以上职称与能力范围，生成一条角色指令（rolePrompt）。\n"
+                "要求：\n"
+                "- 仅基于职称与能力范围，不引用任何具体问题\n"
+                "- 指导如何将输入转化为符合该角色职责的可执行目标\n"
+                "- 简洁、明确，只输出指令文本"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRolePrompt)
-        flow_out.set_llm_out({"rolePrompt": llm_generate("本角色专用的提问转化指令，体现职称与能力边界，不含具体问题")})
+        flow_out.set_llm_out({"rolePrompt": llm_generate("基于职称与能力范围的角色指令，不含具体问题")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
     def receiveRolePrompt(self, data: dict) -> bool:
         """存入 self.rolePrompt（不完成 flow）。data 须为 {"rolePrompt": <...>} map；非 map 或 rolePrompt 为空则以错误完成闭环。"""
         if not isinstance(data, dict):
-            logger.warning("[%s][%s][d=%s] rolePrompt 回包非 map，以错误完成: %r", type(self).__name__, self.title, self.deepth, data)
+            logger.warning("[%s][d=%s] rolePrompt 回包非 map，以错误完成: %r", self.title, self.deepth, data)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "rolePrompt 生成失败（回包非 map）"},
                 AEFlowCompletEvent.error,
@@ -92,7 +94,7 @@ class AERoleInformation(AERoleInfo):
             return True
         prompt = data.get("rolePrompt") or ""
         if not prompt:
-            logger.warning("[%s][%s][d=%s] rolePrompt 为空，以错误完成本 flow 避免卡死", type(self).__name__, self.title, self.deepth)
+            logger.warning("[%s][d=%s] rolePrompt 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "rolePrompt 生成失败"},
                 AEFlowCompletEvent.error,

@@ -95,8 +95,8 @@ class AEFlowInterfaceImpl:
         """
         if self.status != AEFlowStatus.default:
             logger.warning(
-                "[%s][%s][d=%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
-                type(self).__name__, self.ident, self.deepth, self.status,
+                "[d=%s] startFlow 仅在 default 状态可接收，当前 %s，忽略",
+                self.deepth, self.status,
             )
             return False
         self.input = flowInput
@@ -113,9 +113,9 @@ class AEFlowInterfaceImpl:
         sub_flow.deepth = self.deepth + 1
 
         logger.info(
-            "[%s][d=%s] addFlow [%s][d=%s]",
-            self.flow_description(), self.deepth,
-            sub_flow.flow_description(), sub_flow.deepth,
+            "%s addFlow %s",
+            self.flow_description(),
+            sub_flow.flow_description(),
         )
         self._flows[sub_flow.ident] = sub_flow
 
@@ -133,8 +133,8 @@ class AEFlowInterfaceImpl:
         """
         if not isinstance(data, dict):
             logger.error(
-                "[%s][%s][d=%s] 收到的数据非 map，无法解析，以错误完成本 flow 闭环: %r",
-                type(self).__name__, self.ident, self.deepth, data,
+                "[d=%s] 收到的数据非 map，无法解析，以错误完成本 flow 闭环: %r",
+                self.deepth, data,
             )
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法解析"}, AEFlowCompletEvent.error)
             return
@@ -151,8 +151,8 @@ class AEFlowInterfaceImpl:
             return
 
         logger.error(
-            "[%s][%s][d=%s] 无法命中（既非自身也未匹配子 flow），以错误完成本 flow 闭环: %r",
-            type(self).__name__, self.ident, self.deepth, data,
+            "[d=%s] 无法命中（既非自身也未匹配子 flow），以错误完成本 flow 闭环: %r",
+            self.deepth, data,
         )
         self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: f"LLM 回包 ident 无法路由: {ident!r}"}, AEFlowCompletEvent.error)
 
@@ -172,8 +172,8 @@ class AEFlowInterfaceImpl:
         """
         if not isinstance(out_schema, dict):
             logger.error(
-                "[%s][%s][d=%s] out_schema 非 map，以错误完成本 flow 避免卡死: %r",
-                type(self).__name__, self.ident, self.deepth, out_schema,
+                "[d=%s] out_schema 非 map，以错误完成本 flow 避免卡死: %r",
+                self.deepth, out_schema,
             )
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法处理"}, AEFlowCompletEvent.error)
             return
@@ -181,8 +181,8 @@ class AEFlowInterfaceImpl:
         inner = out_schema.get(AE_LLM_OUT)
         if not self.excutor.contains(command):
             logger.error(
-                "[%s][%s][d=%s] out_schema 内 funcationkey=%r 无效或缺失，以错误完成本 flow 避免卡死: %r",
-                type(self).__name__, self.ident, self.deepth, command, out_schema,
+                "[d=%s] out_schema 内 funcationkey=%r 无效或缺失，以错误完成本 flow 避免卡死: %r",
+                self.deepth, command, out_schema,
             )
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包 funcationkey 无效，无法路由处理"}, AEFlowCompletEvent.error)
             return
