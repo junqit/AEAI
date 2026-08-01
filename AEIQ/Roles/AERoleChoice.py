@@ -8,10 +8,10 @@ task 由 AETaskRole 经 requestRoleSelect → requestScripts 直接处理，不�
 """
 import logging
 
-from WorkFlows.AEFlow import AEFlowCompletEvent
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.FlowWork.AEFlow import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import (

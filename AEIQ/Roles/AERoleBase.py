@@ -8,18 +8,17 @@ AERoleBase - 角色 Flow 基类。
 问题优化能力（requestOptimizeInput / receiveOptimizeInput）在 Roles.AERoleQuestionOptimize 中，
 均由本类继承获得。角色信息属性（title / responsibility / roleGoal / rolePrompt）
 由本类 __init__ 持有（非 AEFlow 基类职责）。
-结果汇总编排（summarize_to_llm / summarize_user_instruction 默认）在 WorkFlows.AEFlowDelegateImpl
-实现；本类覆写角色上下文 hook（summarize_extend_messages / outResult_summary）提供角色信息——
-flow 基类不体现 role 信息。
-本类仅定义 AERoleBase 角色基类（需 import AEFlow，故与常量分文件，避免与 WorkFlows.AEFlow 循环导入）。
+结果汇总编排（summarize_to_llm）由 AEIQFlow 实现，本类继承 AEIQFlow 获得。本类另覆写角色上下文
+hook（summarize_extend_messages / outResult_summary）提供角色信息——flow 基类不体现 role 信息。
+本类仅定义 AERoleBase 角色基类（需 import AEIQFlow，故与常量分文件，避免循环导入）。
 """
 import logging
 from typing import Optional
 
-from WorkFlows.AEFlow import AEFlow
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowInfo import AE_ANSWER
+from WorkFlows.AEIQFlow import AEIQFlow
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
 from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AE_USER_QUESTION_PREFIX, AEConentRole, AE_ROLE, AE_CONTENT
 from Roles.AERoleInformation import AERoleInformation
 from Roles.AERoleQuestionOptimize import AERoleQuestionOptimize
@@ -27,7 +26,7 @@ from Roles.AERoleQuestionOptimize import AERoleQuestionOptimize
 logger = logging.getLogger(__name__)
 
 
-class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEFlow):
+class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
     """角色 Flow 基类。角色选择能力（AERoleChoice）由需要的子类显式继承；
     角色信息能力（AERoleInformation）与问题优化能力（AERoleQuestionOptimize）由本类继承。
     能力 mixin 列于 AEFlow 之前，确保 cooperative __init__ 链优先经各 mixin 初始化其属性。"""
@@ -54,7 +53,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEFlow):
         """返回本角色参数信息（直接取 ROLE_PARAMS，不重定义）。"""
         return ROLE_PARAMS[cls._role()]
 
-    # ==================== 角色上下文 hook（供 AEFlowDelegateImpl.summarize_to_llm 调用）====================
+    # ==================== 角色上下文 hook（供 summarize_to_llm 调用）====================
 
     def flow_description(self) -> str:
         """覆写描述信息：在基类「类名[ident]」基础上追加角色职称，供日志等场景使用。"""

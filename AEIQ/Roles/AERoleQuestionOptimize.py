@@ -10,7 +10,7 @@ requestOptimizeInput 以 role_brief 作为系统提示、以 rolePrompt 作为�
 """
 import logging
 
-from WorkFlows.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX

@@ -189,40 +189,11 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         if next_flow is not None:
             next_flow.startFlow(AEFlowInput(content=answer or ""))
 
-    # ==================== 结果汇总编排（默认实现，子类可单独覆写）====================
+    # ==================== 结果汇总编排（由 AERoleBase 实现，AEFlow 不参与）====================
 
     def summarize_to_llm(self) -> None:
-        """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论（非私有，可被子类单独实现）。
-
-        默认实现汇总编排：summarize_extend_messages（hook，子类追加扩展消息，如角色上下文）+
-        各子 flow outResult_summary（hook）+ summarize_user_instruction（hook）。flow 内不体现
-        role 信息——角色上下文由子类经 summarize_extend_messages 提供。亦可整体覆写本方法。
-        由 receive_flow_result 在所有子 flow 完成时调用。
-        """
-        from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT  # 懒导入避免循环
-        logger.info(
-            "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
-            type(self).__name__, self.deepth, len(self._flows), len(self._flows),
+        """AEFlow 默认：直接完成本 flow 闭环，不做 LLM 汇总。由子类（AERoleBase）覆写为 LLM 汇总。"""
+        self.flow_receive_complete(
+            {AE_IDENT: self.ident, AE_ANSWER: ""},
+            AEFlowCompletEvent.default,
         )
-        flow_out = self.generateFlowOutput(AEFunctional.flow_receive_complete)
-        messages = []
-        messages.extend(self.summarize_extend_messages())
-        for f in self._flows.values():
-            if f.outResult is not None:
-                try:
-                    summary = f.outResult_summary()
-                    messages.append({
-                        AE_ROLE: AEConentRole.ASSISTANT.value,
-                        AE_CONTENT: summary,
-                    })
-                except Exception as e:
-                    logger.error("[%s][d=%s] summarize 子 flow outResult_summary 异常: %s", type(self).__name__, self.deepth, e, exc_info=True)
-            else:
-                logger.warning("[%s][d=%s] summarize 子 flow outResult is None, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: self.summarize_user_instruction(),
-        })
-
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)

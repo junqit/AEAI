@@ -1,4 +1,4 @@
-from WorkFlows.AEFlowInfo import AE_TITLE
+from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List

@@ -7,8 +7,8 @@ from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
 from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
-from WorkFlows.AEFlowOutput import AE_LLM_OUT
-from WorkFlows.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
+from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
 
 logger = logging.getLogger(__name__)
 

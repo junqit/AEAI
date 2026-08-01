@@ -7,9 +7,9 @@ AEScript - 脚本 Flow，继承 AEFlow。
 import logging
 from enum import Enum
 
-from WorkFlows.AEFlow import AEFlow
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
+from WorkFlows.FlowWork.AEFlow import AEFlow
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
 
 logger = logging.getLogger(__name__)
 

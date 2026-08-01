@@ -2,8 +2,8 @@
 角色信息属性（role / title / responsibility / rolePrompt / roleGoal）由基类 AERoleInfo 持有。"""
 import logging
 
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX

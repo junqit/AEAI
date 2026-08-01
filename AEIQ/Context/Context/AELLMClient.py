@@ -4,7 +4,7 @@ import httpx
 from json_repair import repair_json
 
 from .AELLMPayload import AELLMPayload
-from WorkFlows.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
 
 logger = logging.getLogger(__name__)
 

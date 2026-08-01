@@ -8,10 +8,10 @@ AERefiner - 问题精炼 Flow，继承 AERoleExcutor。
 """
 import logging
 
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Roles.AERoleType import AE_USER_QUESTION_PREFIX, AEFlowRole, ROLE_PARAMS
 from Roles.Defs.AERoleExcutor import AERoleExcutor
 

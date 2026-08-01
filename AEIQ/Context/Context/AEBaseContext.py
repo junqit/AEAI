@@ -8,10 +8,10 @@ from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .AEContextDelegate import AEContextDelegate
     from .AELLMPayload import AELLMPayload
-    from WorkFlows.AEFlowInfo import AEFlowInfo
+    from WorkFlows.FlowWork.AEFlowInfo import AEFlowInfo
 
 
 class AEBaseContext:

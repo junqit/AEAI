@@ -42,18 +42,18 @@ AEChat - 聊天 Flow，继承 AEFlow。
 import logging
 from typing import Optional
 
-from WorkFlows.AEFlow import AEFlow
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.AEIQFlow import AEIQFlow
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Network.Core.AENetReq import AENetReqInfo
 from Roles.Defs.AERefiner import AERefiner
 
 logger = logging.getLogger(__name__)
 
 
-class AEChat(AEFlow):
+class AEChat(AEIQFlow):
     """聊天 Flow：由 context 构建 input 后交 startFlow 启动。
 
     TODO：当前仅 AERefiner → AERoleExcutor 两个子 flow（过渡实现），后续应重构为
@@ -77,7 +77,7 @@ class AEChat(AEFlow):
     def summarize_user_instruction(self) -> str:
         """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
 
-        summarize_to_llm 由 AEFlowDelegateImpl 实现，AEChat 仅覆写本指令定制口吻。
+        summarize_to_llm 由 AERoleBase 实现，AEChat 仅覆写本指令定制口吻。
         """
         return (
             "请结合以上信息，以自然、人性化的口吻直接回答用户的问题，像在与人对话一样："

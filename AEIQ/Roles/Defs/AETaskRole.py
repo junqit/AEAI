@@ -6,10 +6,10 @@ roleGoal 为空由 AERoleExcutor.receiveOptimizeInput 错误完成，脚本为�
 """
 import logging
 
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Scrips import AEScript

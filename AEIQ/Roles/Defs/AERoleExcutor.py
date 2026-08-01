@@ -16,10 +16,10 @@ expert/workgroup/employee 子类（AEExpertRole 等）继承本类，_role() 决
 """
 import logging
 
-from WorkFlows.AEFlowInput import AEFlowInput
-from WorkFlows.AEFlowOutput import AEFlowOutput
-from WorkFlows.AEFlowInfo import AE_IDENT, AE_ANSWER
-from WorkFlows.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Roles.AERoleType import AEFlowRole
 from Roles.AERoleBase import AERoleBase
 from Roles.AERoleChoice import AERoleChoice
