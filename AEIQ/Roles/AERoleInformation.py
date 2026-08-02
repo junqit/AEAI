@@ -25,7 +25,7 @@ class AERoleInformation(AERoleInfo):
     def requestRoleInformation(self) -> None:
         """请求 LLM 生成 title / responsibility（此时尚未确认，不注入 role_brief）。回包经 receiveRoleInfomation 写入并触发 requestRolePrompt。"""
         messages = []
-        user_question = self.input.content if self.input else ""
+        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input else ""
         if len(user_question) > 0:
             messages.append({
                 AE_ROLE: AEConentRole.SYSTEM.value,

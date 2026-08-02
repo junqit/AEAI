@@ -3,7 +3,7 @@ AERefiner - 问题精炼 Flow，继承 AERoleExcutor。
 
 将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题，再经 receiveOptimizeInput → requestRoleSelect
 让 LLM 选择解决角色（role=None → 全部角色）：选人员角色则派发对应角色 flow；选 llm 则直接作答。
-本类仅覆写 startFlow（→ requestOptimizeInput 精炼，跳过 AERoleExcutor 的 requestRoleInformation）
+本类仅覆写 receive_flow_input（→ requestOptimizeInput 精炼，跳过 AERoleExcutor 的 requestRoleInformation）
 与 outResult_summary；receiveOptimizeInput 沿用 AERoleExcutor（→ requestRoleSelect）。
 """
 import logging
@@ -62,15 +62,15 @@ class AERefiner(AERoleExcutor):
             self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
             return True
         logger.info("[%s][d=%s] 创建 %d 个兄弟 flow，自身完成", self.title, self.deepth, created)
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal}, AEFlowCompletEvent.default)
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: self.roleGoal}, AEFlowCompletEvent.start)
         return True
 
-    def startFlow(self, flowInput: AEFlowInput) -> None:
+    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input，随后请求问题优化（精炼）。
 
-        跳过 AERoleExcutor.startFlow（其会 requestRoleInformation），直接走 requestOptimizeInput。
+        跳过 AERoleExcutor.receive_flow_input（其会 requestRoleInformation），直接走 requestOptimizeInput。
         """
-        if not super(AERoleExcutor, self).startFlow(flowInput):
-            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），忽略", self.title, self.deepth)
+        if not super(AERoleExcutor, self).receive_flow_input(flowInput):
+            logger.warning("[%s][d=%s] receive_flow_input 失败：基类未启动（非 default 状态），忽略", self.title, self.deepth)
             return
         self.requestOptimizeInput()

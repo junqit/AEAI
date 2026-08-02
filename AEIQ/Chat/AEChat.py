@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 
 class AEChat(AEIQFlow):
-    """聊天 Flow：由 context 构建 input 后交 startFlow 启动。
+    """聊天 Flow：由 context 构建 input 后交 receive_flow_input 启动。
 
     TODO：当前仅 AERefiner → AERoleExcutor 两个子 flow（过渡实现），后续应重构为
     上述 7 阶段流水线（上下文确认 → 问题定义 → 拆解 → 方案 → 执行 → 验证 → 沉淀），
@@ -72,7 +72,7 @@ class AEChat(AEIQFlow):
         from Context.Context.AELLMPayload import llm_generate
         refiner_output = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")})
         refiner = AERefiner(flowOutput=refiner_output)
-        self.addFlow(refiner)
+        self.add_flow(refiner)
 
     def subflow_summarize_prompt(self) -> str:
         """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
@@ -86,21 +86,21 @@ class AEChat(AEIQFlow):
             "不要提及内部的拆解、角色、任务等执行过程，直接给出对用户有用的最终回答。"
         )
 
-    def startFlow(self, flowInput: AEFlowInput) -> None:
+    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
         """启动 chat flow：交基类置 input 并切到 processing，随后启动首个子 flow。
 
-        - 仅当基类 startFlow 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
+        - 仅当基类 receive_flow_input 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
         - 任一启动失败均以错误回调 complete 闭环，避免会话永挂
         """
-        if not super().startFlow(flowInput):
-            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成闭环", self.title, self.deepth)
+        if not super().receive_flow_input(flowInput):
+            logger.warning("[%s][d=%s] receive_flow_input 失败：基类未启动（非 default 状态），以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
             return
         next_flow = self.nextFlow()
         if next_flow is None:
-            logger.warning("[%s][d=%s] startFlow 失败：无 default 状态子 flow 可启动，以错误完成闭环", self.title, self.deepth)
+            logger.warning("[%s][d=%s] receive_flow_input 失败：无 default 状态子 flow 可启动，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return
-        next_flow.startFlow(flowInput)
+        next_flow.receive_flow_input(flowInput)
 
 

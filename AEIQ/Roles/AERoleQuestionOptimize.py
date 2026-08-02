@@ -44,7 +44,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         # 用户问题以统一前缀（AE_USER_QUESTION_PREFIX）单独作为 system 消息传入
-        user_question = self.input.content if self.input is not None else ""
+        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
         if len(user_question) > 0:
             messages.append({
                 AE_ROLE: AEConentRole.SYSTEM.value,
@@ -80,7 +80,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         if prompt is None and isinstance(data, str):
             prompt = data
         self.roleGoal = prompt or ""
-        original = self.input.content if self.input is not None else ""
+        original = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"

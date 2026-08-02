@@ -53,7 +53,7 @@ class AERoleChoice:
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        question = self.roleGoal or (self.input.content if self.input is not None else "")
+        question = self.roleGoal or (self.input.parameter.get(AE_CONTENT, "") if self.input is not None else "")
         if len(question) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{question}"})
         # 角色选择规则（system）：必须解决问题 + 网络请求类必选角色
@@ -94,6 +94,7 @@ class AERoleChoice:
                 f"4. 不需要创建总结或汇总类工作流，系统会自动汇总全部结果"
             ),
         })
+        
         flow_out = self.generateFlowOutput(AERoleFunction.receiveRoleSelect)
         flow_out.set_llm_out({
             "workflows": [{
@@ -131,8 +132,8 @@ class AERoleChoice:
 
         Args:
             roles: 工作流列表，每项含 role / goal / title。
-            is_subflow: True → 加入自己的 _flows（self.addFlow，AE_IDENT=self.ident）；
-                        False → 加入 delegate 作为兄弟 flow（delegate.receive_add_flow，AE_IDENT=delegate.ident）。
+            is_subflow: True → 加入自己的 _flows（self.add_flow，AE_IDENT=self.ident）；
+                        False → 加入 delegate 作为兄弟 flow（delegate.add_flow，AE_IDENT=delegate.ident）。
 
         Returns:
             创建并启动的 flow 数量。
@@ -166,10 +167,10 @@ class AERoleChoice:
             content = str(content or "")
             sub = self._instantiate_role_flow(role_enum, target_ident)
             if is_subflow:
-                self.addFlow(sub)
+                self.add_flow(sub)
             else:
-                self.delegate.receive_add_flow(sub)
-            sub.startFlow(AEFlowInput(content=content))
+                self.delegate.add_flow(sub)
+            sub.receive_flow_input(AEFlowInput(content=content, ident=self.ident))
             created += 1
         return created
 

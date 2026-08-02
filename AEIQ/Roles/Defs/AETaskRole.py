@@ -139,12 +139,12 @@ class AETaskRole(AERoleExcutor):
                 flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("脚本执行结果")})
                 script_flow = AEScript(flowOutput=flowOutput)
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
-                self.addFlow(script_flow)
+                self.add_flow(script_flow)
             except (ValueError, TypeError) as e:
                 logger.warning("[%s][d=%s] 跳过非法脚本 spec=%r: %s", self.title, self.deepth, spec, e)
         first_script = self.nextFlow()
         if first_script is not None:
-            first_script.startFlow(AEFlowInput(content=""))
+            first_script.receive_flow_input(AEFlowInput(content="", ident=self.ident))
             logger.info("[%s][d=%s] 启动首个 AEScript: title=%r", self.title, self.deepth, first_script.title)
         else:
             logger.warning("[%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", self.title, self.deepth)

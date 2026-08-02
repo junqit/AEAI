@@ -28,7 +28,7 @@ class AELLMRole(AERoleExcutor):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        question = self.roleGoal or (self.input.content if self.input is not None else "")
+        question = self.roleGoal or (self.input.parameter.get(AE_CONTENT, "") if self.input is not None else "")
         if len(question) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{question}"})
         messages.append({

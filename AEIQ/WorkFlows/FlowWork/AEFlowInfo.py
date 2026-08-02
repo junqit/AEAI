@@ -10,13 +10,13 @@ roleGoal / rolePrompt 及 role_brief / outResult_summary / 汇总等）属 Roles
 ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
 {"ident": <回程路由目标 ident>, "reply": <llm 占位>}：子 flow 填父 flow.ident（路由回父 flow），
-根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 startFlow 设置。
+根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 receive_flow_input 设置。
 """
 import uuid
 from enum import Enum
 from typing import Optional
 
-from .AEFlowInput import AEFlowInput
+from .AEFlowInput import AEFlowInput, AEFlowStatus
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -36,12 +36,6 @@ AE_CONFIRM = "confirm"
 # out_schema 内功能性调用唯一标识字段名（每次 generateFlowOutput 随机生成）
 AE_funcationkey = "excutor"
 
-class AEFlowStatus(str, Enum):
-    """Flow 执行状态"""
-    default = "default"            # 初始状态
-    processing = "processing"      # 执行中
-    complete = "complete"          # 已完成
-
 
 class AEFlowInfo:
     """Flow 元信息：标识、输入/输出数据与执行状态。角色相关信息见 Roles.AERoleBase。"""
@@ -56,7 +50,7 @@ class AEFlowInfo:
                    flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
                         子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
             flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，
-                        未传时仍由 startFlow 设置。命名沿用 startFlow 的 flowInput 约定。
+                        未传时仍由 receive_flow_input 设置。命名沿用 receive_flow_input 的 flowInput 约定。
         """
         if not ident:
             ident = uuid.uuid4().hex
@@ -78,11 +72,11 @@ class AEFlowInfo:
         """flow 标识（只读）"""
         return self._ident
 
-    def generateFlowOutput(self, functional: str) -> AEFlowOutput:
+    def generateFlowOutput(self, functional: AEFunctional) -> AEFlowOutput:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
 
         Args:
-            functional: 功能性方法名（字符串，如 AEFunctional.flow_receive_complete），
+            functional: 功能性方法名（AEFunctional 或其子类常量，如 AEFunctional.flow_receive_complete），
                         直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 

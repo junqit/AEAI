@@ -10,8 +10,14 @@ from enum import Enum
 from WorkFlows.FlowWork.AEFlow import AEFlow
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
+from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
+
+
+class AEScriptFunction(AEFunctional):
+    """AEScript 专属回包功能性方法名。"""
+    receiveScriptFix = "receiveScriptFix"
 
 
 class AEScriptType(str, Enum):
@@ -60,9 +66,9 @@ class AEScript(AEFlow):
             return f"{self.title} 我的回答：{answer}"
         return f"我的回答：{answer}"
 
-    def startFlow(self, flowInput: AEFlowInput) -> None:
+    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
         """启动：执行脚本；失败则请求 LLM 修正后重试。"""
-        if not super().startFlow(AEFlowInput(content="")):
+        if not super().receive_flow_input(AEFlowInput(content="", ident=self.ident)):
             return
         self._retry_count = 0
         self._last_error = ""
@@ -120,7 +126,7 @@ class AEScript(AEFlow):
                 ),
             },
         ]
-        flow_out = self.generateFlowOutput("receiveScriptFix")
+        flow_out = self.generateFlowOutput(AEScriptFunction.receiveScriptFix)
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         logger.info("[%s][d=%s] 请求 LLM 修正脚本(retry=%d/%d)", self.title, self.deepth, self._retry_count, self.MAX_RETRIES)

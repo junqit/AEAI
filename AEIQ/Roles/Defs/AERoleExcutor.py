@@ -7,7 +7,7 @@ AERoleExcutor - 角色执行 Flow，继承 AERoleBase + AERoleChoice（角色选
   - 本类：角色目标就绪后的推进（requestRoleSelect hook）
 
 执行链：
-  startFlow → requestRoleInformation → receiveRoleInfomation → requestRolePrompt
+  receive_flow_input → requestRoleInformation → receiveRoleInfomation → requestRolePrompt
   → receiveRolePrompt → requestOptimizeInput → receiveOptimizeInput → requestRoleSelect
     └─ 默认：requestRoleSelect 派发对应角色 subFlow（task 子类覆写为 requestScripts）
 
@@ -43,10 +43,10 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
         self._questionType: str = ""
         self.role = self._role()
 
-    def startFlow(self, flowInput: AEFlowInput) -> None:
+    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
         """启动：交基类置 input；基类未启动（非 default 状态）则错误完成，避免父 flow 等待卡死。"""
-        if not super().startFlow(flowInput):
-            logger.warning("[%s][d=%s] startFlow 失败：基类未启动（非 default 状态），以错误完成避免卡死",
+        if not super().receive_flow_input(flowInput):
+            logger.warning("[%s][d=%s] receive_flow_input 失败：基类未启动（非 default 状态），以错误完成避免卡死",
                            self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "flow 启动失败"},

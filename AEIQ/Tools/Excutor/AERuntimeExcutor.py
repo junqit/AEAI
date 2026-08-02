@@ -21,15 +21,16 @@ AE_INNER = "inner"  # exec 传入的数据
 AE_RESULT = "__ae_result__"  # 方法执行结果（脚本内赋值，exec 读取后判断/打印）
 
 
-class AEFunctional:
-    """功能性方法名基类（普通类，定义方法名常量），供子类继承扩展。
+class AEFunctional(str):
+    """功能性方法名类型（继承 str），供子类继承扩展。
 
-    子类（AERoleFunction / AERoleExcutorFunction 等）可直接访问下列常量，
-    也可追加各自的方法名常量。值为字符串方法名，由 executor 经 method_call 拼成脚本调用。
+    子类（AERoleFunction / AERoleExcutorFunction 等）继承本类后追加各自的方法名常量。
+    值为字符串方法名，由 executor 经 method_call 拼成脚本调用。
+    作为 str 子类，可直接用于字符串比较与字典 key，同时作为类型标注约束 generateFlowOutput 入参。
     """
-    flow_receive_default = "flow_receive_default"        # 回包置 default
-    flow_receive_processing = "flow_receive_processing"  # 回包置 processing
-    flow_receive_complete = "flow_receive_complete"      # 回包置 complete 并赋值最终结果
+    flow_receive_default = "flow_receive_default"
+    flow_receive_processing = "flow_receive_processing"
+    flow_receive_complete = "flow_receive_complete"
 
 
 @dataclass
