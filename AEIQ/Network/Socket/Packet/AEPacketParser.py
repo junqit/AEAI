@@ -50,7 +50,6 @@ class AEPacketParser:
         # 分片重组：unique_id -> AEPacketPool；解析线程单线程访问，无需加锁
         self._packet_pools: Dict[int, AEPacketPool] = {}
 
-        logger.info("Packet parser created")
 
     def start(self) -> None:
         if self._running:
@@ -64,10 +63,8 @@ class AEPacketParser:
             name="PacketParser"
         )
         self._parse_thread.start()
-        logger.info("Parser thread started")
 
     def stop(self) -> None:
-        logger.info("Stopping parser thread")
         self._running = False
 
         self._data_available.set()
@@ -80,7 +77,6 @@ class AEPacketParser:
 
         self._packet_pools.clear()
 
-        logger.info("Parser thread stopped")
 
     def feed(self, data: bytes) -> None:
         if not self._running:
@@ -91,7 +87,6 @@ class AEPacketParser:
             with self._buffer_lock:
                 self._buffer.append(data)
 
-            logger.debug(f"Fed {len(data)} bytes to parser, buffer size: {self._buffer.size}")
 
             self._data_available.set()
 
@@ -121,7 +116,6 @@ class AEPacketParser:
                         if packet is None:
                             break
 
-                        logger.debug(f"Packet parsed: type=0x{packet.header.data_type:04X}, size={packet.header.length}")
 
                         self._handle_packet(packet)
 
@@ -138,9 +132,8 @@ class AEPacketParser:
         except Exception as e:
             logger.error(f"Error in parse loop: {e}")
             self._notify_error(e)
-
         finally:
-            logger.info("Parse loop ended")
+            pass
 
     def _handle_packet(self, packet: AEPacket) -> None:
         unique_id = packet.header.unique_id
@@ -171,32 +164,24 @@ class AEPacketParser:
             last_seq = pool.last_seq
             # 清理
             self._packet_pools.pop(unique_id, None)
-            logger.info(
-                f"Fragment assembled - unique_id={unique_id}, count={(last_seq + 1) if last_seq is not None else 0}, size={len(assembled)}"
-            )
             self._dispatch_by_type(data_type_value, assembled)
 
     def _dispatch_by_type(self, data_type_value: int, data: bytes) -> None:
         try:
             if data_type_value == AEDataType.REQUEST.value:
                 request = AENetReq.from_bytes(data)
-                logger.debug(f"Parsed REQUEST: path={request.path}")
                 self._notify_request(request)
 
             elif data_type_value == AEDataType.RESPONSE.value:
                 response = AENetRsp.from_bytes(data)
-                logger.debug(f"Parsed as RESPONSE: status={response.status}")
                 self._notify_response(response)
 
             elif data_type_value == AEDataType.HEARTBEAT.value:
-                logger.debug("Received HEARTBEAT")
-
+                pass
             elif data_type_value == AEDataType.PING.value:
-                logger.debug("Received PING")
-
+                pass
             elif data_type_value == AEDataType.PONG.value:
-                logger.debug("Received PONG")
-
+                pass
             else:
                 logger.warning(f"Unknown data type: 0x{data_type_value:04X}")
 

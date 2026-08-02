@@ -43,7 +43,6 @@ class AESocketServer:
             on_packet_received=self._on_packet_received
         )
 
-        logger.info(f"UDP Socket server initialized on {host}:{port}")
 
     @property
     def socket_manager(self) -> AESocketManager:
@@ -77,14 +76,12 @@ class AESocketServer:
             )
             self.receive_thread.start()
 
-            logger.info(f"UDP Socket server started on {self.host}:{self.port}")
 
         except Exception as e:
             logger.error(f"Failed to start server: {e}")
             raise
 
     def stop(self) -> None:
-        logger.info("Stopping UDP socket server")
         self.running = False
 
         self._receive_buffer.stop()
@@ -98,10 +95,8 @@ class AESocketServer:
         if self.receive_thread and self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
 
-        logger.info("UDP Socket server stopped")
 
     def _receive_loop(self) -> None:
-        logger.info("UDP receive loop started")
 
         while self.running:
             try:
@@ -117,7 +112,6 @@ class AESocketServer:
                 if not self.running:
                     break
 
-        logger.info("UDP receive loop ended")
 
     def _on_packet_received(self, result: ParsedPacketResult) -> None:
         """AEPacketReceiveBuffer 解析完成后的回调，转给 AESocketManager"""

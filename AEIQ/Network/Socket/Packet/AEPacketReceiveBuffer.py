@@ -65,7 +65,6 @@ class AEPacketReceiveBuffer:
         )
         self._parse_thread.start()
 
-        logger.info("AEPacketReceiveBuffer started")
 
     def stop(self) -> None:
         self._running = False
@@ -75,7 +74,6 @@ class AEPacketReceiveBuffer:
             self._parse_thread.join(timeout=2.0)
 
         self._packet_pools.clear()
-        logger.info("AEPacketReceiveBuffer stopped")
 
     def set_callback(self, callback: PacketReceivedCallback) -> None:
         self._on_packet_received = callback
@@ -159,10 +157,6 @@ class AEPacketReceiveBuffer:
             last_seq = pool.last_seq
             # 清理
             self._packet_pools.pop(unique_id, None)
-            logger.info(
-                f"Fragment assembled - unique_id={unique_id}, "
-                f"count={(last_seq + 1) if last_seq is not None else 0}, size={len(assembled)}"
-            )
             self._dispatch_by_type(data_type_value, assembled, client_addr)
 
     def _dispatch_by_type(self, data_type_value: int, data: bytes, client_addr: tuple) -> None:

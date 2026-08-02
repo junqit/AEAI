@@ -69,14 +69,11 @@ class AEBaseContext:
         Args:
             data: LLM 回复解析后的 JSON（含 ident 及 out_schema 填充结果）
         """
-        logger.info("Context 收到 LLM 回复")
 
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
         """接收 AENetQues 与 AENetReqInfo：内部创建 AEChat 并持有，构建 input 后交 startFlow 启动
         （不等回，flow 内部异步流转）。
         """
-        logger.info("[Context] receive_chat: context_type=%s",
-                    self.context_type)
         if question is None:
             logger.error("[Context] 收到的 AENetQues 为空，忽略")
             return
@@ -90,10 +87,7 @@ class AEBaseContext:
         chat.req = req
         chat.set_delegate(self)
         self._chat_map[chat.ident] = chat
-        logger.info(
-            "AEChat created - chat_ident=%s, context=%s, question type=%s ident=%s content=%r",
-            chat.ident, self.ident, question.type, question.ident, question.content,
-        )
+        logger.info("[Context] receive_chat: %s", question.content or "")
         flow_input = AEFlowInput(content=question.content or "")
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, chat.startFlow, flow_input)
@@ -125,6 +119,7 @@ class AEBaseContext:
             return
         # 拿到 chat 即表示会话已结束，立即从 _chat_map 移除释放持有，避免后续重复回包
         self._chat_map.pop(flow_ident, None)
+        logger.info("[Context] chat 完成: %s", out.get(AE_ANSWER, "")[:100])
         rsp = AENetRsp(
             code=AENetRspCode.success,
             cont=AENetCont(

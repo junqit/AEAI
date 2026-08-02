@@ -74,7 +74,7 @@ class AEChat(AEIQFlow):
         refiner = AERefiner(flowOutput=refiner_output)
         self.addFlow(refiner)
 
-    def summarize_user_instruction(self) -> str:
+    def subflow_summarize_prompt(self) -> str:
         """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
 
         summarize_to_llm 由 AERoleBase 实现，AEChat 仅覆写本指令定制口吻。

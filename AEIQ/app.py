@@ -18,10 +18,10 @@ from Context.NetRoutCenter.AENetRouteCenter import AENetRouteCenter
 from Network.Socket.Connection.AESocketServer import get_socket_server
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# 屏蔽 httpx / httpcore 的 DEBUG 噪音日志
-for _name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2"):
+# 屏蔽噪音日志
+for _name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2", "asyncio"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
 # 导入路由模块

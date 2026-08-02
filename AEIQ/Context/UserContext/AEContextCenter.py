@@ -73,13 +73,11 @@ class AEContextCenter(AEContextDelegate):
             logger.warning("[AEContextCenter] resolve_context: 无 context 信息, 忽略")
             return None
 
-        logger.info("[AEContextCenter] resolve_context: type=%s, ident=%s, space=%s", cont.type, cont.ident, cont.space)
 
         # 先按 ident 命中
         if cont.ident:
             existing = self._contexts.get(cont.ident)
             if existing is not None:
-                logger.info("[AEContextCenter] 命中已有 context: ident=%s, type=%s", cont.ident, existing.context_type)
                 return existing
 
         # 命中不到则按 type 创建
@@ -87,7 +85,6 @@ class AEContextCenter(AEContextDelegate):
         if cont.type == AEContextType.workspace.value and not space:
             logger.warning("[AEContextCenter] 无法创建 WorkSpaceContext: space 为空")
             return None
-        logger.info("[AEContextCenter] 未命中, 按 type 创建: type=%s, space=%s", cont.type, space)
         return self._create_context(cont.type, space=space)
 
     def get_all(self) -> list:
@@ -115,7 +112,6 @@ class AEContextCenter(AEContextDelegate):
         if context_type in self._SINGLETON_TYPES:
             existing = self.find_by_type(context_type)
             if existing:
-                logger.info("[AEContextCenter] _create_context: 单例已存在, 复用 type=%s, ident=%s", context_type, existing.ident)
                 return existing
 
         context_map = {
@@ -129,8 +125,7 @@ class AEContextCenter(AEContextDelegate):
         context.set_delegate(self)
 
         self._contexts[context.ident] = context
-        logger.info("[AEContextCenter] _create_context: 创建成功 type=%s, ident=%s, space=%s",
-                     context_type, context.ident, space)
+        logger.info("[AEContextCenter] 创建 context: type=%s", context_type.value)
         return context
 
     # ==================== Path 处理（收 cont，经 delegate 发响应） ====================
@@ -164,7 +159,6 @@ class AEContextCenter(AEContextDelegate):
     def handle_chat(self, cont: AENetCont, req: AENetReqInfo) -> None:
         """处理 chat：交 workspace 接收（receive_chat 内部异步流转，不等回）；
         回复由 Chat 处理完成后 Context 内部自行处理，不在此处回复。"""
-        logger.info("[AEContextCenter] handle_chat: 开始, cont_type=%s, cont_ident=%s", cont.type if cont else None, cont.ident if cont else None)
         context = self.resolve_context(cont)
         if context is None:
             logger.warning("[AEContextCenter] handle_chat: resolve_context 返回 None, 无法处理")
@@ -175,7 +169,7 @@ class AEContextCenter(AEContextDelegate):
             return
 
         question = cont.ques if cont else None
-        logger.info("[AEContextCenter] handle_chat: 交 workspace receive_chat")
+        
         context.receive_chat(question, req)
 
     def handle_chat_list(self, cont: AENetCont, req: AENetReqInfo) -> None:

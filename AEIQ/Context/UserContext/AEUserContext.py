@@ -36,15 +36,11 @@ class AEUserContext:
         self._loop = asyncio.new_event_loop()
         self._loop_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._loop_thread.start()
-        logger.info(f"AEUserContext initialized - user_key={user.user_key if user else None}")
 
     # ==================== 接口（请求入口） ====================
 
     def handle_request(self, request: AENetReq) -> None:
         """处理该用户请求：提交到事件循环异步处理，不阻塞调用方（socket 解析线程）。"""
-        logger.info("[AEUserContext] handle_request: 提交到事件循环, user=%s, path=%s",
-                    request.user.user_key if request.user else None,
-                    request.req.path if request.req else None)
         asyncio.run_coroutine_threadsafe(self._dispatch(request), self._loop)
 
     async def _dispatch(self, request: AENetReq) -> None:
@@ -58,30 +54,23 @@ class AEUserContext:
         cont = request.cont
         req = request.req
 
-        logger.info("[AEUserContext] _dispatch: path=%s, cont_type=%s, cont_ident=%s, cont_space=%s",
-                    path, cont.type, cont.ident, cont.space)
 
         # context list 无需具体 context
         if path == AE_PATH_CONTEXT_LIST:
-            logger.info("[AEUserContext] → handle_context_list")
             self._context_center.handle_context_list(req)
             return
 
         # 路径分解：create / chat / chat_list / info，交 AEContextCenter 处理（各自内部 resolve）
         if path == AE_PATH_CONTEXT_CREATE:
-            logger.info("[AEUserContext] → handle_create")
             self._context_center.handle_create(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT:
-            logger.info("[AEUserContext] → handle_chat")
             self._context_center.handle_chat(cont, req)
             return
         if path == AE_PATH_CONTEXT_CHAT_LIST:
-            logger.info("[AEUserContext] → handle_chat_list")
             self._context_center.handle_chat_list(cont, req)
             return
         if path == AE_PATH_CONTEXT_INFO:
-            logger.info("[AEUserContext] → handle_info")
             await self._context_center.handle_info(cont, req)
             return
 

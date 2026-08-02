@@ -12,4 +12,4 @@ class AEPermissionContext(AEBaseContext):
         super().__init__(context_type=AEContextType.permission, space=space)
 
     async def on_request(self, request: AENetReq) -> None:
-        logger.info(f"AEPermissionContext on_request: {request.model_dump_json(exclude_none=True)}")
+        pass

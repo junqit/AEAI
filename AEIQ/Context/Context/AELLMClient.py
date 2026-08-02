@@ -39,7 +39,7 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
-        # logger.info(f"LLM response received, reply_length={len(reply) if reply else 0}")
+        logger.info("[LLM] 收到回复: %d chars", len(reply) if reply else 0)
         filled_content = _parse_content_json(reply)
         if filled_content is None:
             logger.error("LLM 内容解析失败，回填失败占位信封")

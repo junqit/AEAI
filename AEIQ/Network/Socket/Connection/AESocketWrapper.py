@@ -20,7 +20,6 @@ class AESocketWrapper:
         self._user = user
         self._client_addr = client_addr
         self._server_socket = server_socket
-        logger.debug(f"AESocketWrapper created: user={user.user_key}, addr={client_addr}")
 
     @property
     def user(self) -> AEUserInfo:
@@ -32,17 +31,11 @@ class AESocketWrapper:
 
     def update_addr(self, client_addr: tuple) -> None:
         if self._client_addr != client_addr:
-            logger.debug(f"Address updated: user={self._user.user_key}, {self._client_addr} -> {client_addr}")
             self._client_addr = client_addr
 
     def _send_data(self, data_type: AEDataType, data: bytes) -> None:
         """由 AEPacket.packets_from_data 生成 packet 列表，循环 sendto 发送。"""
         packets = AEPacket.packets_from_data(data_type, data)
-        if len(packets) > 1:
-            logger.info(
-                "send %s 分片 - data_size=%d, fragments=%d",
-                self._client_addr, len(data), len(packets),
-            )
         for packet in packets:
             self._server_socket.sendto(packet.to_bytes(), self._client_addr)
 
@@ -58,10 +51,6 @@ class AESocketWrapper:
     def send_response(self, response: AENetRsp) -> bool:
         try:
             data = response.to_bytes()
-            logger.info(
-                "send_response to %s - data_size=%d bytes",
-                self._client_addr, len(data),
-            )
             self._send_data(AEDataType.RESPONSE, data)
             return True
         except Exception as e:

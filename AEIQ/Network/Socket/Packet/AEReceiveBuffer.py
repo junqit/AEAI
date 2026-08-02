@@ -32,23 +32,19 @@ class AEReceiveBuffer:
                 f"> 最大限制 {self._max_buffer_size}"
             )
         self._buffer.extend(data)
-        logger.debug(f"Buffer append {len(data)} bytes, total: {len(self._buffer)}")
 
     def try_parse_packet(self) -> Optional[AEPacket]:
         if len(self._buffer) < AEPacketHeader.HEADER_SIZE:
-            logger.debug(f"Buffer too small for header: {len(self._buffer)} < {AEPacketHeader.HEADER_SIZE}")
             return None
 
         try:
             header = AEPacketHeader.from_bytes(bytes(self._buffer[:AEPacketHeader.HEADER_SIZE]))
-            logger.debug(f"Parsed header: type=0x{header.data_type:04X}, length={header.length}")
 
             if header.length > self._max_buffer_size:
                 raise ValueError(f"数据长度过大: {header.length} > {self._max_buffer_size}")
 
             total_packet_size = AEPacketHeader.HEADER_SIZE + header.length
             if len(self._buffer) < total_packet_size:
-                logger.debug(f"Incomplete packet: {len(self._buffer)} < {total_packet_size}")
                 return None
 
             data_start = AEPacketHeader.HEADER_SIZE
@@ -58,7 +54,6 @@ class AEReceiveBuffer:
             packet = AEPacket.from_bytes(header, data)
 
             self._buffer = self._buffer[total_packet_size:]
-            logger.debug(f"Packet parsed successfully, remaining buffer: {len(self._buffer)} bytes")
 
             return packet
 
@@ -83,7 +78,6 @@ class AEReceiveBuffer:
 
     def clear(self) -> None:
         self._buffer.clear()
-        logger.debug("Buffer cleared")
 
     @property
     def size(self) -> int:

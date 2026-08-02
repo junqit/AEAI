@@ -37,7 +37,6 @@ class AESocketManager:
         self._wrappers: Dict[str, AESocketWrapper] = {}
         self._lock = threading.Lock()
         self._listeners: List[AESocketListener] = []
-        logger.info("AESocketManager initialized")
 
     def set_socket(self, server_socket: socket.socket) -> None:
         self._server_socket = server_socket
@@ -56,20 +55,15 @@ class AESocketManager:
             if request.user:
                 self._register_user(request.user, result.client_addr)
 
-            logger.info("[AESocketManager] 收到 REQUEST，listeners=%d, user=%s, path=%s, cont_type=%s",
-                        len(self._listeners),
-                        request.user.user_key if request.user else None,
-                        request.req.path if request.req else None,
-                        request.cont.type if request.cont else None)
             for listener in self._listeners:
                 try:
                     listener.on_request_received(request)
                 except Exception as e:
                     logger.error("[AESocketManager] listener.on_request_received 异常: %s", e, exc_info=True)
         elif result.data_type == AEDataType.PING:
-            logger.debug(f"PING from {result.client_addr}")
+            pass
         elif result.data_type == AEDataType.HEARTBEAT:
-            logger.debug(f"Heartbeat from {result.client_addr}")
+            pass
 
     def send_request(self, request: AENetReq) -> bool:
         """发送 AENetReq，委托给用户对应的 AESocketWrapper"""
@@ -111,7 +105,6 @@ class AESocketManager:
             else:
                 wrapper = AESocketWrapper(user, client_addr, self._server_socket)
                 self._wrappers[key] = wrapper
-                logger.debug(f"User wrapper created: {key} -> {client_addr}")
 
     def _user_key(self, user: AEUserInfo) -> str:
         return user.user_key

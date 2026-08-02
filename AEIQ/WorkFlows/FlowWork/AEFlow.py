@@ -146,7 +146,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """flow 描述信息（hook）：返回 [d=deepth]，子类覆写可追加 role / title。"""
         return f"[d={self.deepth}]"
 
-    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_user_instruction）====================
+    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / subflow_summarize_prompt）====================
 
     def summarize_extend_messages(self) -> list:
         """汇总扩展 message（hook，非私有，可被子类覆写）：返回需追加到汇总 messages 头部的额外消息列表。
@@ -157,15 +157,17 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """
         return []
 
-    def summarize_user_instruction(self) -> str:
+    def subflow_summarize_prompt(self) -> str:
         """汇总 user 指令（hook，非私有，可被子类覆写）：子类可覆写以定制口吻（如 Chat.AEChat 面向用户的人性化回答）。
 
         由 AEFlowDelegateImpl.summarize_to_llm 在所有子 flow 完成后调用。
         """
         return (
-            "请对以上各子任务的结果进行总结，形成最终结论；"
-            "总结时必须保留所有重点信息与关键细节，不得遗漏或弱化要点，也不能为精简而丢掉重要信息；"
-            "仅对冗余、重复的内容去重。"
+            "请根据以上所有子任务的结果，整理形成最终结论。\n"
+            "要求：\n"
+            "- 保留全部信息，不得删除任何内容\n"
+            "- 仅对重复、冗余的部分去重\n"
+            "- 按逻辑整理，使结论清晰可读"
         )
 
     # ==================== AEFlowDelegate 实现 ====================

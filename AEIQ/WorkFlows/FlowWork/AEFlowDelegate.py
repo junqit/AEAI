@@ -13,7 +13,7 @@ AEFlowDelegateImpl 为协议方法的实例实现（mixin），由 AEFlow 继承
 
 本类管工作流流转（结果路由 / 子 flow 编排 / 完成聚合触发）与结果汇总编排（summarize_to_llm，
 非私有，可被子类单独实现）；汇总扩展消息 hook（summarize_extend_messages）与 outResult_summary
-属角色信息，由 Roles.AERoleBase 覆写，summarize_user_instruction 由 Chat.AEChat 覆写
+属角色信息，由 Roles.AERoleBase 覆写，subflow_summarize_prompt 由 Chat.AEChat 覆写
 （receive_flow_result 在所有子 flow 完成时调 self.summarize_to_llm()）。flow 基类不体现 role 信息。
 """
 import logging
@@ -169,7 +169,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
         - 有 default 子 flow：启动下一个 default 子 flow（异步执行）
         - 所有子 flow 均已完成：触发 self.summarize_to_llm() 汇总（默认实现在本类
-          AEFlowDelegateImpl；summarize_extend_messages / summarize_user_instruction 等 hook 由
+          AEFlowDelegateImpl；summarize_extend_messages / subflow_summarize_prompt 等 hook 由
           Roles.AERoleBase / Chat.AEChat 覆写）。
         - 否则等待剩余子 flow。
 
