@@ -18,8 +18,8 @@ from typing import Optional
 from WorkFlows.AEIQFlow import AEIQFlow
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
-from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AE_USER_QUESTION_PREFIX, AEConentRole, AE_ROLE, AE_CONTENT
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
+from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AE_USER_QUESTION_PREFIX, AEConentRole, AE_ROLE
 from Roles.AERoleInformation import AERoleInformation
 from Roles.AERoleQuestionOptimize import AERoleQuestionOptimize
 
@@ -97,7 +97,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         - 无 roleGoal：回退到 title 作为上下文，
           「{title} 我的回答：{answer}」，避免只剩裸「我的回答：{answer}」丢失上下文。
         """
-        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
+        answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
         question = self.roleGoal or ""
         if question:
             return f"{AE_USER_QUESTION_PREFIX}{question} 我的回答：{answer}"

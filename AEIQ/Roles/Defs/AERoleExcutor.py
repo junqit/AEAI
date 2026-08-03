@@ -18,7 +18,7 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Roles.AERoleType import AEFlowRole
 from Roles.AERoleBase import AERoleBase
@@ -43,17 +43,17 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
         self._questionType: str = ""
         self.role = self._role()
 
-    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
-        """启动：交基类置 input；基类未启动（非 default 状态）则错误完成，避免父 flow 等待卡死。"""
-        if not super().receive_flow_input(flowInput):
-            logger.warning("[%s][d=%s] receive_flow_input 失败：基类未启动（非 default 状态），以错误完成避免卡死",
-                           self.title, self.deepth)
+    def on_flow_start(self, flowInput) -> bool:
+        """启动：基类置 input；未启动则错误完成，避免父 flow 等待卡死。"""
+        if not super().on_flow_start(flowInput):
+            logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "flow 启动失败"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "flow 启动失败"},
                 AEFlowCompletEvent.error,
             )
-            return
+            return False
         self.requestRoleInformation()
+        return True
 
     def receiveRolePrompt(self, data: dict) -> bool:
         """接收 rolePrompt：基类校验 map 并存储（失败则错误完成）；rolePrompt 就绪后请求问题优化。"""
@@ -70,7 +70,7 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
             logger.warning("[%s][d=%s] roleGoal 为空，以错误完成本 flow 避免卡死",
                            self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "问题优化失败"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "问题优化失败"},
                 AEFlowCompletEvent.error,
             )
             return True

@@ -6,9 +6,9 @@ from enum import Enum
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
+from Roles.AERoleType import AEConentRole, AE_ROLE
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
-from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +76,12 @@ class AELLMPayload:
         return list(self._env_params)
 
     def _extract_content_template(self):
-        """取出 out_schema 最内层 llm_out（内容），并按 AE_ANSWER 收敛，确保 LLM 不接触 ident：
+        """取出 out_schema 最内层 llm_out（内容），并按 AE_CONTENT 收敛，确保 LLM 不接触 ident：
 
         - 沿 llm_out 下钻到最内层内容（占位符所在层）。
-        - 若内容为含 AE_ANSWER 的 dict（如 complete 阶段 {ident, reply: <|..|>}），
-          只取 {AE_ANSWER: <模板>}，隐去 ident 等路由字段——LLM 只填 AE_ANSWER。
-        - 否则（内容无 AE_ANSWER，如 {"result": <|..|>} 或任务数组）取整个内容；
+        - 若内容为含 AE_CONTENT 的 dict（如 complete 阶段 {ident, reply: <|..|>}），
+          只取 {AE_CONTENT: <模板>}，隐去 ident 等路由字段——LLM 只填 AE_CONTENT。
+        - 否则（内容无 AE_CONTENT，如 {"result": <|..|>} 或任务数组）取整个内容；
           这些内容本身不含 ident，可直接发给 LLM。
         """
         node = self.out_schema
@@ -93,8 +93,8 @@ class AELLMPayload:
             else:
                 content = child
                 break
-        if isinstance(content, dict) and AE_ANSWER in content:
-            return {AE_ANSWER: content[AE_ANSWER]}
+        if isinstance(content, dict) and AE_CONTENT in content:
+            return {AE_CONTENT: content[AE_CONTENT]}
         return content
 
     def to_llm_request_dic(self) -> dict:
@@ -124,7 +124,7 @@ class AELLMPayload:
     def fill_content(self, filled_content) -> dict:
         """两步流程·第二步：把 LLM 生成的内容回填到信封，返回完整信封（含可信 ident，逐字保留）。
 
-        - 若最内层内容为含 AE_ANSWER 的 dict：仅回填 AE_ANSWER，ident 等路由字段保持不变。
+        - 若最内层内容为含 AE_CONTENT 的 dict：仅回填 AE_CONTENT，ident 等路由字段保持不变。
         - 否则：用 LLM 生成的内容整体替换最内层 llm_out（此类内容不含 ident）。
         """
         import copy
@@ -135,11 +135,11 @@ class AELLMPayload:
             if isinstance(child, dict) and AE_LLM_OUT in child:
                 node = child
             else:
-                if isinstance(child, dict) and AE_ANSWER in child:
-                    if isinstance(filled_content, dict) and AE_ANSWER in filled_content:
-                        child[AE_ANSWER] = filled_content[AE_ANSWER]
+                if isinstance(child, dict) and AE_CONTENT in child:
+                    if isinstance(filled_content, dict) and AE_CONTENT in filled_content:
+                        child[AE_CONTENT] = filled_content[AE_CONTENT]
                     else:
-                        child[AE_ANSWER] = filled_content
+                        child[AE_CONTENT] = filled_content
                 else:
                     node[AE_LLM_OUT] = filled_content
                 break

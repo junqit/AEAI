@@ -9,7 +9,7 @@ from enum import Enum
 
 from WorkFlows.FlowWork.AEFlow import AEFlow
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)
@@ -61,18 +61,19 @@ class AEScript(AEFlow):
 
         AEScript 非角色 flow（不经问题优化），故以 title（脚本用途）作为上下文。
         """
-        answer = self.outResult.get(AE_ANSWER, "") if isinstance(self.outResult, dict) else ""
+        answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
         if self.title:
             return f"{self.title} 我的回答：{answer}"
         return f"我的回答：{answer}"
 
-    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
+    def on_flow_start(self, flowInput) -> bool:
         """启动：执行脚本；失败则请求 LLM 修正后重试。"""
-        if not super().receive_flow_input(AEFlowInput(content="", ident=self.ident)):
-            return
+        if not super().on_flow_start(AEFlowInput(content="", ident=self.ident)):
+            return False
         self._retry_count = 0
         self._last_error = ""
         self._run_script()
+        return True
 
     def _run_script(self) -> None:
         """执行脚本；成功则完成，失败且有重试次数则请求 LLM 修正，否则以空结果完成。"""
@@ -99,12 +100,12 @@ class AEScript(AEFlow):
         if isinstance(stdout, str) and len(stdout) > self.MAX_STDOUT_LEN:
             stdout = stdout[:self.MAX_STDOUT_LEN] + f"\n...（已截断，原始长度 {len(stdout)} 字符）"
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_ANSWER: stdout})
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: stdout})
 
     def _request_script_fix(self, error: str) -> None:
         """请求 LLM 根据错误信息、脚本能力与内容修正脚本。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
+        from Roles.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,

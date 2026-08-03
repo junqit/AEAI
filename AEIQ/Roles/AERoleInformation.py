@@ -2,11 +2,11 @@
 角色信息属性（role / title / responsibility / rolePrompt / roleGoal）由基类 AERoleInfo 持有。"""
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_USER_QUESTION_PREFIX
 from Roles.AERoleInfo import AERoleInfo
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class AERoleInformation(AERoleInfo):
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
         flow_out.set_llm_out({
             AE_TITLE: llm_generate("工作名称，体现专业领域与定位"),
-            "responsibility": llm_generate("职责范围，明确职责边界与禁止事项"),
+            AE_RESPONSIBILITY: llm_generate("职责范围，明确职责边界与禁止事项"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
@@ -54,10 +54,10 @@ class AERoleInformation(AERoleInfo):
         if not isinstance(data, dict):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
-        self.responsibility = data.get("responsibility", "") or ""
+        self.responsibility = data.get(AE_RESPONSIBILITY, "") or ""
         if not self.title or not self.responsibility:
             logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "角色信息（title/responsibility）生成失败"}, AEFlowCompletEvent.error)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "角色信息（title/responsibility）生成失败"}, AEFlowCompletEvent.error)
             return True
         self.requestRolePrompt()
         return True
@@ -88,7 +88,7 @@ class AERoleInformation(AERoleInfo):
         if not isinstance(data, dict):
             logger.warning("[%s][d=%s] rolePrompt 回包非 map，以错误完成: %r", self.title, self.deepth, data)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "rolePrompt 生成失败（回包非 map）"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "rolePrompt 生成失败（回包非 map）"},
                 AEFlowCompletEvent.error,
             )
             return True
@@ -96,7 +96,7 @@ class AERoleInformation(AERoleInfo):
         if not prompt:
             logger.warning("[%s][d=%s] rolePrompt 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "rolePrompt 生成失败"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "rolePrompt 生成失败"},
                 AEFlowCompletEvent.error,
             )
             return True

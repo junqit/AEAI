@@ -21,7 +21,7 @@ from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_ANSWER
+from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_CONTENT
 from .AEFlowInput import AEFlowStatus, AEFlowInput, AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
@@ -96,8 +96,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         - 其他：打印错误，不处理
         """
         if flowInput.ident == self.ident:
-            # 检查状态顺序（int Enum 直接比较），self.status 必须晚于 input.state
-            if self.status.value <= flowInput.state.value:
+            # 检查状态顺序（int Enum 直接比较），self.status 必须早于 input.state 才可接收
+            if self.status.value > flowInput.state.value:
                 logger.warning(
                     "[d=%s] receive_flow_input 状态不允许：self=%s input=%s，忽略",
                     self.deepth, self.status, flowInput.state,
@@ -126,7 +126,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         return False
 
     def on_flow_start(self, flowInput) -> bool:
-        """启动 flow：置 input、切到 processing。子类覆写以追加业务逻辑。"""
+        """启动 flow：置 input、切到 processing。子类覆写以追加业务逻辑（覆写时调 super().on_flow_start 完成基础置位）。"""
         self.input = flowInput
         self.status = AEFlowStatus.processing
         return True
@@ -136,16 +136,16 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         return False
 
     def sub_flow_complete(self, flowInput) -> bool:
-        """子 flow 完成：所有子 flow 均完成则汇总，否则通知父 flow 等待。"""
+        """子 flow 完成：所有子 flow 均完成则汇总，否则等待剩余子 flow。"""
+        if not self._flows:
+            return True
         if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
             self.summarize_to_llm()
-            return True
-        complete_input = AEFlowInput(
-            content=flowInput.parameter.get(AE_CONTENT, ""),
-            ident=self.ident,
-        )
-        complete_input.state = AEFlowStatus.complete
-        self.delegate.receive_flow_input(complete_input)
+        else:
+            logger.info("[%s][d=%s] 子 flow 未全部完成，等待剩余: %d/%d",
+                        self.title, self.deepth,
+                        sum(1 for f in self._flows.values() if f.status == AEFlowStatus.complete),
+                        len(self._flows))
         return True
 
     def add_flow(self, sub_flow) -> None:
@@ -188,6 +188,6 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     def summarize_to_llm(self) -> None:
         """AEFlow 默认：直接完成本 flow 闭环，不做 LLM 汇总。由子类（AERoleBase）覆写为 LLM 汇总。"""
         self.flow_receive_complete(
-            {AE_IDENT: self.ident, AE_ANSWER: ""},
+            {AE_IDENT: self.ident, AE_CONTENT: ""},
             AEFlowCompletEvent.start,
         )

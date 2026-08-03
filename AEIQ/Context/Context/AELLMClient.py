@@ -4,7 +4,7 @@ import httpx
 from json_repair import repair_json
 
 from .AELLMPayload import AELLMPayload
-from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
     """两步流程：仅把内容模板发给 LLM 生成内容，回包后回填固定信封，返回完整信封 dict（含可信 ident）。
 
     LLM 全程不接触 ident 等路由字段，故不会腐蚀路由信封；ident 由框架持有的信封逐字保留。
-    LLM 返回错误或内容不可解析时，不再丢弃回包，而是把原数据结构内 AE_ANSWER 置为
+    LLM 返回错误或内容不可解析时，不再丢弃回包，而是把原数据结构内 AE_CONTENT 置为
     "llm 生成失败" 后返回完整信封，使 flow 仍能收到回包事件并推进，避免挂死。
     """
     try:
@@ -36,6 +36,7 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         #     "📤 即将发送 LLM 请求:\n%s",
         #     json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
         # )
+        logger.info("[AELLMClient] 发送 LLM 请求")
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
@@ -53,13 +54,13 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
 
 
 def _build_failure_envelope(payload: AELLMPayload, reason: str = "") -> dict:
-    """LLM 失败 / 不可解析时，把原数据结构内 AE_ANSWER 置为失败原因，返回完整信封。
+    """LLM 失败 / 不可解析时，把原数据结构内 AE_CONTENT 置为失败原因，返回完整信封。
 
-    复用 payload.fill_content 的回填逻辑：最内层含 AE_ANSWER 的 dict 直接替换其值；
-    否则用 {AE_ANSWER: reason} 整体替换最内层 llm_out。两种情况均保证信封内出现
-    AE_ANSWER=失败原因，下游 flow 可据此收尾推进。
+    复用 payload.fill_content 的回填逻辑：最内层含 AE_CONTENT 的 dict 直接替换其值；
+    否则用 {AE_CONTENT: reason} 整体替换最内层 llm_out。两种情况均保证信封内出现
+    AE_CONTENT=失败原因，下游 flow 可据此收尾推进。
     """
-    return payload.fill_content({AE_ANSWER: reason})
+    return payload.fill_content({AE_CONTENT: reason})
 
 
 def _strip_code_fence(text: str) -> str:

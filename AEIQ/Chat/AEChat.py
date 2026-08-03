@@ -43,7 +43,7 @@ import logging
 from typing import Optional
 
 from WorkFlows.AEIQFlow import AEIQFlow
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
@@ -70,7 +70,7 @@ class AEChat(AEIQFlow):
         # 添加首个子 flow：问题精炼（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
         # refiner 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
         from Context.Context.AELLMPayload import llm_generate
-        refiner_output = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("精炼后的问题")})
+        refiner_output = AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("精炼后的问题")})
         refiner = AERefiner(flowOutput=refiner_output)
         self.add_flow(refiner)
 
@@ -86,21 +86,20 @@ class AEChat(AEIQFlow):
             "不要提及内部的拆解、角色、任务等执行过程，直接给出对用户有用的最终回答。"
         )
 
-    def receive_flow_input(self, flowInput: AEFlowInput) -> None:
-        """启动 chat flow：交基类置 input 并切到 processing，随后启动首个子 flow。
-
-        - 仅当基类 receive_flow_input 返回 True（成功启动）时，才取首个子 flow（问题精炼）启动
-        - 任一启动失败均以错误回调 complete 闭环，避免会话永挂
-        """
-        if not super().receive_flow_input(flowInput):
-            logger.warning("[%s][d=%s] receive_flow_input 失败：基类未启动（非 default 状态），以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
-            return
+    def on_flow_start(self, flowInput) -> bool:
+        """启动 chat flow：基类置 input 并切到 processing 后，启动首个子 flow。"""
+        if not super().on_flow_start(flowInput):
+            logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
+            return False
         next_flow = self.nextFlow()
         if next_flow is None:
-            logger.warning("[%s][d=%s] receive_flow_input 失败：无 default 状态子 flow 可启动，以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
-            return
-        next_flow.receive_flow_input(flowInput)
+            logger.warning("[%s][d=%s] on_flow_start 失败：无 default 状态子 flow 可启动", self.title, self.deepth)
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
+            return False
+        from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AE_CONTENT
+        child_input = AEFlowInput(content=flowInput.parameter.get(AE_CONTENT, ""), ident=next_flow.ident)
+        next_flow.receive_flow_input(child_input)
+        return True
 
 

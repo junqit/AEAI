@@ -10,10 +10,10 @@ requestOptimizeInput 以 role_brief 作为系统提示、以 rolePrompt 作为�
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE, AE_USER_QUESTION_PREFIX
 from Roles.AERoleInfo import AERoleInfo
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         （针对 AE_USER_QUESTION_PREFIX 的优化指令），让 LLM 据此生成一段「问题优化提示」。
 
         - messages: system(role_brief，含身份与能力) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(rolePrompt 作为针对用户问题的提问指令；为空时回退默认指令)
-        - out_schema: {AE_ANSWER: 问题优化提示 占位}，由 LLM 填充
+        - out_schema: {AE_CONTENT: 问题优化提示 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 roleGoal（不完成 flow）
 
         注：rolePrompt 由 requestRoleInformation 一并生成，是本角色针对用户问题（AE_USER_QUESTION_PREFIX）
@@ -61,7 +61,8 @@ class AERoleQuestionOptimize(AERoleInfo):
             AE_CONTENT: self.rolePrompt or default_instruction,
         })
         flow_out = self.generateFlowOutput(AERoleQuestionOptimizeFunction.receiveOptimizeInput)
-        flow_out.set_llm_out({AE_ANSWER: llm_generate("优化后的问题")})
+        flow_out.set_llm_out({AE_CONTENT: llm_generate("优化后的问题")})
+        logger.info("[%s][d=%s] requestOptimizeInput -> send_llm_payload", self.title, self.deepth)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 
@@ -71,12 +72,12 @@ class AERoleQuestionOptimize(AERoleInfo):
         成功时打印一次完整摘要（title / responsibility / 原始问题 / 优化后的问题 / rolePrompt）。
 
         Args:
-            data: 回包内层 llm_out，形如 {AE_ANSWER: <生成的问题优化提示>}
+            data: 回包内层 llm_out，形如 {AE_CONTENT: <生成的问题优化提示>}
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
         """
-        prompt = data.get(AE_ANSWER) if isinstance(data, dict) else None
+        prompt = data.get(AE_CONTENT) if isinstance(data, dict) else None
         if prompt is None and isinstance(data, str):
             prompt = data
         self.roleGoal = prompt or ""
@@ -84,9 +85,9 @@ class AERoleQuestionOptimize(AERoleInfo):
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"
-            "  原始问题: %s\n  角色目标: %s\n  rolePrompt: %s\n"
+            "  title: %s\n  responsibility: %s\n  rolePrompt: %s\n  原始问题: %s\n  角色目标: %s\n"
             "========================================",
             self.title, self.deepth,
-            original, self.roleGoal, self.rolePrompt,
+            self.title, self.responsibility, self.rolePrompt, original, self.roleGoal,
         )
         return True

@@ -8,12 +8,12 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Context.Context.AELLMPayload import AELLMPayload, AEEnvParamType, llm_generate
 from Tools.Scrips import AEScript
-from Roles.AERoleType import AEFlowRole, AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT
+from Roles.AERoleType import AEFlowRole, AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE
 from Roles.Defs.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ class AETaskRole(AERoleExcutor):
         # 非 script：task 须通过脚本完成，不直答，以错误完成闭环
         logger.warning("[%s][d=%s] task 判定为非脚本（%r），以错误完成", self.title, self.deepth, result)
         self.flow_receive_complete(
-            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "task 须通过脚本完成"},
+            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "task 须通过脚本完成"},
             AEFlowCompletEvent.error,
         )
         return True
@@ -110,7 +110,7 @@ class AETaskRole(AERoleExcutor):
         })
         flow_out = self.generateFlowOutput(AETaskRoleFunction.receiveScripts)
         flow_out.set_llm_out({
-            AE_ANSWER: [{
+            AE_CONTENT: [{
                 AE_TITLE: llm_generate("作用（脚本用途说明）"),
                 "script": llm_generate("脚本内容（可执行的脚本文本）"),
                 "type": llm_generate("脚本类型，取值 python / shell / ruby 之一"),
@@ -124,19 +124,19 @@ class AETaskRole(AERoleExcutor):
 
     def receiveScripts(self, data: dict) -> bool:
         """接收 LLM 返回的多个 AEScript 任务，逐项创建并加入 self._flows。"""
-        result = data.get(AE_ANSWER) if isinstance(data, dict) else None
+        result = data.get(AE_CONTENT) if isinstance(data, dict) else None
         if result is None and isinstance(data, str):
             result = data
         if isinstance(result, list):
             specs = result
         else:
-            logger.warning("[%s][d=%s] AE_ANSWER 非数组，跳过脚本生成", self.title, self.deepth)
+            logger.warning("[%s][d=%s] AE_CONTENT 非数组，跳过脚本生成", self.title, self.deepth)
             specs = []
         for spec in specs:
             if not isinstance(spec, dict):
                 continue
             try:
-                flowOutput = AEFlowOutput({AE_IDENT: self.ident, AE_ANSWER: llm_generate("脚本执行结果")})
+                flowOutput = AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("脚本执行结果")})
                 script_flow = AEScript(flowOutput=flowOutput)
                 script_flow.update(spec.get(AE_TITLE, ""), spec.get("script", ""), spec.get("type", ""))
                 self.add_flow(script_flow)
@@ -148,7 +148,7 @@ class AETaskRole(AERoleExcutor):
             logger.info("[%s][d=%s] 启动首个 AEScript: title=%r", self.title, self.deepth, first_script.title)
         else:
             logger.warning("[%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可执行的脚本任务（脚本生成失败或为空）"}, AEFlowCompletEvent.error)
+            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可执行的脚本任务（脚本生成失败或为空）"}, AEFlowCompletEvent.error)
         return True
 
     # ==================== 辅助 ====================

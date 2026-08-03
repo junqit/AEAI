@@ -10,7 +10,7 @@ from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
 from .AEFlowInput import AEFlowInput, AEFlowStatus
-from .AEFlowInfo import AE_IDENT, AE_ANSWER, AE_funcationkey
+from .AEFlowInfo import AE_IDENT, AE_CONTENT, AE_funcationkey
 from .AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload
 
@@ -63,7 +63,7 @@ class AEFlowInterfaceImpl:
                 "[d=%s] 收到的数据非 map，无法解析，以错误完成本 flow 闭环: %r",
                 self.deepth, data,
             )
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法解析"}, AEFlowCompletEvent.error)
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "LLM 回包非 map，无法解析"}, AEFlowCompletEvent.error)
             return
 
         ident = data.get(AE_IDENT)
@@ -101,7 +101,7 @@ class AEFlowInterfaceImpl:
                 "[d=%s] out_schema 非 map，以错误完成本 flow 避免卡死: %r",
                 self.deepth, out_schema,
             )
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包非 map，无法处理"}, AEFlowCompletEvent.error)
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "LLM 回包非 map，无法处理"}, AEFlowCompletEvent.error)
             return
         command = out_schema.get(AE_funcationkey)
         inner = out_schema.get(AE_LLM_OUT)
@@ -110,6 +110,6 @@ class AEFlowInterfaceImpl:
                 "[d=%s] out_schema 内 funcationkey=%r 无效或缺失，以错误完成本 flow 避免卡死: %r",
                 self.deepth, command, out_schema,
             )
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_ANSWER: "LLM 回包 funcationkey 无效，无法路由处理"}, AEFlowCompletEvent.error)
+            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "LLM 回包 funcationkey 无效，无法路由处理"}, AEFlowCompletEvent.error)
             return
         self.excutor.exec(command, inner)

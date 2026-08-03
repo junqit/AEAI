@@ -92,6 +92,7 @@ class AEUserContext:
 
     def send_llm_request(self, payload) -> None:
         """异步发送 LLM 请求：提交到 loop 立即返回（无返回值）；回复到达后由 AEContextCenter 派发。"""
+        logger.info("[AEUserContext] send_llm_request -> run_coroutine_threadsafe")
         asyncio.run_coroutine_threadsafe(self._do_llm(payload), self._loop)
 
     async def _do_llm(self, payload) -> None:

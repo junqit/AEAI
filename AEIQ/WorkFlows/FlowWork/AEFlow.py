@@ -16,7 +16,7 @@ import uuid
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_ANSWER
+from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_CONTENT
 from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
 from .AEFlowInterface import AEFlowInterfaceImpl
 from .AEFlowInput import AEFlowStatus, AEFlowInput
@@ -82,18 +82,18 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         return True
 
     def flow_receive_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.start) -> bool:
-        """status=complete：置状态、赋值 outResult，经 delegate.receive_flow_input 通知父 flow。"""
+        """status=complete：置状态、赋值 outResult，直接调 delegate.sub_flow_complete 通知父 flow。"""
         if self.status == AEFlowStatus.complete:
             logger.error(
                 "[%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s outResult=%r",
-                type(self).__name__, self.ident, self.deepth, event, out_schema,
+                type(self).__name__, self.deepth, event, out_schema,
             )
             return True
         self.status = AEFlowStatus.complete
         self.outResult = out_schema
         if self.delegate is not None:
-            answer = out_schema.get(AE_ANSWER, "") if isinstance(out_schema, dict) else ""
-            complete_input = AEFlowInput(content=answer, ident=self.ident)
+            answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
+            complete_input = AEFlowInput(content=answer, ident=self.output.ident)
             complete_input.state = AEFlowStatus.complete
             self.delegate.receive_flow_input(complete_input)
         return True
@@ -129,6 +129,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             AE_IDENT: self.ident,
             AE_LLM_OUT: payload.out_schema,
         }
+        logger.info("[%s][d=%s] send_llm_payload -> delegate.flow_send_llm_request", self.title, self.deepth)
         self.delegate.flow_send_llm_request(payload)
 
     # ==================== 描述信息 hook（子类覆写提供更丰富描述）====================

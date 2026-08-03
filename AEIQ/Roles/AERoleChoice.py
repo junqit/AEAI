@@ -11,12 +11,12 @@ import logging
 from WorkFlows.FlowWork.AEFlow import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER, AE_TITLE
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import (
     AEFlowRole, ROLE_PARAMS, roles_below,
-    AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT,
+    AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class AERoleChoice:
             if not candidates:
                 # 无可选下层角色，以错误完成闭环
                 self.flow_receive_complete(
-                    {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "无可选下层角色"},
+                    {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可选下层角色"},
                     AEFlowCompletEvent.error,
                 )
                 return
@@ -125,7 +125,7 @@ class AERoleChoice:
             AEFlowRole.llm: AELLMRole,
         }
         cls = role_class[role_enum]
-        return cls(flowOutput=AEFlowOutput({AE_IDENT: ident, AE_ANSWER: llm_generate("任务结论")}))
+        return cls(flowOutput=AEFlowOutput(ident=ident, out_schema={AE_CONTENT: llm_generate("任务结论")}))
 
     def _create_role_flows(self, roles: list, is_subflow: bool = True) -> int:
         """根据工作流列表创建角色 flow 并启动。
@@ -170,7 +170,7 @@ class AERoleChoice:
                 self.add_flow(sub)
             else:
                 self.delegate.add_flow(sub)
-            sub.receive_flow_input(AEFlowInput(content=content, ident=self.ident))
+            sub.receive_flow_input(AEFlowInput(content=content, ident=sub.ident))
             created += 1
         return created
 
@@ -184,14 +184,14 @@ class AERoleChoice:
         if not workflows:
             logger.warning("[%s][d=%s] 返回空工作流，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_ANSWER: "未返回可执行工作流"},
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "未返回可执行工作流"},
                 AEFlowCompletEvent.error,
             )
             return True
         if self.delegate is None:
             logger.warning("[%s][d=%s] delegate 未设置，以错误完成", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.ident, AE_ANSWER: "delegate 未设置"},
+                {AE_IDENT: self.ident, AE_CONTENT: "delegate 未设置"},
                 AEFlowCompletEvent.error,
             )
             return True
@@ -199,7 +199,7 @@ class AERoleChoice:
         if created == 0:
             logger.warning("[%s][d=%s] 全部工作流 role 非法被跳过，以错误完成闭环", self.title, self.deepth)
             self.flow_receive_complete(
-                {AE_IDENT: self.ident, AE_ANSWER: "全部工作流 role 非法被跳过"},
+                {AE_IDENT: self.ident, AE_CONTENT: "全部工作流 role 非法被跳过"},
                 AEFlowCompletEvent.error,
             )
             return True

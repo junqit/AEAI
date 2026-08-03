@@ -27,8 +27,11 @@ AE_IDENT = "ident"
 # out_schema / 路由信封内 title 字段名（字段常量保留，供 Context 等使用；WorkFlows 信封不再写入）
 AE_TITLE = "title"
 
+# out_schema / 路由信封内 responsibility 字段名
+AE_RESPONSIBILITY = "responsibility"
+
 # llm_out 内默认 answer 字段名
-AE_ANSWER = "reply"
+AE_CONTENT = "content"
 
 # llm_out 内「需要提问者确认的信息」字段名
 AE_CONFIRM = "confirm"
@@ -81,18 +84,18 @@ class AEFlowInfo:
                         路由到对应方法。
 
         llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；
-        其余阶段用默认占位 {AE_ANSWER: llm_generate("生成的答案")}。
+        其余阶段用默认占位 {AE_CONTENT: llm_generate("生成的答案")}。
         """
         from Context.Context.AELLMPayload import llm_generate
 
         if functional == AEFunctional.flow_receive_complete and self.output is not None:
             llm_out = self.output.out_schema
         else:
-            llm_out = {AE_ANSWER: llm_generate("给出最准确的答案，不可随意！！")}
+            llm_out = {AE_CONTENT: llm_generate("给出最准确的答案，不可随意！！")}
 
         funcationkey = self.registerFunctional(functional)
 
-        return AEFlowOutput(out_schema={
+        return AEFlowOutput(ident=self.ident, out_schema={
             AE_IDENT: self.ident,
             AE_funcationkey: funcationkey,
             AE_LLM_OUT: llm_out,

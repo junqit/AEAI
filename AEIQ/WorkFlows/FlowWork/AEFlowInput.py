@@ -24,5 +24,5 @@ class AEFlowInput:
         self.parameter: Dict[str, Any] = {}
         if content:
             self.parameter[AE_CONTENT] = content
-        self.state: AEFlowStatus = AEFlowStatus.default
+        self.state: AEFlowStatus = AEFlowStatus.start
         self.ident: str = ident

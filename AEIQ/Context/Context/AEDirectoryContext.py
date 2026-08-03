@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from .AELLMPayload import AEEnvParamType
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -235,5 +236,5 @@ class AEDirectoryContext(AEBaseContext):
         """组装完整的 role prompt，返回 {role: content} 结构"""
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
-        from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
+        from Roles.AERoleType import AEConentRole, AE_ROLE
         return {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt}

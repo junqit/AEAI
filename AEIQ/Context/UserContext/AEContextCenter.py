@@ -55,14 +55,15 @@ class AEContextCenter(AEContextDelegate):
 
     def send_llm_request(self, payload) -> None:
         """转发 LLM 请求给上层 delegate；注入 DirectoryContext 的环境参数 prompt。"""
-        # 获取 DirectoryContext，注入 payload 携带的环境参数（env_params）prompt
         directory = self.find_by_type(AEContextType.directory)
         if directory is not None:
-            from Roles.AERoleType import AEConentRole, AE_ROLE, AE_CONTENT
+            from Roles.AERoleType import AEConentRole, AE_ROLE
+            from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
             for env_param in reversed(list(payload.env_params)):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
+        logger.info("[AEContextCenter] send_llm_request -> delegate.send_llm_request")
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
@@ -112,6 +113,7 @@ class AEContextCenter(AEContextDelegate):
         if context_type in self._SINGLETON_TYPES:
             existing = self.find_by_type(context_type)
             if existing:
+                logger.info("[AEContextCenter] 复用 context: type=%s", context_type.value)
                 return existing
 
         context_map = {

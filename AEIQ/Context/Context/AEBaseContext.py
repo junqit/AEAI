@@ -10,7 +10,7 @@ from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Chat.AEChat import AEChat
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_ANSWER
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AEFlowStatus, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
@@ -66,21 +66,21 @@ class AEBaseContext:
         chat_ident = uuid.uuid4().hex
         chat = AEChat(
             ident=chat_ident,
-            flowOutput=AEFlowOutput({AE_IDENT: chat_ident, AE_ANSWER: llm_generate("对用户的回复")}),
+            flowOutput=AEFlowOutput(ident=chat_ident, out_schema={AE_CONTENT: llm_generate("对用户的回复")}),
         )
         chat.req = req
         chat.set_delegate(self)
         self._chat_map[chat.ident] = chat
         logger.info("[Context] receive_chat: %s", question.content or "")
-        flow_input = AEFlowInput(content=question.content or "", ident=self.ident)
+        flow_input = AEFlowInput(content=question.content or "", ident=chat_ident)
+        logger.info("[Context] submit chat.receive_flow_input to executor")
         self._executor.submit(chat.receive_flow_input, flow_input)
 
     # ==================== AEFlowDelegate 协议实现 ====================
 
     def receive_flow_input(self, flowInput: AEFlowInput) -> bool:
-        """仅处理 complete 状态——子 flow 完成时，AE_CONTENT 转为 reply 发送响应。"""
+        """收到回复后直接 response——AE_CONTENT 转为 reply 发送响应。"""
         if flowInput.state != AEFlowStatus.complete:
-            logger.warning("[Context] receive_flow_input 仅处理 complete，当前 state=%s，忽略", flowInput.state)
             return False
         chat = self._chat_map.get(flowInput.ident)
         if chat is None:
@@ -93,7 +93,7 @@ class AEBaseContext:
             code=AENetRspCode.success,
             cont=AENetCont(type=self.context_type.value, ident=self.ident, space=self.space),
             req=chat.req,
-            rsp={AE_ANSWER: reply},
+            rsp={"reply": reply},
         )
         self.send_response(rsp)
         return True
@@ -105,6 +105,7 @@ class AEBaseContext:
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
         """转发 LLM 请求，用 context.ident 包装 out_schema。"""
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
+        logger.info("[Context] flow_send_llm_request -> send_llm_request")
         self.send_llm_request(payload)
 
     # ==================== delegate 转发 ====================
@@ -122,4 +123,5 @@ class AEBaseContext:
     def send_llm_request(self, payload) -> None:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
+        logger.info("[Context] send_llm_request -> delegate.send_llm_request")
         self.delegate.send_llm_request(payload)

@@ -6,7 +6,8 @@ AELLMRole - LLM 直接作答角色 Flow，继承 AERoleExcutor。
 _role()=llm；requestRoleSelect 覆写为直接作答（替代默认的 requestRoleSelect）。
 """
 from Context.Context.AELLMPayload import AELLMPayload
-from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AE_CONTENT, AEFlowRole
+from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AEFlowRole
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Roles.Defs.AERoleExcutor import AERoleExcutor
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
