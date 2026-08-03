@@ -62,7 +62,6 @@ class AERoleQuestionOptimize(AERoleInfo):
         })
         flow_out = self.generateFlowOutput(AERoleQuestionOptimizeFunction.receiveOptimizeInput)
         flow_out.set_llm_out({AE_CONTENT: llm_generate("优化后的问题")})
-        logger.info("[%s][d=%s] requestOptimizeInput -> send_llm_payload", self.title, self.deepth)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)
 

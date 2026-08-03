@@ -63,8 +63,7 @@ class AEContextCenter(AEContextDelegate):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
-        logger.info("[AEContextCenter] send_llm_request -> delegate.send_llm_request")
-        self._delegate.send_llm_request(payload)
+                self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
 

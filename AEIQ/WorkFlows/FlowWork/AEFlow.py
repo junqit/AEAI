@@ -129,7 +129,6 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             AE_IDENT: self.ident,
             AE_LLM_OUT: payload.out_schema,
         }
-        logger.info("[%s][d=%s] send_llm_payload -> delegate.flow_send_llm_request", self.title, self.deepth)
         self.delegate.flow_send_llm_request(payload)
 
     # ==================== 描述信息 hook（子类覆写提供更丰富描述）====================

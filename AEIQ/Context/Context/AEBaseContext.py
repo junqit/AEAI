@@ -73,7 +73,6 @@ class AEBaseContext:
         self._chat_map[chat.ident] = chat
         logger.info("[Context] receive_chat: %s", question.content or "")
         flow_input = AEFlowInput(content=question.content or "", ident=chat_ident)
-        logger.info("[Context] submit chat.receive_flow_input to executor")
         self._executor.submit(chat.receive_flow_input, flow_input)
 
     # ==================== AEFlowDelegate 协议实现 ====================
@@ -105,7 +104,6 @@ class AEBaseContext:
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
         """转发 LLM 请求，用 context.ident 包装 out_schema。"""
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
-        logger.info("[Context] flow_send_llm_request -> send_llm_request")
         self.send_llm_request(payload)
 
     # ==================== delegate 转发 ====================
@@ -123,5 +121,4 @@ class AEBaseContext:
     def send_llm_request(self, payload) -> None:
         if not self.delegate:
             raise ValueError("Context delegate is not set")
-        logger.info("[Context] send_llm_request -> delegate.send_llm_request")
         self.delegate.send_llm_request(payload)

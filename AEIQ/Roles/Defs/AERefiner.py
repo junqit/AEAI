@@ -70,6 +70,5 @@ class AERefiner(AERoleExcutor):
         if not AEFlowDelegateImpl.on_flow_start(self, flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
             return False
-        logger.info("[%s][d=%s] on_flow_start -> requestOptimizeInput", self.title, self.deepth)
         self.requestOptimizeInput()
         return True

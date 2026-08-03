@@ -36,7 +36,6 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         #     "📤 即将发送 LLM 请求:\n%s",
         #     json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
         # )
-        logger.info("[AELLMClient] 发送 LLM 请求")
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
