@@ -38,7 +38,6 @@ _SOLVE_GOAL_NOTE = (
 
 class AETaskRoleFunction(AEFunctional):
     """task 角色 Flow 专属回包功能性方法名。"""
-    receiveQuestionType = "receiveQuestionType"
     receiveScripts = "receiveScripts"
 
 
@@ -54,40 +53,6 @@ class AETaskRole(AERoleExcutor):
         self.requestScripts(self.roleGoal)
 
     # ==================== task 执行能力（Script Generator）====================
-
-    def requestQuestionType(self) -> None:
-        """请求 LLM 判定当前优化后的问题是否需要脚本程序处理。"""
-        messages = self._build_base_messages()
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                f"请判定{AE_USER_QUESTION_PREFIX}是否需要通过编写并执行脚本程序"
-                "（python / shell / ruby）来处理，并将判定结果填入 result 字段："
-                "script（需要脚本）或 llm（不需要脚本，直接由 LLM 作答）。"
-            ),
-        })
-        flow_out = self.generateFlowOutput(AETaskRoleFunction.receiveQuestionType)
-        flow_out.set_llm_out({"result": llm_generate("script 或 llm")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
-
-    def receiveQuestionType(self, data: dict) -> bool:
-        """接收 LLM 判定结果（result: script / llm），据结果分流。"""
-        result = data.get("result") if isinstance(data, dict) else None
-        if result is None and isinstance(data, str):
-            result = data
-        result = (result or "").strip().lower()
-        self._questionType = result
-        if result == "script":
-            self.requestScripts(self.roleGoal)
-            return True
-        # 非 script：task 须通过脚本完成，不直答，以错误完成闭环
-        logger.warning("[%s][d=%s] task 判定为非脚本（%r），以错误完成", self.title, self.deepth, result)
-        self.flow_receive_complete(
-            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "task 须通过脚本完成"},
-            AEFlowCompletEvent.error,
-        )
-        return True
 
     def requestScripts(self, question: str) -> None:
         """请求 LLM 生成对应的脚本任务。"""
@@ -144,7 +109,7 @@ class AETaskRole(AERoleExcutor):
                 logger.warning("[%s][d=%s] 跳过非法脚本 spec=%r: %s", self.title, self.deepth, spec, e)
         first_script = self.nextFlow()
         if first_script is not None:
-            first_script.receive_flow_input(AEFlowInput(content="", ident=self.ident))
+            first_script.receive_flow_input(AEFlowInput(content="", ident=first_script.ident))
             logger.info("[%s][d=%s] 启动首个 AEScript: title=%r", self.title, self.deepth, first_script.title)
         else:
             logger.warning("[%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", self.title, self.deepth)

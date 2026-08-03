@@ -136,16 +136,20 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         return False
 
     def sub_flow_complete(self, flowInput) -> bool:
-        """子 flow 完成：所有子 flow 均完成则汇总，否则等待剩余子 flow。"""
+        """子 flow 完成：所有子 flow 均完成则汇总，否则启动下一个 default 子 flow。"""
         if not self._flows:
             return True
         if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
             self.summarize_to_llm()
         else:
-            logger.info("[%s][d=%s] 子 flow 未全部完成，等待剩余: %d/%d",
+            logger.info("[%s][d=%s] 子 flow 未全部完成: %d/%d",
                         self.title, self.deepth,
                         sum(1 for f in self._flows.values() if f.status == AEFlowStatus.complete),
                         len(self._flows))
+            next_flow = self.nextFlow()
+            if next_flow is not None:
+                from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+                next_flow.receive_flow_input(AEFlowInput(content=flowInput.parameter.get(AE_CONTENT, ""), ident=next_flow.ident))
         return True
 
     def add_flow(self, sub_flow) -> None:

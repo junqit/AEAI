@@ -8,7 +8,7 @@ import logging
 from enum import Enum
 
 from WorkFlows.FlowWork.AEFlow import AEFlow
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AEFlowStatus
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -67,9 +67,9 @@ class AEScript(AEFlow):
         return f"我的回答：{answer}"
 
     def on_flow_start(self, flowInput) -> bool:
-        """启动：执行脚本；失败则请求 LLM 修正后重试。"""
-        if not super().on_flow_start(AEFlowInput(content="", ident=self.ident)):
-            return False
+        """启动：直接执行脚本。"""
+
+        self.status = AEFlowStatus.processing
         self._retry_count = 0
         self._last_error = ""
         self._run_script()
