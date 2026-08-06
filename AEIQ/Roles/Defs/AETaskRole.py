@@ -109,8 +109,8 @@ class AETaskRole(AERoleExcutor):
                 logger.warning("[%s][d=%s] 跳过非法脚本 spec=%r: %s", self.title, self.deepth, spec, e)
         first_script = self.nextFlow()
         if first_script is not None:
-            first_script.receive_flow_input(AEFlowInput(content="", ident=first_script.ident))
             logger.info("[%s][d=%s] 启动首个 AEScript: title=%r", self.title, self.deepth, first_script.title)
+            first_script.receive_flow_input(AEFlowInput(content="", ident=first_script.ident))
         else:
             logger.warning("[%s][d=%s] 无可执行的 AEScript，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可执行的脚本任务（脚本生成失败或为空）"}, AEFlowCompletEvent.error)
