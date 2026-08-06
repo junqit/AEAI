@@ -18,13 +18,15 @@ class AEGPTModel:
 
     # AI 级别 → 模型名映射，由模型内部自行判断
     MODEL_MAP = {
-        AEAiLevel.default: "ppio/pa/gpt-5.5",
-        AEAiLevel.middle: "ppio/pa/gpt-5.5",
-        AEAiLevel.high: "ppio/pa/gpt-5.5",
+        AEAiLevel.default: "ppio/pa/gpt-5.6-sol",
+        AEAiLevel.middle: "ppio/pa/gpt-5.6-sol",
+        AEAiLevel.high: "ppio/pa/gpt-5.6-sol",
     }
-    DEFAULT_MODEL = "ppio/pa/gpt-5.5"
-    # max_tokens 按 LLM 不同在模型内部设置
-    MAX_TOKENS = 128000
+    DEFAULT_MODEL = "ppio/pa/gpt-5.6-sol"
+    # 模型上下文窗口（输入与输出合计）
+    CONTEXT_WINDOW = 1_000_000
+    # 为输入上下文预留空间后的单次输出上限
+    MAX_TOKENS = 128_000
 
     BASE_URL = "http://model.mify.ai.srv/anthropic"
     AUTH_TOKEN = "sk-psTx7IFlW79l67Or8JqLsBL0CqCtkhVlHoOMfRMts1Ugkdiu"
