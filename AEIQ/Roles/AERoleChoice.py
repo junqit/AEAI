@@ -164,6 +164,10 @@ class AERoleChoice:
                 logger.warning("[%s][d=%s] 子任务 role 非法或不在可选范围，跳过: spec=%r",
                                self.title, self.deepth, spec)
                 continue
+            # llm 直接作答：输入用精炼后的问题（self.roleGoal），而非 LLM 生成的 goal——
+            # goal 易生成「将用户输入的…改写为…」类元指令，污染下游 roleinfo 生成错误角色。
+            if role_enum == AEFlowRole.llm and self.roleGoal:
+                content = self.roleGoal
             content = str(content or "")
             sub = self._instantiate_role_flow(role_enum, target_ident)
             if is_subflow:

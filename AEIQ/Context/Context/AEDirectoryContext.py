@@ -3,7 +3,6 @@ import shutil
 import subprocess
 import platform
 import logging
-from datetime import datetime
 from typing import Dict, List, Optional
 
 from .AEBaseContext import AEBaseContext
@@ -119,8 +118,7 @@ class AEDirectoryContext(AEBaseContext):
         """实际探测并拼接环境信息（每次调用都执行探测/拼接，由 build_env_param_info 缓存）。"""
         if env_param == AEEnvParamType.system:
             return (
-                f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
-                f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"OS: {platform.system()} {platform.release()} ({platform.machine()})"
             )
         name = self._ENV_SCRIPT_NAME.get(env_param)
         if not name:

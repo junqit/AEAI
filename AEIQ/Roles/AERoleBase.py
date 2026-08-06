@@ -56,13 +56,13 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
     # ==================== 角色上下文 hook（供 summarize_to_llm 调用）====================
 
     def flow_description(self) -> str:
-        """覆写：返回 [role][title][deepth]，不存在的项不输出。"""
+        """覆写：在基类 [d=deepth] 基础上前置 [role][title]，不存在的项不输出。"""
         parts = []
-        if self.role is not None:
-            parts.append(f"[{self.role.value}]")
         if self.title:
             parts.append(f"[{self.title}]")
-        parts.append(f"[d={self.deepth}]")
+        if self.role is not None:
+            parts.append(f"[{self.role.value}]")
+        parts.append(super().flow_description())
         return "".join(parts)
 
     def summarize_extend_messages(self) -> list:

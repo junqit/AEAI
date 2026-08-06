@@ -80,13 +80,12 @@ class AERoleQuestionOptimize(AERoleInfo):
         if prompt is None and isinstance(data, str):
             prompt = data
         self.roleGoal = prompt or ""
-        original = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"
-            "  title: %s\n  responsibility: %s\n  rolePrompt: %s\n  原始问题: %s\n  角色目标: %s\n"
+            "  title: %s\n  优化后的问题: %s\n"
             "========================================",
             self.title, self.deepth,
-            self.title, self.responsibility, self.rolePrompt, original, self.roleGoal,
+            self.title, self.roleGoal,
         )
         return True

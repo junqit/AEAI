@@ -101,4 +101,12 @@ class AERoleInformation(AERoleInfo):
             )
             return True
         self.rolePrompt = prompt
+        logger.info(
+            "[%s][d=%s] 角色信息就绪:\n"
+            "========================================\n"
+            "  title: %s\n  responsibility: %s\n  rolePrompt: %s\n"
+            "========================================",
+            self.title, self.deepth,
+            self.title, self.responsibility, self.rolePrompt,
+        )
         return True

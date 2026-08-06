@@ -39,7 +39,23 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
-        logger.info("[LLM] 收到回复: %d chars", len(reply) if reply else 0)
+        elapsed = result.get("elapsed_seconds")
+        logger.info(
+            "[LLM] 收到回复: %d chars%s",
+            len(reply) if reply else 0,
+            f", 耗时: {elapsed:.2f}s" if isinstance(elapsed, (int, float)) else "",
+        )
+        # token 消耗：依赖网关透传上游 usage（prompt_tokens / completion_tokens / total_tokens）
+        usage = result.get("usage") or {}
+        if not usage:
+            usage = {k: result[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens") if k in result}
+        if usage:
+            logger.info(
+                "[LLM] token 消耗: prompt=%s, completion=%s, total=%s",
+                usage.get("prompt_tokens", "-"),
+                usage.get("completion_tokens", "-"),
+                usage.get("total_tokens", "-"),
+            )
         filled_content = _parse_content_json(reply)
         if filled_content is None:
             logger.error("LLM 内容解析失败，回填失败占位信封")
