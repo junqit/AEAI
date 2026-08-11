@@ -45,7 +45,7 @@ class AELLMPayload:
     messages: List[Dict[str, str]]
     # LLM 必须严格按该结构输出（始终存在）
     out_schema: Dict[str, Any]
-    llm_type: AELLMType = AELLMType.CHATGPT
+    llm_type: AELLMType = AELLMType.DEEPSEEK
     level: AEAiLevel = AEAiLevel.default
     # 采样温度，范围 0.0 - 1.0
     temperature: float = 0.7

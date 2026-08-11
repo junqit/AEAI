@@ -1,10 +1,29 @@
 """
 AE DeepSeek Provider - DeepSeek API 提供商
 负责组装 DeepSeek API 需要的所有信息
+
+key 与接口访问参照 zhipu_provider：复用同一内部网关与同一 auth_token，
+通过 OpenAI 兼容的 /v1/chat/completions 接口访问（附带 X-Model-Provider-Id: tongyi），
+模型名替换为 DeepSeek 系列。
 """
+import sys
+import logging
+from pathlib import Path
+
+# 添加项目根目录到路径
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from .ae_base_provider import AEBaseProvider
 from AEQuestion import AEQuestion
 from AEAiLevel import AEAiLevel
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class AEDeepSeekProvider(AEBaseProvider):
@@ -12,66 +31,100 @@ class AEDeepSeekProvider(AEBaseProvider):
 
     def __init__(self):
         super().__init__()
-        self.api_key = None
-        self.base_url = "https://api.deepseek.com"
+        self.deepseek_model = None
 
     def load(self):
-        """加载 DeepSeek API 配置"""
-        import os
-        self.api_key = os.getenv("DEEPSEEK_API_KEY")
-        if not self.api_key:
-            print("⚠️  Warning: DEEPSEEK_API_KEY not found in environment")
-        self.is_loaded = True
-        print(f"✅ {self.name} loaded")
+        """加载 DeepSeek API"""
+        if self.is_loaded:
+            logger.info(f"{self.name} 已加载，跳过重复加载")
+            return
 
-    MAX_TOKENS = 64000
+        try:
+            # 导入 DeepSeek 模型类
+            from llm.deepseek import get_deepseek_model
+
+            logger.info(f"🔄 正在初始化 {self.name}...")
+            self.deepseek_model = get_deepseek_model()
+
+            # 加载配置
+            self.deepseek_model.load()
+
+            self.is_loaded = True
+            logger.info(f"✅ {self.name} 加载成功!")
+
+        except Exception as e:
+            logger.error(f"❌ {self.name} 加载失败: {str(e)}", exc_info=True)
+            raise
 
     def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
-        if not self.is_loaded:
-            self.load()
+        try:
+            if not self.is_loaded:
+                self.load()
 
-        model = self._get_model_by_level(level)
-        messages = question.messages
+            messages = question.messages
 
-        request_params = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": self.MAX_TOKENS,
-            "temperature": 0.7
-        }
+            # 只传 messages 与 level，模型名与 max_tokens 由 AEDeepSeekModel 内部决定
+            result = self.deepseek_model.generate(
+                messages=messages,
+                level=level,
+            )
 
-        # TODO: 实现 DeepSeek API 调用
-        # DeepSeek API 兼容 OpenAI 格式
-        # import requests
-        # response = requests.post(
-        #     f"{self.base_url}/v1/chat/completions",
-        #     headers={"Authorization": f"Bearer {self.api_key}"},
-        #     json=request_params
-        # )
-        # result = response.json()
-        # return result['choices'][0]['message']['content']
+            # 解析响应
+            parsed_result = self._parse_response(result)
+            return parsed_result
 
-        raise NotImplementedError("DeepSeek API 调用尚未实现")
+        except Exception as e:
+            logger.error(f"❌ DeepSeek API 调用失败: {str(e)}", exc_info=True)
+            raise Exception(f"DeepSeek API 调用失败: {str(e)}")
 
-    def _get_model_by_level(self, level: AEAiLevel) -> str:
+    def _parse_response(self, result) -> str:
         """
-        根据 AI 级别选择 DeepSeek 模型
+        解析 DeepSeek API 响应
+        接口访问参照 zhipu_provider，响应格式与 Claude 一致（Anthropic 兼容）
 
         Args:
-            level: AI 级别
+            result: API 响应结果
 
         Returns:
-            str: 模型名称
+            str: 提取的文本内容
         """
-        model_map = {
-            AEAiLevel.default: "deepseek-chat",
-            AEAiLevel.middle: "deepseek-coder",
-            AEAiLevel.high: "deepseek-coder"
-        }
-        return model_map.get(level, "deepseek-chat")
+        if isinstance(result, dict):
+            # Claude/Anthropic API 标准响应格式: {"content": [{"type": "text", "text": "..."}]}
+            if "content" in result:
+                content = result["content"]
+                if isinstance(content, list) and len(content) > 0:
+                    if isinstance(content[0], dict) and "text" in content[0]:
+                        return content[0]["text"]
+                    else:
+                        return str(content[0])
+                else:
+                    return str(content)
+            elif "text" in result:
+                return result["text"]
+            elif "response" in result:
+                return result["response"]
+            else:
+                return str(result)
+        elif isinstance(result, str):
+            # 如果返回的是字符串，检查是否是错误消息
+            if result.startswith("请求失败") or result.startswith("请求异常"):
+                raise Exception(result)
+            return result
+        else:
+            return str(result)
+
+    def get_status(self) -> dict:
+        """获取提供商状态"""
+        status = super().get_status()
+        if self.deepseek_model:
+            status["model_status"] = self.deepseek_model.get_status()
+        return status
 
     def cleanup(self):
         """清理 DeepSeek 资源"""
-        self.api_key = None
+        if self.deepseek_model is not None:
+            self.deepseek_model.cleanup()
+            self.deepseek_model = None
+
         self.is_loaded = False
         print(f"🧹 {self.name} cleaned up")
