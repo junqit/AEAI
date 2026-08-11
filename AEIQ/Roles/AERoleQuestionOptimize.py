@@ -32,7 +32,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         """组装并发送 LLM 请求：以 role_brief 作为系统提示，以 rolePrompt 作为「提的问题」
         （针对 AE_USER_QUESTION_PREFIX 的优化指令），让 LLM 据此生成一段「问题优化提示」。
 
-        - messages: system(role_brief，含身份与能力) / system(用户问题，AE_USER_QUESTION_PREFIX 前缀) / user(rolePrompt 作为针对用户问题的提问指令；为空时回退默认指令)
+        - messages: system(role_brief，含身份与能力) / system(rolePrompt 优化指令) / user(用户问题，AE_USER_QUESTION_PREFIX 前缀；无问题时退化为 user 指令)
         - out_schema: {AE_CONTENT: 问题优化提示 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 roleGoal（不完成 flow）
 
@@ -43,23 +43,25 @@ class AERoleQuestionOptimize(AERoleInfo):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        # 用户问题以统一前缀（AE_USER_QUESTION_PREFIX）单独作为 system 消息传入
-        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
-        if len(user_question) > 0:
-            messages.append({
-                AE_ROLE: AEConentRole.SYSTEM.value,
-                AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
-            })
         # rolePrompt 作为针对 AE_USER_QUESTION_PREFIX 的提问指令；为空时回退默认指令
         default_instruction = (
             f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做优化，不可扩展、不可改变原意思"
             "（更清晰、更完整、更易于理解），使问题更契合你的专业能力与约束范围。"
             "体现你的专业角色，不得超出你的能力与职责边界。"
         )
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: self.rolePrompt or default_instruction,
-        })
+        instruction = self.rolePrompt or default_instruction
+        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
+        if len(user_question) > 0:
+            # 指令放 system、待优化问题放 user——user 才是模型要处理的内容，
+            # 避免 DeepSeek 等模型把 user 指令本身当作待优化问题原样改写
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
+            messages.append({
+                AE_ROLE: AEConentRole.USER.value,
+                AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
+            })
+        else:
+            # 无待优化问题：指令作为 user 消息，确保存在 user 轮次
+            messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: instruction})
         flow_out = self.generateFlowOutput(AERoleQuestionOptimizeFunction.receiveOptimizeInput)
         flow_out.set_llm_out({AE_CONTENT: llm_generate("优化后的问题")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

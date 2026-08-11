@@ -89,16 +89,15 @@ class AEDeepSeekProvider(AEBaseProvider):
             str: 提取的文本内容
         """
         if isinstance(result, dict):
-            # Claude/Anthropic API 标准响应格式: {"content": [{"type": "text", "text": "..."}]}
+            # Anthropic 响应: content 是块数组，可能含 thinking（推理）与 text（结果），取 text 块
             if "content" in result:
                 content = result["content"]
-                if isinstance(content, list) and len(content) > 0:
-                    if isinstance(content[0], dict) and "text" in content[0]:
-                        return content[0]["text"]
-                    else:
-                        return str(content[0])
-                else:
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text" and block.get("text"):
+                            return block["text"]
                     return str(content)
+                return str(content)
             elif "text" in result:
                 return result["text"]
             elif "response" in result:

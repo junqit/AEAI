@@ -34,10 +34,8 @@ class AEDeepSeekModel:
         AEAiLevel.high: "deepseek-v4-pro",
     }
     DEFAULT_MODEL = "deepseek-v4-pro"
-    # 模型上下文窗口（输入与输出合计）
-    CONTEXT_WINDOW = 1_000_000
-    # 为输入上下文预留空间后的单次输出上限
-    MAX_TOKENS = 128000
+    # 单次输出上限，DeepSeek-v4-pro 仅提供 1M（1_000_000）一档
+    MAX_TOKENS = 1_000_000
 
     def __init__(self, base_url: str = None, auth_token: str = None):
         """
