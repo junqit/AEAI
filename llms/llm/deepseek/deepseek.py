@@ -50,6 +50,7 @@ _DS_DELTA_THINKING = "thinking_delta"
 _DS_F_TYPE = "type"
 _DS_F_DELTA = "delta"
 _DS_F_TEXT = "text"
+_DS_F_THINKING = "thinking"
 _DS_F_MESSAGE = "message"
 _DS_F_ID = "id"
 _DS_F_MODEL = "model"
@@ -189,8 +190,8 @@ class AEDeepSeekModel:
                 delta = event.get(_DS_F_DELTA, {}) or {}
                 dtype = delta.get(_DS_F_TYPE)
                 if dtype == _DS_DELTA_THINKING:
-                    # thinking_delta：思考内容，逐 delta 上报 think_process（final=False）
-                    piece = delta.get(_DS_F_TEXT, "")
+                    # thinking_delta：思考内容在 delta.thinking 字段（非 text），逐 delta 上报 think_process（final=False）
+                    piece = delta.get(_DS_F_THINKING, "")
                     accumulated_thinking.append(piece)
                     fire_progress(
                         think_process, "".join(accumulated_thinking), max_tokens, False
