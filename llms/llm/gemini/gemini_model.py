@@ -3,14 +3,14 @@ Gemini 本地模型类
 封装 Gemini 模型的加载、生成和资源管理
 使用 mlx_lm 库进行模型加载和推理
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 import logging
 import re
 from mlx_lm import load, generate
 from mlx_lm.sample_utils import make_sampler
 
 from AEAiLevel import AEAiLevel
-from common.llm_utils import split_system_messages
+from common.llm_utils import split_system_messages, fire_progress
 
 # 配置日志
 logging.basicConfig(
@@ -83,6 +83,8 @@ class AEGeminiModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+        delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> str:
         """
         使用 Gemini 模型生成文本（支持 messages 格式）
@@ -90,6 +92,8 @@ class AEGeminiModel:
         Args:
             messages: 消息列表 [{"role": "user", "content": "..."}]
             level: AI 级别（模型名/max_tokens/temperature 由模型内部决定）
+            delta_process: 进度回调，整体进度 = 生成累计长度 / max_tokens；
+                生成完成后回调一次最终结果（final=True）。为 None 时不回调。
 
         Returns:
             str: 生成的文本
@@ -135,6 +139,8 @@ class AEGeminiModel:
 
             # 响应内容由 AEBaseProvider.generate 统一打印，模型层不再输出
             parsed = self.parse_output(text=response.strip())
+            # 本地非流式：拿到完整结果后回调一次最终进度（final=True）
+            fire_progress(delta_process, parsed["answer"], max_tokens, True)
             return parsed["answer"]
 
         except Exception as e:

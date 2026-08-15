@@ -5,10 +5,10 @@ GPT API 模型类
 import re
 import requests
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from AEAiLevel import AEAiLevel
-from common.llm_utils import split_system_messages
+from common.llm_utils import split_system_messages, extract_message_text, fire_progress
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,8 @@ class AEGPTModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+        delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
@@ -102,6 +104,10 @@ class AEGPTModel:
                 result = response.json()
                 self._strip_thinking(result)
                 logger.info(f"GPT API 调用成功 - model={model}, elapsed={elapsed:.2f}s")
+                # 非流式：拿到完整结果后回调一次最终进度（final=True）
+                fire_progress(
+                    delta_process, extract_message_text(result), max_tokens, True
+                )
                 return result
             else:
                 logger.error(f"GPT API 调用失败 - model={model}, status={response.status_code}, error={response.text[:200]}")
@@ -145,14 +151,3 @@ def cleanup_gpt_model():
     if _gpt_model_instance is not None:
         _gpt_model_instance.cleanup()
         _gpt_model_instance = None
-
-
-def call_gpt_api(
-    messages: list,
-    level: AEAiLevel,
-):
-    gpt_model = get_gpt_model()
-    return gpt_model.generate(
-        messages=messages,
-        level=level,
-    )

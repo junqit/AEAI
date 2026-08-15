@@ -8,10 +8,14 @@ key 与接口访问参照 claude_provider：复用同一内部网关与同一 au
 import requests
 import time
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from AEAiLevel import AEAiLevel
-from common.llm_utils import split_system_messages
+from common.llm_utils import (
+    split_system_messages,
+    extract_message_text,
+    fire_progress,
+)
 
 # 配置日志
 logging.basicConfig(
@@ -92,6 +96,8 @@ class AEZhipuModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+        delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
@@ -136,6 +142,10 @@ class AEZhipuModel:
                 if response.status_code == 200:
                     result = response.json()
                     logger.info(f"✅ Zhipu API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200, attempt={attempt}")
+                    # 非流式：拿到完整结果后回调一次最终进度（final=True）
+                    fire_progress(
+                        delta_process, extract_message_text(result), max_tokens, True
+                    )
                     return result
 
                 last_error = f"status={response.status_code}, error={response.text[:200]}"
@@ -214,17 +224,3 @@ def cleanup_zhipu_model():
     if _zhipu_model_instance is not None:
         _zhipu_model_instance.cleanup()
         _zhipu_model_instance = None
-
-
-# ==================== 向后兼容的函数 ====================
-# 保留 call_zhipu_api 函数以保持与其他模型一致的调用风格
-
-def call_zhipu_api(
-    messages: list,
-    level: AEAiLevel,
-):
-    zhipu_model = get_zhipu_model()
-    return zhipu_model.generate(
-        messages=messages,
-        level=level,
-    )

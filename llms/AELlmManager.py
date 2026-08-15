@@ -4,7 +4,7 @@ AELlmManager - 统一的 LLM 管理器
 使用独立的 Provider 类管理各个 LLM
 """
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Callable, Dict, Any
 from question.AEQuestion import AELLMType, AEQuestion
 from AEAiLevel import AEAiLevel
 from llm_providers import (
@@ -75,12 +75,36 @@ class AELlmManager:
 
         print("All providers initialized.")
 
-    def generate(self, question: AEQuestion) -> Dict[str, Any]:
+    @staticmethod
+    def _default_think_process(info: Dict[str, Any]) -> None:
+        """
+        默认 think_process：打印流式逐 delta（思考过程）进度。
+        stream 接收的思考过程信息统一在此回调中输出，模型层不再打印 stream 相关日志。
+        """
+        print(f"[think] progress={info['progress']:.1%} "
+              f"generated={info['generated_length']} "
+              f"remaining={info['remaining']} final={info['final']}")
+
+    @staticmethod
+    def _default_delta_process(info: Dict[str, Any]) -> None:
+        """默认 delta_process：打印最终结果进度。"""
+        print(f"[delta] progress={info['progress']:.1%} "
+              f"generated={info['generated_length']} "
+              f"remaining={info['remaining']} final={info['final']}")
+
+    def generate(self, question: AEQuestion,
+                 think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+                 delta_process: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
         """
         生成回复
 
         Args:
             question: AEQuestion 对象，包含所有必要信息（messages、llm_type、level、max_tokens、system、context、tools）
+            think_process: 流式逐 delta（思考过程）进度回调，接收 make_progress_info 字典
+                （progress / content / generated_length / max_tokens / remaining / final，final=False）。
+                为 None 时使用默认回调打印；仅流式模型（DeepSeek）会触发，非流式模型不回调。
+            delta_process: 最终结果进度回调，接收同一 make_progress_info 字典（final=True）。
+                为 None 时使用默认回调打印；所有模型在生成完成后回调一次。
 
         Returns:
             Dict[str, Any]: 包含响应详情的字典
@@ -95,7 +119,12 @@ class AELlmManager:
 
         # 从 question 对象中获取所有参数
         llm_type = question.llm_type
-        level = question.level
+
+        # 未提供回调时使用默认打印回调（进度信息统一在此输出，模型层不再打印 stream 日志）
+        if think_process is None:
+            think_process = self._default_think_process
+        if delta_process is None:
+            delta_process = self._default_delta_process
 
         start_time = time.time()
 
@@ -111,7 +140,7 @@ class AELlmManager:
             }
 
         try:
-            response = provider.generate(question, level)
+            response = provider.generate(question, think_process, delta_process)
             elapsed = time.time() - start_time
             return {
                 "response": response,

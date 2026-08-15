@@ -5,10 +5,10 @@ Claude API 模型类
 import requests
 import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from AEAiLevel import AEAiLevel
-from common.llm_utils import split_system_messages
+from common.llm_utils import split_system_messages, extract_message_text, fire_progress
 
 # 配置日志
 logging.basicConfig(
@@ -88,6 +88,8 @@ class AEClaudeModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+        delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         if not self.is_loaded:
             self.load()
@@ -128,6 +130,10 @@ class AEClaudeModel:
             if response.status_code == 200:
                 result = response.json()
                 logger.info(f"✅ Claude API 调用成功 - model={model}, elapsed={elapsed:.2f}s, status=200")
+                # 非流式：拿到完整结果后回调一次最终进度（final=True）
+                fire_progress(
+                    delta_process, extract_message_text(result), max_tokens, True
+                )
                 return result
             else:
                 error_msg = f"请求失败: {response.status_code}"
@@ -193,21 +199,6 @@ def cleanup_claude_model():
     if _claude_model_instance is not None:
         _claude_model_instance.cleanup()
         _claude_model_instance = None
-
-
-# ==================== 向后兼容的函数 ====================
-# 保留原有的 call_claude_api 函数以保持向后兼容
-
-def call_claude_api(
-    messages: list,
-    level: AEAiLevel,
-):
-    claude_model = get_claude_model()
-    return claude_model.generate(
-        messages=messages,
-        level=level,
-    )
-
 
 
 # def call_claude_api_stream(message, system=None, tools=None, level=AEAiLevel.default):

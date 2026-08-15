@@ -9,9 +9,9 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from typing import Optional, Callable, Dict, Any
 from .ae_base_provider import AEBaseProvider
 from AEQuestion import AEQuestion
-from AEAiLevel import AEAiLevel
 
 # 配置日志
 logging.basicConfig(
@@ -52,7 +52,9 @@ class AEClaudeProvider(AEBaseProvider):
             logger.error(f"❌ {self.name} 加载失败: {str(e)}", exc_info=True)
             raise
 
-    def _generate(self, question: AEQuestion, level: AEAiLevel) -> str:
+    def _generate(self, question: AEQuestion,
+                  think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+                  delta_process: Optional[Callable[[Dict[str, Any]], None]] = None) -> str:
         try:
             if not self.is_loaded:
                 self.load()
@@ -62,7 +64,9 @@ class AEClaudeProvider(AEBaseProvider):
             # 只传 messages 与 level，模型名与 max_tokens 由 AEClaudeModel 内部决定
             result = self.claude_model.generate(
                 messages=messages,
-                level=level,
+                level=question.level,
+                think_process=think_process,
+                delta_process=delta_process,
             )
 
             # 5. 解析响应
