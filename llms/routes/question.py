@@ -112,7 +112,22 @@ def _process_llm_sync(
         # 获取 AELlmManager 实例并调用
         manager = get_ae_llm_manager()
         logger.info(f"🚀 [Request-{request_id}] [LLM-{llm_type.value}] 调用 LLM")
-        result = manager.generate(question)
+
+        # 每个请求使用独立的进度回调：仅把内容拼接进 question（think/delta），不逐 delta 打印，避免日志刷屏
+        def _think_cb(info: Dict[str, Any]) -> None:
+            question.feed_think(info)
+
+        def _delta_cb(info: Dict[str, Any]) -> None:
+            question.feed_delta(info)
+
+        result = manager.generate(question, think_process=_think_cb, delta_process=_delta_cb)
+        logger.info(
+            f"🧩 [Request-{request_id}] 内容拼接完成 - "
+            f"think_length={len(question.think_content)}, delta_length={len(question.delta_content)}"
+        )
+        logger.info(f"💭 [Request-{request_id}] think = {question.think_content!r}")
+        logger.info(f"💧 [Request-{request_id}] delta = {question.delta_content!r}")
+        logger.info(f"📦 [Request-{request_id}] result = {result}")
 
         return result
 

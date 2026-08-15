@@ -23,7 +23,7 @@ class AERoleInformation(AERoleInfo):
     角色信息属性由基类 AERoleInfo 经 cooperative __init__ 持有。"""
 
     def requestRoleInformation(self) -> None:
-        """请求 LLM 生成 title / responsibility（此时尚未确认，不注入 role_brief）。回包经 receiveRoleInfomation 写入并触发 requestRolePrompt。"""
+        """请求 LLM 生成 title / responsibility：以当前角色 ROLE_PARAMS 为生成规则，确保贴合角色性质。回包经 receiveRoleInfomation 写入并触发 requestRolePrompt。"""
         messages = []
         user_question = self.input.parameter.get(AE_CONTENT, "") if self.input else ""
         if len(user_question) > 0:
@@ -32,14 +32,23 @@ class AERoleInformation(AERoleInfo):
                 AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
             })
 
+        # 以当前角色 ROLE_PARAMS（AERoleType.ROLE_PARAMS）作为生成规则，确保 title/responsibility 贴合角色性质
+        param = self.param_info()
+        messages.append({
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: (
+                "【角色生成规则】\n"
+                f"当前角色类型：{param.role.value}\n"
+                f"默认定位：{param.title}\n"
+                f"默认职责：{param.responsibility}\n\n"
+                "依据上述角色定位生成「工作名称」与「职责范围」，要求：\n"
+                "- 生成内容须与默认定位/职责同性质，不得偏离当前角色类型；\n"
+                "- 职责范围须明确职责边界与禁止事项；客观、完整，不得包含用户问题本身。"
+            ),
+        })
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                f"根据{AE_USER_QUESTION_PREFIX}，生成工作名称与职责范围：\n"
-                "- 工作名称：体现专业领域与定位；\n"
-                "- 职责范围：明确职责边界与禁止事项。\n"
-                "要求：生成内容须客观、完整，不得包含用户问题本身。"
-            ),
+            AE_CONTENT: f"请根据{AE_USER_QUESTION_PREFIX}与上述角色生成规则，生成工作名称与职责范围。",
         })
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
         flow_out.set_llm_out({
@@ -104,9 +113,9 @@ class AERoleInformation(AERoleInfo):
         logger.info(
             "[%s][d=%s] 角色信息就绪:\n"
             "========================================\n"
-            "  title: %s\n  responsibility: %s\n  rolePrompt: %s\n"
+            "  role: %s\n  deepth: %s\n  title: %s\n  responsibility: %s\n  rolePrompt: %s\n"
             "========================================",
             self.title, self.deepth,
-            self.title, self.responsibility, self.rolePrompt,
+            self.role, self.deepth, self.title, self.responsibility, self.rolePrompt,
         )
         return True

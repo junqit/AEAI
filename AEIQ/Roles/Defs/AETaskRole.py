@@ -63,7 +63,7 @@ class AETaskRole(AERoleExcutor):
                 "请根据以上信息生成多个可独立执行的脚本任务，严格输出 JSON 数组，每项含：\n"
                 "  - title：作用\n"
                 "  - script：纯代码，不要包裹解释器调用命令\n"
-                "  - type：python / shell / ruby 之一\n\n"
+                "  - type：在 python / shell / ruby 中选择你最擅长的一种\n\n"
                 "执行环境：python 用 python -c、shell 用 sh -c、ruby 用 ruby -e，\n"
                 "脚本内容原样传入解释器，stdout 作为结果返回，30 秒超时，macOS 下全只读沙箱。\n\n"
                 "要求：\n"
@@ -78,7 +78,7 @@ class AETaskRole(AERoleExcutor):
             AE_CONTENT: [{
                 AE_TITLE: llm_generate("作用（脚本用途说明）"),
                 "script": llm_generate("脚本内容（可执行的脚本文本）"),
-                "type": llm_generate("脚本类型，取值 python / shell / ruby 之一"),
+                "type": llm_generate("脚本类型：python / shell / ruby 之一，由你自行选择最擅长的一种"),
             }]
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

@@ -85,9 +85,9 @@ class AERoleQuestionOptimize(AERoleInfo):
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"
-            "  title: %s\n  优化后的问题: %s\n"
+            "  role: %s\n  deepth: %s\n  title: %s\n  优化后的问题: %s\n"
             "========================================",
             self.title, self.deepth,
-            self.title, self.roleGoal,
+            self.role, self.deepth, self.title, self.roleGoal,
         )
         return True

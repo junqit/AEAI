@@ -32,13 +32,13 @@ class AEDirectoryContext(AEBaseContext):
         ),
         AEEnvParamType.python: (
             _ENV_PARAM_NOTE
-            + "【Python 环境】下方为当前实际可用的 Python 解释器版本、路径与已安装第三方库。"
+            + "【Python 环境】下方为当前实际可用的 Python 解释器版本与已安装第三方库。"
             "所生成代码须确认仅使用下方已列出的解释器与库、可在当前环境下直接运行；"
             "缺失所需库时按安装申请规则申请安装，不得直接引用未安装的依赖。"
         ),
         AEEnvParamType.ruby: (
             _ENV_PARAM_NOTE
-            + "【Ruby 环境】下方为当前实际可用的 Ruby 解释器版本、路径与已安装 gem 库。"
+            + "【Ruby 环境】下方为当前实际可用的 Ruby 解释器版本与已安装 gem 库。"
             "所生成代码须确认仅使用下方已列出的解释器与库、可在当前环境下直接运行；"
             "缺失所需库时按安装申请规则申请安装，不得直接引用未安装的依赖。"
         ),
@@ -90,9 +90,8 @@ class AEDirectoryContext(AEBaseContext):
             return self._scripts_cache
         scripts = []
         for name in self.SCRIPT_LANGUAGES:
-            which = shutil.which(name)
-            if which:
-                scripts.append(self._get_script_info(name, which))
+            if shutil.which(name):
+                scripts.append(self._get_script_info(name))
         self._scripts_cache = scripts
         return scripts
 
@@ -127,7 +126,7 @@ class AEDirectoryContext(AEBaseContext):
         match = next((s for s in scripts if s["scriptname"] == name), None)
         if not match:
             return f"{name}: 未安装"
-        parts = [f"{match['scriptname']} {match['version']} ({match['which']})"]
+        parts = [f"{match['scriptname']} {match['version']}"]
         if match["packages"]:
             parts.append(f"已安装库: {', '.join(match['packages'])}")
         return "\n".join(parts)
@@ -149,7 +148,7 @@ class AEDirectoryContext(AEBaseContext):
         return env
 
     @staticmethod
-    def _get_script_info(scriptname: str, which: str) -> dict:
+    def _get_script_info(scriptname: str) -> dict:
         version = ""
         env = AEDirectoryContext._subprocess_env()
         try:
@@ -161,7 +160,7 @@ class AEDirectoryContext(AEBaseContext):
         except Exception:
             pass
         packages = AEDirectoryContext._get_packages(scriptname)
-        return {"scriptname": scriptname, "which": which, "version": version, "packages": packages}
+        return {"scriptname": scriptname, "version": version, "packages": packages}
 
     @staticmethod
     def _get_packages(scriptname: str) -> list:
@@ -192,7 +191,7 @@ class AEDirectoryContext(AEBaseContext):
         scripts = self._discover_scripts()
         script_parts = []
         for s in scripts:
-            part = f"- {s['scriptname']} {s['version']} ({s['which']})"
+            part = f"- {s['scriptname']} {s['version']}"
             if s["packages"]:
                 part += f"\n  已安装库: {', '.join(s['packages'])}"
             script_parts.append(part)
