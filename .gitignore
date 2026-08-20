@@ -1,0 +1,6 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# 百度网盘凭证（含 secretkey，勿提交）
+CloudSorage/baidu/credentials.py
