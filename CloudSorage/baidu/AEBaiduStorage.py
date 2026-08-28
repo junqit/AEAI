@@ -1,147 +1,102 @@
 """
-AE Baidu Storage - 百度网盘存储实现（直连百度网盘 OpenAPI，不再依赖 bypy）
+AE Baidu Storage - 百度网盘文件操作（直连百度网盘 OpenAPI，不再依赖 bypy）。
 
-访问流程对齐百度官方 OpenAPI Python SDK（pythonsdk_20220616/openapi_client/api/*.py）：
-  - OAuth：device-code 授权（/oauth/2.0/device/code → 轮询 /oauth/2.0/token?grant_type=device_token）
-           + refresh_token 自动续期（grant_type=refresh_token）
-           + authorization-code 备选入口（grant_type=authorization_code）
-  - 网盘文件：xpanfilelist（/rest/2.0/xpan/file?method=list）等
+凭证（应用凭证 + OAuth token）与一切 Credential 能力（加载/判断/持久化/刷新/授权/
+取有效 token）均由 AEBDCredential 提供；本类只负责网盘文件操作：文件列表、上传、
+创建文件夹、用户信息。不读环境变量，不含任何凭证逻辑。
 
-构造零参、非交互：创建时从本地 token 缓存加载 access_token，过期则用 refresh_token
-自动续期。首次使用前需调用一次 authorize() 完成 device-code 授权（打印验证 URL/二维码
-→ 用户授权 → 轮询拿 token 并缓存）；之后构造即自动连接、非交互。
+构造零参、非交互：创建时从 credentials.py 读应用凭证，构造 AEBDCredential（4 参数），过期则 cred.refresh() 续期。
+首次使用前需调用一次 s.cred.authorize() 完成 device-code 授权；之后构造即自动连接。
 
-appkey/secretkey/app_name 从 gitignore 的 credentials.py 读取（对应 OpenAPI 的
-client_id/client_secret、应用沙箱名）；不读环境变量。
-
-本次实现范围（仅授权的「用户验证 + 文件列表访问」；其余存储操作不在本类，
-由 AECloudStorage 基类提供 NotImplementedError 默认，调用即报未实现）：
-  - 用户验证：device-code OAuth（authorize/authorize_with_code）+ refresh_token
-              自动续期 + xpannasuinfo 取用户信息（get_user_info）
+实现范围（其余存储操作由 AECloudStorage 基类提供 NotImplementedError 默认）：
   - 文件列表访问：xpanfilelist（_list_files，自动翻页）
-未实现（基类默认 NotImplementedError）：upload/download/delete/mkdir/exists。
+  - 创建文件夹：_mkdir（precreate isdir=1 + create，无分片）
+  - 上传文件：_upload（precreate → superfile2 按 4MB 分片 → create）
+  - 用户信息：get_user_info（xpannasuinfo）
+未实现（基类默认 NotImplementedError）：download/delete/exists。
 
-token 缓存：默认 ~/.baidu_pan/token.json（可用 credentials.TOKEN_PATH 覆盖），权限 0600。
-
-沙箱（重要）：自 2026-08-31 起百度平台强制应用默认仅可访问 /apps/{APP_NAME}/ 目录
-（本应用 APP_NAME=FileManager）。所有 remote_path 均相对该沙箱根解析：
-API 实际路径 = /apps/{APP_NAME}[/base_path]/remote_path。APP_NAME 取自
-credentials.APP_NAME，缺省 "FileManager"；base_path（credentials.BASE_PATH，可选）
-作为沙箱内统一子前缀。
+沙箱（重要）：自 2026-08-31 起应用默认仅可访问 /apps/{APP_NAME}/ 目录
+（APP_NAME 取自 credentials.APP_NAME，缺省 FileManager）。所有 remote_path 相对该沙箱根
+解析：API 实际路径 = /apps/{APP_NAME}[/base_path]/remote_path。
 """
+import hashlib
 import json
 import os
-import time
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 import requests
 
 try:  # 作为 CloudSorage.baidu 包被导入
     from ..AECloudStorage import AECloudStorage
-except ImportError:  # 以 CloudSorage 为根直接运行
+    from ..File.AECloudFile import CloudFileType
+except ImportError:  # 以 CloudSorge 为根直接运行（baidu 作为顶层包）
     from AECloudStorage import AECloudStorage
+    from File.AECloudFile import CloudFileType
+from .AEBDCredential import AEBDCredential  # 同包，单点相对导入两种上下文均可用
+from .BDFile import AEBDFile
 
-# ---- 百度 OpenAPI 端点（来自 pythonsdk_20220616/openapi_client/api/*.py）----
-_OPENAPI_HOST = "https://openapi.baidu.com"   # OAuth 授权域
-_PAN_HOST = "https://pan.baidu.com"            # 网盘文件操作域
-
-# OAuth（openapi.baidu.com）
-_URL_DEVICE_CODE = _OPENAPI_HOST + "/oauth/2.0/device/code"   # ?response_type=device_code&openapi=xpansdk
-_URL_TOKEN = _OPENAPI_HOST + "/oauth/2.0/token"              # ?grant_type=<device_token|authorization_code|refresh_token>&openapi=xpansdk
-# 网盘（pan.baidu.com）
-_URL_FILE = _PAN_HOST + "/rest/2.0/xpan/file"                 # ?method=<list|filemanager>&opera=<delete|...>&openapi=xpansdk
+# ---- 百度网盘端点（pan.baidu.com / d.pcs.baidu.com）----
+_PAN_HOST = "https://pan.baidu.com"
+_URL_FILE = _PAN_HOST + "/rest/2.0/xpan/file"                 # ?method=<list|precreate|create|filemanager>&...&openapi=xpansdk
 _URL_UINFO = _PAN_HOST + "/rest/2.0/xpan/nas"                 # ?method=uinfo&openapi=xpansdk
+_URL_SUPERFILE = "https://d.pcs.baidu.com/rest/2.0/pcs/superfile2"  # ?method=upload&openapi=xpansdk
+_URL_DOWNLOAD = "https://d.pcs.baidu.com/rest/2.0/pcs/file"        # ?method=download&access_token&path（PCS 按路径下载）
 
-_DEFAULT_SCOPE = "basic,netdisk"
-_TOKEN_DIR = os.path.expanduser("~/.baidu_pan")
-_DEFAULT_TOKEN_PATH = os.path.join(_TOKEN_DIR, "token.json")
-
-# 距过期不足此秒数即提前 refresh，避免边界过期
-_REFRESH_MARGIN = 60
 # 单页文件数上限（xpanfilelist method=list 的 limit）
 _PAGE_LIMIT = 1000
+# 上传：superfile2 单片 4MB；rtype 重名策略对齐 SDK demo 取 3
+_UPLOAD_CHUNK = 4 * 1024 * 1024
+_UPLOAD_RTYPE = 3
+# 下载流式分片
+_DOWNLOAD_CHUNK = 1024 * 1024
 
 
 class AEBaiduStorage(AECloudStorage):
-    """百度网盘存储（直连 OpenAPI）。创建即自动加载/续期 token；首次需 authorize()。"""
+    """百度网盘文件操作。凭证与 OAuth 能力全部委托 AEBDCredential。"""
 
     def __init__(self):
         super().__init__()
-        self.base_path = (str(self._cred_attr("BASE_PATH") or "").strip("/")) or None
-        self.app_name = self._cred_attr("APP_NAME") or "FileManager"
+        from . import credentials as c
+        self._cred = AEBDCredential(c.APP_NAME, c.APPKEY, c.SECRETKEY, c.TOKEN_PATH)
+        self._cred.delegate = self  # 注册为 delegate，接收验证有效/刷新成功回调
+        self.app_name = self._cred.app_name
         self.sandbox_root = "/apps/" + self.app_name  # 沙箱根（2026-08-31 起强制）
-        self.token_path = self._cred_attr("TOKEN_PATH") or _DEFAULT_TOKEN_PATH
-        self._token = None  # {access_token, refresh_token, expires_at, scope}
-        self._load_token()
-        # 构造即自动连接：token 过期但有 refresh_token 则静默续期
-        if self._token and not self._is_token_valid() and self._token.get("refresh_token"):
-            try:
-                self._refresh()
-            except RuntimeError:
-                pass  # 续期失败留待 _access_token() 抛错指引 authorize()
-        self.is_loaded = self._is_token_valid()
+        self.base_path = (str(c.BASE_PATH or "").strip("/")) or None
+        self.token_path = self._cred.credential_path
+        self.files: List[AEBDFile] = []
+        # 验证有效/刷新成功 → 回调 on_valid/on_refreshed → 添加第一个 AEBDFile
+        self.is_loaded = self._cred.verify()
 
-    # ---- 配置：仅从 gitignore 的 credentials.py 读取（不读环境变量）----
+    # ---- 凭证访问 ----
 
-    @staticmethod
-    def _cred_attr(name: str, default=None):
-        """从 credentials.py 取属性；文件缺省或属性不存在则返回 default"""
-        try:
-            from . import credentials as _cred
-            return getattr(_cred, name, default)
-        except ImportError:
-            return default
+    @property
+    def cred(self) -> AEBDCredential:
+        """凭证对象；authorize/authorize_with_code/refresh 等能力由它提供"""
+        return self._cred
 
-    @staticmethod
-    def _credentials() -> Tuple[str, str]:
-        """返回 (client_id, client_secret) = (APPKEY, SECRETKEY)"""
-        return AEBaiduStorage._cred_attr("APPKEY"), AEBaiduStorage._cred_attr("SECRETKEY")
+    # ---- AEBDCredential delegate 回调 ----
 
-    # ---- token 缓存 ----
+    def on_valid(self, cred: AEBDCredential) -> None:
+        """credential 验证有效（含授权后有效）：标记已加载 + 添加第一个 AEBDFile"""
+        self.is_loaded = True
+        self._add_first_file()
 
-    def _load_token(self):
-        try:
-            with open(self.token_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, ValueError):
-            data = None
-        self._token = data
+    def on_refreshed(self, cred: AEBDCredential) -> None:
+        """credential 刷新成功：标记已加载 + 添加第一个 AEBDFile（幂等）"""
+        self.is_loaded = True
+        self._add_first_file()
 
-    def _save_token(self, token: dict):
-        """用 OAuth 返回（含 access_token/refresh_token/expires_in/scope）更新并落盘缓存"""
-        access_token = token.get("access_token")
-        if not access_token:
-            raise RuntimeError("OAuth 返回缺少 access_token: %s" % token)
-        expires_in = token.get("expires_in")
-        # refresh_token 缺省保留旧值（refresh 响应可能不含）
-        refresh_token = token.get("refresh_token") or (self._token or {}).get("refresh_token")
-        self._token = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_at": int(time.time()) + int(expires_in) if expires_in else 0,
-            "scope": token.get("scope"),
-        }
-        try:
-            os.makedirs(os.path.dirname(self.token_path) or ".", exist_ok=True)
-            with open(self.token_path, "w", encoding="utf-8") as f:
-                json.dump(self._token, f, ensure_ascii=False, indent=2)
-                f.flush()
-            os.chmod(self.token_path, 0o600)
-        except OSError:
-            pass  # 缓存落盘失败不阻断内存中的 token
+    def _add_first_file(self) -> None:
+        """添加第一个 AEBDFile（沙箱根节点）；幂等，仅一次"""
+        if self.files:
+            return
+        self.files.append(AEBDFile(name=self.app_name, type=CloudFileType.FOLDER, path=self.sandbox_root))
 
-    def _is_token_valid(self) -> bool:
-        t = self._token
-        if not (t and t.get("access_token")):
-            return False
-        exp = t.get("expires_at", 0)
-        return not exp or exp - _REFRESH_MARGIN > int(time.time())
-
-    # ---- HTTP ----
+    # ---- HTTP（网盘文件操作：GET/POST/分片）----
 
     @staticmethod
-    def _request(method: str, url: str, params=None, data=None) -> dict:
-        resp = requests.request(method, url, params=params, data=data, timeout=30)
+    def _request(method: str, url: str, params=None, data=None, files=None, timeout=30) -> dict:
+        resp = requests.request(method, url, params=params, data=data, files=files, timeout=timeout)
         try:
             return resp.json()
         except ValueError:
@@ -149,103 +104,11 @@ class AEBaiduStorage(AECloudStorage):
                 "百度 OpenAPI 非 JSON 响应 status=%s body=%s"
                 % (resp.status_code, resp.text[:200]))
 
-    def _access_token(self) -> str:
-        """取有效 access_token；过期则用 refresh_token 续期，失败抛错指引 authorize()"""
-        if self._is_token_valid():
-            return self._token["access_token"]
-        if self._token and self._token.get("refresh_token"):
-            self._refresh()
-            if self._is_token_valid():
-                self.is_loaded = True
-                return self._token["access_token"]
-        self.is_loaded = False
-        raise RuntimeError("百度网盘未授权或 token 已失效，请先调用 authorize() 完成授权")
-
-    # ---- 用户验证 ----
-
-    def authorize(self, scope: str = _DEFAULT_SCOPE, timeout: int = 600) -> dict:
-        """device-code OAuth 授权（交互式，首次使用调用一次）。
-
-        流程：取 device_code → 打印 verification_url/qrcode_url + user_code →
-        轮询 device_token 端点，用户完成授权后拿到 access_token/refresh_token → 缓存。
-        """
-        client_id, client_secret = self._credentials()
-        if not (client_id and client_secret):
-            raise RuntimeError(
-                "缺少 client_id/client_secret：在 credentials.py 设置 APPKEY/SECRETKEY")
-        # 1. 取 device code（仅需 client_id）
-        d = self._request("GET", _URL_DEVICE_CODE, params={
-            "response_type": "device_code", "openapi": "xpansdk",
-            "client_id": client_id, "scope": scope,
-        })
-        device_code = d.get("device_code")
-        if not device_code:
-            raise RuntimeError("获取 device_code 失败: %s" % d)
-        user_code = d.get("user_code", "")
-        verification_url = d.get("verification_url", "")
-        qrcode_url = d.get("qrcode_url", "")
-        interval = max(int(d.get("interval", 5) or 5), 1)
-        expires_in = int(d.get("expires_in", 600) or 600)
-        print("\n[百度网盘授权] 请在浏览器访问: %s" % verification_url)
-        if user_code:
-            print("[百度网盘授权] 授权码: %s" % user_code)
-        if qrcode_url:
-            print("[百度网盘授权] 或扫码: %s" % qrcode_url)
-        print("[百度网盘授权] 等待授权完成...")
-        # 2. 轮询 device token（需 client_id + client_secret）
-        deadline = int(time.time()) + min(expires_in, timeout)
-        while int(time.time()) < deadline:
-            r = self._request("GET", _URL_TOKEN, params={
-                "grant_type": "device_token", "openapi": "xpansdk",
-                "code": device_code, "client_id": client_id, "client_secret": client_secret,
-            })
-            if r.get("access_token"):
-                self._save_token(r)
-                self.is_loaded = True
-                print("[百度网盘授权] 成功，token 已缓存到 %s" % self.token_path)
-                return r
-            # 用户尚未授权：按 interval 重试；遇 fatal 错误（过期/拒绝）立即终止
-            err = str(r.get("error") or r.get("errmsg") or "")
-            if err and ("expired" in err or "denied" in err):
-                raise RuntimeError("device-code 授权失败: %s" % r)
-            time.sleep(interval)
-        raise RuntimeError("device-code 授权超时，未在 %ss 内完成授权" % timeout)
-
-    def authorize_with_code(self, code: str, redirect_uri: str = "oob") -> dict:
-        """authorization-code OAuth 授权（备选：用浏览器回调/粘贴的 code 换 token）"""
-        client_id, client_secret = self._credentials()
-        if not (client_id and client_secret):
-            raise RuntimeError(
-                "缺少 client_id/client_secret：在 credentials.py 设置 APPKEY/SECRETKEY")
-        r = self._request("GET", _URL_TOKEN, params={
-            "grant_type": "authorization_code", "openapi": "xpansdk",
-            "code": code, "client_id": client_id, "client_secret": client_secret,
-            "redirect_uri": redirect_uri,
-        })
-        if not r.get("access_token"):
-            raise RuntimeError("authorization_code 换 token 失败: %s" % r)
-        self._save_token(r)
-        self.is_loaded = True
-        return r
-
-    def _refresh(self) -> dict:
-        """用 refresh_token 续期 access_token"""
-        client_id, client_secret = self._credentials()
-        refresh_token = (self._token or {}).get("refresh_token")
-        if not (client_id and client_secret and refresh_token):
-            raise RuntimeError("refresh_token 续期缺参数（client_id/client_secret/refresh_token）")
-        r = self._request("GET", _URL_TOKEN, params={
-            "grant_type": "refresh_token", "openapi": "xpansdk",
-            "refresh_token": refresh_token, "client_id": client_id, "client_secret": client_secret,
-        })
-        if not r.get("access_token"):
-            raise RuntimeError("refresh_token 续期失败: %s" % r)
-        self._save_token(r)
-        return r
+    # ---- 用户信息 ----
 
     def get_user_info(self) -> dict:
         """xpannasuinfo：返回授权用户信息（errno/uk/baidu_name/netdisk_name/vip_type/...）"""
-        access_token = self._access_token()
+        access_token = self._cred.get_access_token()
         return self._request("GET", _URL_UINFO, params={
             "method": "uinfo", "openapi": "xpansdk", "access_token": access_token,
         })
@@ -253,8 +116,11 @@ class AEBaiduStorage(AECloudStorage):
     # ---- 路径处理（remote_path 相对沙箱根 /apps/{APP_NAME}，base_path 作子前缀）----
 
     def _full_path(self, remote_path: str) -> str:
-        """API 实际路径 = /apps/{APP_NAME}[/base_path]/remote_path（沙箱内绝对路径）"""
-        segs = [self.sandbox_root.strip("/")]  # apps/FileManager
+        """API 实际路径（沙箱内绝对）：已是沙箱内绝对路径则原样，否则相对沙箱根拼接。"""
+        sandbox = self.sandbox_root  # /apps/FileManager
+        if remote_path == sandbox or remote_path.startswith(sandbox + "/"):
+            return remote_path.rstrip("/") or sandbox
+        segs = [sandbox.strip("/")]
         bp = (self.base_path or "").strip("/")
         if bp:
             segs.append(bp)
@@ -266,7 +132,7 @@ class AEBaiduStorage(AECloudStorage):
     # ---- 文件列表访问（xpanfilelist）----
 
     def _list_files(self, remote_dir: str) -> List[Dict[str, Any]]:
-        access_token = self._access_token()
+        access_token = self._cred.get_access_token()
         dir_path = self._full_path(remote_dir)
         files: List[Dict[str, Any]] = []
         start = 0
@@ -286,3 +152,134 @@ class AEBaiduStorage(AECloudStorage):
                 break
             start += _PAGE_LIMIT
         return files
+
+    def print_file_list(self, remote_dir: str) -> List[Dict[str, Any]]:
+        """打印目录下的文件列表（目录路径 + 每项 DIR/FILE、名称、大小），并返回该列表"""
+        files = self.list_files(remote_dir)
+        print("目录: %s （共 %d 项）" % (self._full_path(remote_dir), len(files)))
+        for f in files:
+            tag = "DIR " if f.get("isdir") else "FILE"
+            name = f.get("server_filename") or f.get("path", "")
+            print("  %s %s  size=%s" % (tag, name, f.get("size", "")))
+        return files
+
+    # ---- 上传文件 / 创建文件夹（fileupload：precreate → superfile2 分片 → create）----
+
+    @staticmethod
+    def _md5_blocks(local_path: str):
+        """按 4MB 分片读文件，返回 (block_list, n)：block_list 为 md5 hex 的 JSON 串"""
+        md5s = []
+        with open(local_path, "rb") as f:
+            while True:
+                chunk = f.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                md5s.append(hashlib.md5(chunk).hexdigest())
+        if not md5s:  # 空文件：单个空块（md5=d41d8cd98f00b204e9800998ecf8427e）
+            md5s.append(hashlib.md5(b"").hexdigest())
+        return json.dumps(md5s, ensure_ascii=False), len(md5s)
+
+    def _upload(self, local_path: str, remote_path: str) -> Dict[str, Any]:
+        access_token = self._cred.get_access_token()
+        path = self._full_path(remote_path)
+        size = os.path.getsize(local_path)
+        block_list, n_blocks = self._md5_blocks(local_path)
+        # 1. precreate（access_token 走 query，path/isdir/size/autoinit/block_list/rtype 走 form）
+        pre = self._request("POST", _URL_FILE, params={
+            "method": "precreate", "openapi": "xpansdk", "access_token": access_token,
+        }, data={
+            "path": path, "isdir": 0, "size": size, "autoinit": 1,
+            "block_list": block_list, "rtype": _UPLOAD_RTYPE,
+        })
+        uploadid = pre.get("uploadid")
+        if not uploadid:
+            raise RuntimeError("[%s] upload precreate 失败: %s" % (self.name, pre))
+        # 2. superfile2 分片上传（access_token/partseq/path/uploadid/type 走 query，file 走 multipart）
+        with open(local_path, "rb") as f:
+            for partseq in range(n_blocks):
+                chunk = f.read(_UPLOAD_CHUNK)
+                cr = self._request("POST", _URL_SUPERFILE, params={
+                    "method": "upload", "openapi": "xpansdk", "access_token": access_token,
+                    "partseq": str(partseq), "path": path, "uploadid": uploadid, "type": "tmpfile",
+                }, files={"file": (os.path.basename(path), chunk)}, timeout=120)
+                if not cr.get("md5") and cr.get("errno") not in (None, 0):
+                    raise RuntimeError(
+                        "[%s] upload superfile2 partseq=%s 失败: %s" % (self.name, partseq, cr))
+        # 3. create（与 precreate 的 path/size/block_list 保持一致）
+        cre = self._request("POST", _URL_FILE, params={
+            "method": "create", "openapi": "xpansdk", "access_token": access_token,
+        }, data={
+            "path": path, "isdir": 0, "size": size, "uploadid": uploadid,
+            "block_list": block_list, "rtype": _UPLOAD_RTYPE,
+        })
+        errno = cre.get("errno")
+        if errno not in (None, 0):
+            raise RuntimeError(
+                "[%s] upload create 失败 errno=%s %s" % (self.name, errno, cre.get("errmsg", "")))
+        return {
+            "errno": errno if errno is not None else 0,
+            "local": local_path, "remote": path, "size": size, "raw": cre,
+        }
+
+    def _mkdir(self, remote_path: str) -> Dict[str, Any]:
+        access_token = self._cred.get_access_token()
+        path = self._full_path(remote_path)
+        block_list = "[]"  # 文件夹无分片
+        # 1. precreate（isdir=1, size=0）
+        pre = self._request("POST", _URL_FILE, params={
+            "method": "precreate", "openapi": "xpansdk", "access_token": access_token,
+        }, data={
+            "path": path, "isdir": 1, "size": 0, "autoinit": 1,
+            "block_list": block_list, "rtype": _UPLOAD_RTYPE,
+        })
+        uploadid = pre.get("uploadid")
+        if not uploadid:
+            raise RuntimeError("[%s] mkdir precreate 失败: %s" % (self.name, pre))
+        # 2. create（isdir=1, 无分片上传）
+        cre = self._request("POST", _URL_FILE, params={
+            "method": "create", "openapi": "xpansdk", "access_token": access_token,
+        }, data={
+            "path": path, "isdir": 1, "size": 0, "uploadid": uploadid,
+            "block_list": block_list, "rtype": _UPLOAD_RTYPE,
+        })
+        errno = cre.get("errno")
+        if errno not in (None, 0):
+            raise RuntimeError(
+                "[%s] mkdir create 失败 errno=%s %s" % (self.name, errno, cre.get("errmsg", "")))
+        return {"errno": errno if errno is not None else 0, "remote": path, "raw": cre}
+
+    # ---- 查找文件（xpanfilesearch）----
+
+    def search(self, key: str, remote_dir: str = None, recursion: int = 1) -> List[Dict[str, Any]]:
+        """按 key 搜索文件；remote_dir 限定目录（缺省全网盘）。返回原始条目列表。"""
+        access_token = self._cred.get_access_token()
+        params = {
+            "method": "search", "openapi": "xpansdk", "access_token": access_token,
+            "key": key, "recursion": str(recursion),
+        }
+        if remote_dir:
+            params["dir"] = self._full_path(remote_dir)
+        r = self._request("GET", _URL_FILE, params=params)
+        errno = r.get("errno")
+        if errno not in (None, 0):
+            raise RuntimeError("[%s] search errno=%s %s" % (self.name, errno, r.get("errmsg", "")))
+        return r.get("list") or []
+
+    # ---- 下载文件（PCS 按路径下载，流式）----
+
+    def _download(self, remote_path: str, local_path: str) -> str:
+        access_token = self._cred.get_access_token()
+        path = self._full_path(remote_path)
+        parent = os.path.dirname(local_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        resp = requests.get(_URL_DOWNLOAD, params={
+            "method": "download", "access_token": access_token, "path": path,
+        }, stream=True, timeout=120)
+        if resp.status_code != 200:
+            raise RuntimeError("[%s] download 失败 status=%s" % (self.name, resp.status_code))
+        with open(local_path, "wb") as f:
+            for chunk in resp.iter_content(_DOWNLOAD_CHUNK):
+                if chunk:
+                    f.write(chunk)
+        return local_path
