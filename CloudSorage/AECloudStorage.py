@@ -1,7 +1,9 @@
 """
 AE Cloud Storage - 云存储提供商基类
 对齐 llms/llm_providers/ae_base_provider.py 的写法：
-公共方法统一打日志后委托抽象 _xxx；子类只需实现 _xxx。
+公共方法统一打日志后委托 _xxx；子类按需覆写。
+_list_files 为必选（抽象）；_upload/_download/_delete/_mkdir/_exists 为可选，
+默认抛 NotImplementedError，子类未覆写即不支持该操作。
 """
 import json
 import logging
@@ -65,31 +67,28 @@ class AECloudStorage(ABC):
         logger.info("[%s] exists result=%s", self.name, result)
         return result
 
-    # ---- 抽象方法：各 provider 实现 ----
-
-    @abstractmethod
-    def _upload(self, local_path: str, remote_path: str) -> Dict[str, Any]:
-        pass
-
-    @abstractmethod
-    def _download(self, remote_path: str, local_path: str) -> str:
-        pass
+    # ---- 子类实现的方法 ----
+    # _list_files 必选（抽象）：provider 至少能列文件；
+    # _upload/_download/_delete/_mkdir/_exists 可选，默认 NotImplementedError，子类按需覆写。
 
     @abstractmethod
     def _list_files(self, remote_dir: str) -> List[Dict[str, Any]]:
         pass
 
-    @abstractmethod
+    def _upload(self, local_path: str, remote_path: str) -> Dict[str, Any]:
+        raise NotImplementedError("[%s] upload 未实现" % self.name)
+
+    def _download(self, remote_path: str, local_path: str) -> str:
+        raise NotImplementedError("[%s] download 未实现" % self.name)
+
     def _delete(self, remote_path: str) -> Dict[str, Any]:
-        pass
+        raise NotImplementedError("[%s] delete 未实现" % self.name)
 
-    @abstractmethod
     def _mkdir(self, remote_path: str) -> Dict[str, Any]:
-        pass
+        raise NotImplementedError("[%s] mkdir 未实现" % self.name)
 
-    @abstractmethod
     def _exists(self, remote_path: str) -> bool:
-        pass
+        raise NotImplementedError("[%s] exists 未实现" % self.name)
 
     def get_status(self) -> dict:
         return {
