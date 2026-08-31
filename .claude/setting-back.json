@@ -1,0 +1,10 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "asdf",
+    "ANTHROPIC_BASE_URL": "http://10.220.146.132:10000",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "/Users/worker/Downloads/Qwen3.5-122B-A10B-4bit",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "/Users/worker/Downloads/Qwen3.5-122B-A10B-4bit",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "/Users/worker/Downloads/Qwen3.5-122B-A10B-4bit",
+    "ANTHROPIC_DISABLE_THINKING": "true"
+  }
+}

@@ -13,6 +13,7 @@ class AELLMType(Enum):
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
     ZHIPU = "zhipu"
+    QWEN = "qwen"
 
 
 class AEAiLevel(Enum):

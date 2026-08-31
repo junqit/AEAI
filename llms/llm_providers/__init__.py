@@ -6,11 +6,13 @@ from .ae_chatgpt_provider import AEChatGPTProvider
 from .ae_deepseek_provider import AEDeepSeekProvider
 from .ae_gemini_provider import AEGeminiProvider
 from .ae_zhipu_provider import AEZhipuProvider
+from .ae_qwen_provider import AEQwenProvider
 
 __all__ = [
     "AEClaudeProvider",
     "AEChatGPTProvider",
     "AEDeepSeekProvider",
     "AEGeminiProvider",
-    "AEZhipuProvider"
+    "AEZhipuProvider",
+    "AEQwenProvider"
 ]

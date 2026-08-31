@@ -1,6 +1,6 @@
 """
 AELlmManager - 统一的 LLM 管理器
-支持多种 LLM 类型：Claude、ChatGPT、DeepSeek、Gemini 等
+支持多种 LLM 类型：Claude、ChatGPT、DeepSeek、Gemini、Qwen 等
 使用独立的 Provider 类管理各个 LLM
 """
 import os
@@ -12,7 +12,8 @@ from llm_providers import (
     AEChatGPTProvider,
     AEDeepSeekProvider,
     AEGeminiProvider,
-    AEZhipuProvider
+    AEZhipuProvider,
+    AEQwenProvider
 )
 
 class AELlmManager:
@@ -59,7 +60,8 @@ class AELlmManager:
             AELLMType.CLAUDE: AEClaudeProvider(),
             AELLMType.CHATGPT: AEChatGPTProvider(),
             AELLMType.DEEPSEEK: AEDeepSeekProvider(),
-            AELLMType.ZHIPU: AEZhipuProvider()
+            AELLMType.ZHIPU: AEZhipuProvider(),
+            AELLMType.QWEN: AEQwenProvider()
             # AELLMType.GEMINI: AEGeminiProvider()
         }
 
@@ -168,19 +170,6 @@ class AELlmManager:
             "available": True,
             "providers": providers_status
         }
-
-    def set_llm_type(self, llm_type: AELLMType):
-        """动态切换 LLM 类型"""
-        self.llm_type = llm_type
-
-        # 如果切换到 Gemini，确保模型已加载
-        if llm_type == AELLMType.GEMINI:
-            gemini_provider = self.providers.get(AELLMType.GEMINI)
-            if gemini_provider and not gemini_provider.is_loaded:
-                print("Loading Gemini model for switched LLM type...")
-                gemini_provider.load()
-
-        print(f"LLM type switched to: {llm_type.value}")
 
     def cleanup_provider(self, llm_type: AELLMType):
         """清理指定 Provider 的资源"""

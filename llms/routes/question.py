@@ -170,7 +170,8 @@ async def process_question(request: AEQuestionRequest):
             "chatgpt": AELLMType.CHATGPT,
             "deepseek": AELLMType.DEEPSEEK,
             "gemini": AELLMType.GEMINI,
-            "zhipu": AELLMType.ZHIPU
+            "zhipu": AELLMType.ZHIPU,
+            "qwen": AELLMType.QWEN
         }
         llm_type = llm_type_map.get(request.llm_type.lower())
         if not llm_type:
