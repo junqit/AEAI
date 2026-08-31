@@ -117,8 +117,8 @@ class AEQwenModel:
 
             payload = {
                 "model": self.model_path,
-                "messages": messages,
-                "max_tokens": effective_max_tokens
+                "messages": messages
+                # "max_tokens": effective_max_tokens
             }
 
             logger.info(f"🚀 发送请求到 Qwen API: {url}")

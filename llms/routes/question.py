@@ -125,9 +125,6 @@ def _process_llm_sync(
             f"🧩 [Request-{request_id}] 内容拼接完成 - "
             f"think_length={len(question.think_content)}, delta_length={len(question.delta_content)}"
         )
-        logger.info(f"💭 [Request-{request_id}] think = {question.think_content!r}")
-        logger.info(f"💧 [Request-{request_id}] delta = {question.delta_content!r}")
-        logger.info(f"📦 [Request-{request_id}] result = {result}")
 
         return result
 
