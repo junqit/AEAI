@@ -4,10 +4,8 @@ AE Baidu File Read - 百度网盘文件「查」能力（继承 AECloudFileRead�
 """
 try:  # 作为 CloudSorage.baidu.BDFile 包被导入
     from ...File.AECloudFileRead import AECloudFileRead
-    from ...File.AECloudFile import AECloudFile
 except ImportError:  # 以 CloudSorge 为根直接运行（baidu 作为顶层包）
     from File.AECloudFileRead import AECloudFileRead
-    from File.AECloudFile import AECloudFile
 
 
 class AEBDFileRead(AECloudFileRead):
@@ -15,17 +13,17 @@ class AEBDFileRead(AECloudFileRead):
 
     def read(self):
         if self.storage is None:
-            raise RuntimeError("未绑定 storage：组合方需提供 storage 并 bind")
+            raise RuntimeError("未设置 storage")
         if self.is_file:
             return []
-        return [AECloudFile.from_dict(d) for d in self.storage.list_files(self.path or "") if isinstance(d, dict)]
+        return [type(self).from_dict(d) for d in self.storage.list_files(self.path or "") if isinstance(d, dict)]
 
     def find(self, key):
         if self.storage is None:
-            raise RuntimeError("未绑定 storage：组合方需提供 storage 并 bind")
-        return [AECloudFile.from_dict(d) for d in self.storage.search(key, self.path or "") if isinstance(d, dict)]
+            raise RuntimeError("未设置 storage")
+        return [type(self).from_dict(d) for d in self.storage.search(key, self.path or "") if isinstance(d, dict)]
 
     def download(self, local_path):
         if self.storage is None:
-            raise RuntimeError("未绑定 storage：组合方需提供 storage 并 bind")
+            raise RuntimeError("未设置 storage")
         return self.storage.download(self.path or "", local_path)

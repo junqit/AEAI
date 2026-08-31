@@ -2,7 +2,7 @@
 AEBaiduStorage 测试 —— 直连百度网盘 OpenAPI 做真实联网测试。
 
 访问流程（对齐 pythonsdk_20220616 OpenAPI）：
-  - 构造零参、非交互：从 ~/.baidu_pan/token.json 加载 access_token，过期用 refresh_token
+  - 构造需 4 凭证参数、非交互：从 ~/.baidu_pan/token.json 加载 access_token，过期用 refresh_token
     自动续期。
   - 若无缓存 token（首次使用），调用 s.cred.authorize() 走 device-code 授权：
         打印验证 URL/二维码 → 浏览器授权 → 轮询拿 token → 缓存到 ~/.baidu_pan/token.json。
@@ -26,7 +26,8 @@ class TestRealIntegration(unittest.TestCase):
     """真实联网测试：直连百度网盘 OpenAPI。"""
 
     def test_auth_and_list_first_level(self):
-        s = AEBaiduStorage()  # 非交互构造：加载/续期缓存 token
+        from baidu import credentials as c
+        s = AEBaiduStorage(c.APP_NAME, c.APPKEY, c.SECRETKEY, c.TOKEN_PATH)  # 非交互构造
         if not s.is_loaded:
             s.cred.authorize()  # 首次使用：交互式 device-code 授权（能力由 AEBDCredential 提供）
         self.assertTrue(s.is_loaded)

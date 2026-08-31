@@ -5,7 +5,7 @@ AE Baidu Storage - 百度网盘文件操作（直连百度网盘 OpenAPI，不�
 取有效 token）均由 AEBDCredential 提供；本类只负责网盘文件操作：文件列表、上传、
 创建文件夹、用户信息。不读环境变量，不含任何凭证逻辑。
 
-构造零参、非交互：创建时从 credentials.py 读应用凭证，构造 AEBDCredential（4 参数），过期则 cred.refresh() 续期。
+构造需 4 凭证参数（app_name/app_key/app_secret/credential_path），非交互；过期则 cred.refresh() 续期。
 首次使用前需调用一次 s.cred.authorize() 完成 device-code 授权；之后构造即自动连接。
 
 实现范围（其余存储操作由 AECloudStorage 基类提供 NotImplementedError 默认）：
@@ -54,15 +54,13 @@ _DOWNLOAD_CHUNK = 1024 * 1024
 class AEBaiduStorage(AECloudStorage):
     """百度网盘文件操作。凭证与 OAuth 能力全部委托 AEBDCredential。"""
 
-    def __init__(self):
-        super().__init__()
-        from . import credentials as c
-        self._cred = AEBDCredential(c.APP_NAME, c.APPKEY, c.SECRETKEY, c.TOKEN_PATH)
+    def __init__(self, app_name: str, app_key: str, app_secret: str, credential_path: str):
+        self._cred = AEBDCredential(app_name, app_key, app_secret, credential_path)
         self._cred.delegate = self  # 注册为 delegate，接收验证有效/刷新成功回调
-        self.app_name = self._cred.app_name
-        self.sandbox_root = "/apps/" + self.app_name  # 沙箱根（2026-08-31 起强制）
-        self.base_path = (str(c.BASE_PATH or "").strip("/")) or None
-        self.token_path = self._cred.credential_path
+        self.app_name = app_name
+        self.sandbox_root = "/apps/" + app_name  # 沙箱根（2026-08-31 起强制）
+        super().__init__(base_dir=self.sandbox_root)  # 基础目录 = 沙箱根
+        self.token_path = credential_path
         self.files: List[AEBDFile] = []
         # 验证有效/刷新成功 → 回调 on_valid/on_refreshed → 添加第一个 AEBDFile
         self.is_loaded = self._cred.verify()
@@ -113,27 +111,11 @@ class AEBaiduStorage(AECloudStorage):
             "method": "uinfo", "openapi": "xpansdk", "access_token": access_token,
         })
 
-    # ---- 路径处理（remote_path 相对沙箱根 /apps/{APP_NAME}，base_path 作子前缀）----
-
-    def _full_path(self, remote_path: str) -> str:
-        """API 实际路径（沙箱内绝对）：已是沙箱内绝对路径则原样，否则相对沙箱根拼接。"""
-        sandbox = self.sandbox_root  # /apps/FileManager
-        if remote_path == sandbox or remote_path.startswith(sandbox + "/"):
-            return remote_path.rstrip("/") or sandbox
-        segs = [sandbox.strip("/")]
-        bp = (self.base_path or "").strip("/")
-        if bp:
-            segs.append(bp)
-        rp = remote_path.strip("/")
-        if rp:
-            segs.append(rp)
-        return "/" + "/".join(segs)
-
     # ---- 文件列表访问（xpanfilelist）----
 
     def _list_files(self, remote_dir: str) -> List[Dict[str, Any]]:
         access_token = self._cred.get_access_token()
-        dir_path = self._full_path(remote_dir)
+        dir_path = remote_dir
         files: List[Dict[str, Any]] = []
         start = 0
         while True:
@@ -156,7 +138,7 @@ class AEBaiduStorage(AECloudStorage):
     def print_file_list(self, remote_dir: str) -> List[Dict[str, Any]]:
         """打印目录下的文件列表（目录路径 + 每项 DIR/FILE、名称、大小），并返回该列表"""
         files = self.list_files(remote_dir)
-        print("目录: %s （共 %d 项）" % (self._full_path(remote_dir), len(files)))
+        print("目录: %s （共 %d 项）" % (self._resolve_path(remote_dir), len(files)))
         for f in files:
             tag = "DIR " if f.get("isdir") else "FILE"
             name = f.get("server_filename") or f.get("path", "")
@@ -181,7 +163,7 @@ class AEBaiduStorage(AECloudStorage):
 
     def _upload(self, local_path: str, remote_path: str) -> Dict[str, Any]:
         access_token = self._cred.get_access_token()
-        path = self._full_path(remote_path)
+        path = remote_path
         size = os.path.getsize(local_path)
         block_list, n_blocks = self._md5_blocks(local_path)
         # 1. precreate（access_token 走 query，path/isdir/size/autoinit/block_list/rtype 走 form）
@@ -223,7 +205,7 @@ class AEBaiduStorage(AECloudStorage):
 
     def _mkdir(self, remote_path: str) -> Dict[str, Any]:
         access_token = self._cred.get_access_token()
-        path = self._full_path(remote_path)
+        path = remote_path
         block_list = "[]"  # 文件夹无分片
         # 1. precreate（isdir=1, size=0）
         pre = self._request("POST", _URL_FILE, params={
@@ -258,7 +240,7 @@ class AEBaiduStorage(AECloudStorage):
             "key": key, "recursion": str(recursion),
         }
         if remote_dir:
-            params["dir"] = self._full_path(remote_dir)
+            params["dir"] = self._resolve_path(remote_dir)
         r = self._request("GET", _URL_FILE, params=params)
         errno = r.get("errno")
         if errno not in (None, 0):
@@ -269,7 +251,7 @@ class AEBaiduStorage(AECloudStorage):
 
     def _download(self, remote_path: str, local_path: str) -> str:
         access_token = self._cred.get_access_token()
-        path = self._full_path(remote_path)
+        path = remote_path
         parent = os.path.dirname(local_path)
         if parent:
             os.makedirs(parent, exist_ok=True)
