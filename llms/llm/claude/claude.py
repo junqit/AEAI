@@ -169,7 +169,6 @@ class AEClaudeModel:
     def cleanup(self):
         """清理资源"""
         self.is_loaded = False
-        print("🧹 Claude API 资源已清理")
 
 
 # 全局单例实例

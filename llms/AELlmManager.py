@@ -4,6 +4,7 @@ AELlmManager - 统一的 LLM 管理器
 使用独立的 Provider 类管理各个 LLM
 """
 import os
+import logging
 from typing import Optional, Callable, Dict, Any
 from question.AEQuestion import AELLMType, AEQuestion
 from AEAiLevel import AEAiLevel
@@ -15,6 +16,9 @@ from llm_providers import (
     AEZhipuProvider,
     AEQwenProvider
 )
+
+logger = logging.getLogger(__name__)
+
 
 class AELlmManager:
     """
@@ -49,11 +53,8 @@ class AELlmManager:
         except ValueError:
             self.llm_type = AELLMType.CLAUDE
 
-        print(f"AELlmManager initialized with LLM type: {self.llm_type.value}")
-
     def _init_providers(self):
         """初始化所有 Provider 并加载模型"""
-        print("Initializing all LLM providers...")
 
         # 实例化所有 Provider
         self.providers = {
@@ -69,30 +70,18 @@ class AELlmManager:
         for llm_type, provider in self.providers.items():
             try:
                 if hasattr(provider, 'load') and not provider.is_loaded:
-                    print(f"Loading {llm_type.value} provider...")
                     provider.load()
             except Exception as e:
-                print(f"⚠️ Warning: Failed to load {llm_type.value} provider: {str(e)}")
+                logger.warning("Failed to load %s provider: %s", llm_type.value, e)
                 # 继续加载其他 Provider，不中断整个初始化过程
-
-        print("All providers initialized.")
 
     @staticmethod
     def _default_think_process(info: Dict[str, Any]) -> None:
-        """
-        默认 think_process：打印流式逐 delta（思考过程）进度。
-        stream 接收的思考过程信息统一在此回调中输出，模型层不再打印 stream 相关日志。
-        """
-        print(f"[think] progress={info['progress']:.1%} "
-              f"generated={info['generated_length']} "
-              f"remaining={info['remaining']} final={info['final']}")
+        """默认 think_process：无操作占位。调用方未提供回调时使用；需进度输出时由调用方传入回调。"""
 
     @staticmethod
     def _default_delta_process(info: Dict[str, Any]) -> None:
-        """默认 delta_process：打印最终结果进度。"""
-        print(f"[delta] progress={info['progress']:.1%} "
-              f"generated={info['generated_length']} "
-              f"remaining={info['remaining']} final={info['final']}")
+        """默认 delta_process：无操作占位。"""
 
     def generate(self, question: AEQuestion,
                  think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
@@ -197,8 +186,7 @@ def cleanup_ae_llm_manager():
             try:
                 provider.cleanup()
             except Exception as e:
-                print(f"Error cleaning up {llm_type.value}: {e}")
+                logger.error("Error cleaning up %s: %s", llm_type.value, e)
 
         _manager_instance = None
-        print("AELlmManager cleaned up")
 

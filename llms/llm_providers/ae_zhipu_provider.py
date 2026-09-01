@@ -130,4 +130,3 @@ class AEZhipuProvider(AEBaseProvider):
             self.zhipu_model = None
 
         self.is_loaded = False
-        print(f"🧹 {self.name} cleaned up")

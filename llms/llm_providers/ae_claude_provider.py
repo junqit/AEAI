@@ -126,5 +126,4 @@ class AEClaudeProvider(AEBaseProvider):
             self.claude_model = None
 
         self.is_loaded = False
-        print(f"🧹 {self.name} cleaned up")
 

@@ -130,4 +130,3 @@ class AEDeepSeekProvider(AEBaseProvider):
             self.deepseek_model = None
 
         self.is_loaded = False
-        print(f"🧹 {self.name} cleaned up")

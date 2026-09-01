@@ -124,7 +124,7 @@ class AEQwenModel:
             logger.info(f"🚀 发送请求到 Qwen API: {url}")
 
             # 发送 POST 请求（Qwen 本地 API 不支持流式响应）
-            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response = requests.post(url, headers=headers, json=payload, timeout=300)
 
             elapsed = (datetime.now() - start_time).total_seconds()
 

@@ -29,27 +29,31 @@ class AERoleQuestionOptimize(AERoleInfo):
     roleGoal（优化后的问题）由基类 AERoleInfo 持有。"""
 
     def requestOptimizeInput(self) -> None:
-        """组装并发送 LLM 请求：以 role_brief 作为系统提示，以 rolePrompt 作为「提的问题」
-        （针对 AE_USER_QUESTION_PREFIX 的优化指令），让 LLM 据此生成一段「问题优化提示」。
+        """组装并发送 LLM 请求：对用户问题做二次解释与补全缺失，输出「优化后的问题」本身，
+        不得直接回答该问题。
 
-        - messages: system(role_brief，含身份与能力) / system(rolePrompt 优化指令) / user(用户问题，AE_USER_QUESTION_PREFIX 前缀；无问题时退化为 user 指令)
-        - out_schema: {AE_CONTENT: 问题优化提示 占位}，由 LLM 填充
+        - messages: system(role_brief，含身份与能力) / system(问题优化指令) / user(用户问题，AE_USER_QUESTION_PREFIX 前缀；无问题时退化为 user 指令)
+        - out_schema: {AE_CONTENT: 优化后的问题 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 roleGoal（不完成 flow）
 
-        注：rolePrompt 由 requestRoleInformation 一并生成，是本角色针对用户问题（AE_USER_QUESTION_PREFIX）
-        所提的提问/优化指令；未生成 rolePrompt 的 flow（如 AERefiner）回退到默认指令。
+        注：本步骤只做问题优化（二次解释 + 补全缺失），不直接回答；rolePrompt 是作答步骤
+        （requestLLMAnswer）的指令，此处不用，避免把「转化为可执行目标/作答」倾向带入问题优化。
         """
         messages = []
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        # rolePrompt 作为针对 AE_USER_QUESTION_PREFIX 的提问指令；为空时回退默认指令
-        default_instruction = (
-            f"请根据你的职称与能力，对{AE_USER_QUESTION_PREFIX}做优化，不可扩展、不可改变原意思"
-            "（更清晰、更完整、更易于理解），使问题更契合你的专业能力与约束范围。"
-            "体现你的专业角色，不得超出你的能力与职责边界。"
+        # 问题优化指令：二次解释与补全缺失，输出优化后的「问题」本身，严禁直接回答。
+        # 不用 rolePrompt——它是作答步骤（requestLLMAnswer）的指令，倾向「转化为可执行目标/作答」，
+        # 用在此处会让模型直接回答问题（如罗列能力范围），而非优化问题。
+        instruction = (
+            f"对{AE_USER_QUESTION_PREFIX}做问题优化：在保持原意的前提下，对用户问题进行二次解释与补全缺失，"
+            "重述并补全其中隐含或缺失的信息，使其更清晰、更完整、更易于理解，且契合你的专业能力与约束范围。\n"
+            "要求：\n"
+            "- 输出必须是「一个问题」（优化后的用户问题本身）；\n"
+            "- 严禁直接回答该问题，严禁罗列或描述你的能力范围；\n"
+            "- 不得扩展原意、不得改变问题意图。"
         )
-        instruction = self.rolePrompt or default_instruction
         user_question = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
         if len(user_question) > 0:
             # 指令放 system、待优化问题放 user——user 才是模型要处理的内容，
