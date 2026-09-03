@@ -20,6 +20,7 @@ class AEQwenModel:
     DEFAULT_BASE_URL = "http://10.220.146.132:10000/v1/chat/completions"
     DEFAULT_API_KEY = "asdf"
     DEFAULT_MAX_TOKENS = 262144
+    REQUEST_TIMEOUT = 600  # 请求超时时间（秒，10 分钟）
 
     def __init__(self, base_url: str = None, api_key: str = None, model_path: str = None, max_tokens: int = None):
         """
@@ -124,7 +125,7 @@ class AEQwenModel:
             logger.info(f"🚀 发送请求到 Qwen API: {url}")
 
             # 发送 POST 请求（Qwen 本地 API 不支持流式响应）
-            response = requests.post(url, headers=headers, json=payload, timeout=300)
+            response = requests.post(url, headers=headers, json=payload, timeout=self.REQUEST_TIMEOUT)
 
             elapsed = (datetime.now() - start_time).total_seconds()
 
