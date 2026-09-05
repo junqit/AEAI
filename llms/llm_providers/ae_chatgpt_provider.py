@@ -11,6 +11,8 @@ from llm.gpt.gpt import AEGPTModel
 class AEChatGPTProvider(AEBaseProvider):
     """ChatGPT API 提供商"""
 
+    MAX_CONCURRENCY: int = 10
+
     def __init__(self):
         super().__init__()
         self._gpt = AEGPTModel()

@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 class AEQwenProvider(AEBaseProvider):
     """Qwen API 提供商"""
 
+    # 本地部署模型，默认 2 并行
+    MAX_CONCURRENCY: int = 2
+
     def __init__(self):
         super().__init__()
         self.qwen_model = None
@@ -74,8 +77,10 @@ class AEQwenProvider(AEBaseProvider):
             return parsed_result
 
         except Exception as e:
+            # 重抛原始异常，保留完整 traceback 与异常链，不二次包装成裸 Exception
+            # 否则上层只能拿到 str(message)，丢失异常因果链，无法据类型做差异化处理
             logger.error(f"❌ Qwen API 调用失败：{str(e)}", exc_info=True)
-            raise Exception(f"Qwen API 调用失败：{str(e)}")
+            raise
 
     def _parse_response(self, result) -> str:
         """

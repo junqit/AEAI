@@ -83,9 +83,9 @@ class AELlmManager:
     def _default_delta_process(info: Dict[str, Any]) -> None:
         """默认 delta_process：无操作占位。"""
 
-    def generate(self, question: AEQuestion,
-                 think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
-                 delta_process: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+    async def generate(self, question: AEQuestion,
+                       think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
+                       delta_process: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
         """
         生成回复
 
@@ -131,7 +131,7 @@ class AELlmManager:
             }
 
         try:
-            response = provider.generate(question, think_process, delta_process)
+            response = await provider.generate(question, think_process, delta_process)
             elapsed = time.time() - start_time
             return {
                 "response": response,

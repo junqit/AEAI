@@ -51,6 +51,9 @@ class AESocketWrapper:
     def send_response(self, response: AENetRsp) -> bool:
         try:
             data = response.to_bytes()
+            # 诊断：打印实际发到网络上的响应字节前 300 字符（reply 在 JSON 首部，可据此确认服务端究竟发了什么）
+            logger.info("[AESocketWrapper] send_response req=%s len=%d head=%s",
+                        response.req, len(data), data[:300].decode('utf-8', 'replace'))
             self._send_data(AEDataType.RESPONSE, data)
             return True
         except Exception as e:

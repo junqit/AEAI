@@ -169,8 +169,8 @@ class AEPacketReceiveBuffer:
                 payload = AENetRsp.from_bytes(data)
                 ae_type = AEDataType.RESPONSE
             elif data_type_value == AEDataType.HEARTBEAT.value:
-                payload = data
-                ae_type = AEDataType.HEARTBEAT
+                # 心跳包：仅保活链路，不上传业务层
+                return
             elif data_type_value == AEDataType.PING.value:
                 payload = data
                 ae_type = AEDataType.PING

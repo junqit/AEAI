@@ -1,15 +1,12 @@
 """
-Question Route - 接收 question 请求，并发处理多个请求
-使用 AELlmManager 统一管理 LLM Provider
-支持多个请求并行处理
+Question Route - 接收 question 请求，调用单个 LLM
+并发控制由各 Provider 自身的 per-provider 信号量管理，route 层不再持有线程池
 """
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 import sys
 from pathlib import Path
@@ -26,9 +23,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 创建线程池用于并发处理 LLM 调用（避免阻塞事件循环）
-# 支持最多 20 个并发请求
-executor = ThreadPoolExecutor(max_workers=10)
 
 class AEQuestionRequest(BaseModel):
     """Question 请求模型 - 接收已组装好的数据"""
@@ -81,70 +75,11 @@ class AEQuestionResponse(BaseModel):
 router = APIRouter(prefix="/aellms/question", tags=["question"])
 
 
-def _process_llm_sync(
-    request_id: str,
-    messages: List[Dict[str, Any]],
-    llm_type: AELLMType,
-    level: AEAiLevel,
-) -> Dict[str, Any]:
-    """
-    同步调用 LLM（在线程池中执行，避免阻塞事件循环）
-
-    Args:
-        request_id: 请求 ID
-        messages: 消息列表
-        llm_type: LLM 类型
-        level: AI 级别
-
-    Returns:
-        Dict: LLM 调用结果
-    """
-    try:
-        logger.info(f"🔄 [Request-{request_id}] [LLM-{llm_type.value}] 开始处理")
-
-        # 创建 AEQuestion 对象
-        question = AEQuestion(
-            messages=messages,
-            llm_type=llm_type,
-            level=level
-        )
-
-        # 获取 AELlmManager 实例并调用
-        manager = get_ae_llm_manager()
-        logger.info(f"🚀 [Request-{request_id}] [LLM-{llm_type.value}] 调用 LLM")
-
-        # 每个请求使用独立的进度回调：仅把内容拼接进 question（think/delta），不逐 delta 打印，避免日志刷屏
-        def _think_cb(info: Dict[str, Any]) -> None:
-            question.feed_think(info)
-
-        def _delta_cb(info: Dict[str, Any]) -> None:
-            question.feed_delta(info)
-
-        result = manager.generate(question, think_process=_think_cb, delta_process=_delta_cb)
-        logger.info(
-            f"🧩 [Request-{request_id}] 内容拼接完成 - "
-            f"think_length={len(question.think_content)}, delta_length={len(question.delta_content)}"
-        )
-
-        return result
-
-    except Exception as e:
-        logger.error(f"❌ [Request-{request_id}] [LLM-{llm_type.value}] 处理异常: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "response": None,
-            "error": str(e),
-            "elapsed_seconds": 0
-        }
-
-
 @router.post("", response_model=AEQuestionResponse)
 async def process_question(request: AEQuestionRequest):
     """
     处理 question 请求，调用单个 LLM
-    支持多个请求并发处理（FastAPI + asyncio + ThreadPoolExecutor）
-
-    当多个客户端同时发送请求时，它们会被并发处理，而不是串行等待
+    并发控制由各 Provider 自身的 per-provider 信号量管理，route 层不再控制并行
 
     认证：通过全局中间件统一验证 API Key
 
@@ -189,16 +124,30 @@ async def process_question(request: AEQuestionRequest):
 
         logger.info(f"🔄 [Request-{request_id}] 开始处理 - LLM={llm_type.value}, level={level.name}")
 
-        # 在线程池中执行 LLM 调用（避免阻塞事件循环）
-        # 这样多个请求可以并发处理
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            _process_llm_sync,
-            request_id,
-            request.messages,
-            llm_type,
-            level,
+        # 创建 AEQuestion 对象
+        question = AEQuestion(
+            messages=request.messages,
+            llm_type=llm_type,
+            level=level
+        )
+
+        # 获取 AELlmManager 实例并调用
+        manager = get_ae_llm_manager()
+
+        # 每个请求使用独立的进度回调：仅把内容拼接进 question（think/delta），不逐 delta 打印，避免日志刷屏
+        def _think_cb(info: Dict[str, Any]) -> None:
+            question.feed_think(info)
+
+        def _delta_cb(info: Dict[str, Any]) -> None:
+            question.feed_delta(info)
+
+        logger.info(f"🚀 [Request-{request_id}] [LLM-{llm_type.value}] 调用 LLM")
+
+        # 调用 LLM（并发控制由 provider 层 per-provider 信号量管理）
+        result = await manager.generate(question, think_process=_think_cb, delta_process=_delta_cb)
+        logger.info(
+            f"🧩 [Request-{request_id}] 内容拼接完成 - "
+            f"think_length={len(question.think_content)}, delta_length={len(question.delta_content)}"
         )
 
         elapsed = (datetime.now() - start_time).total_seconds()

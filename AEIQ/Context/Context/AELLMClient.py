@@ -1,3 +1,4 @@
+import json
 import logging
 
 import httpx
@@ -31,11 +32,11 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
     """
     try:
         client = _get_async_client()
-        # 打印即将发送的数据（JSON 标准格式输出）
-        # logger.info(
-        #     "📤 即将发送 LLM 请求:\n%s",
-        #     json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
-        # )
+        # 诊断：即将发送的 LLM 请求（messages + 内容模板），看清上游摘要是否空洞
+        logger.info(
+            "📤 即将发送 LLM 请求:\n%s",
+            json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
+        )
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
@@ -45,6 +46,8 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
             len(reply) if reply else 0,
             f", 耗时: {elapsed:.2f}s" if isinstance(elapsed, (int, float)) else "",
         )
+        # 诊断：原始回复预览，确认 LLM 究竟回了什么（content 是否为空 / 内容是否落在别的字段）
+        logger.info("[LLM] 原始回复预览(前800字符): %s", (reply or "")[:800])
         # token 消耗：依赖网关透传上游 usage（prompt_tokens / completion_tokens / total_tokens）
         usage = result.get("usage") or {}
         if not usage:
@@ -57,11 +60,14 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
                 usage.get("total_tokens", "-"),
             )
         filled_content = _parse_content_json(reply)
+        # 诊断：解析后内容预览，确认 content 占位符被填成了什么（是否为空串）
+        logger.info("[LLM] 解析内容预览(前800字符): %s", str(filled_content)[:800])
         if filled_content is None:
             logger.error("LLM 内容解析失败，回填失败占位信封")
             return _build_failure_envelope(payload)
         envelope = payload.fill_content(filled_content)
-        # logger.info("LLM 回填信封:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
+        # 诊断：回填后的完整信封（含 AE_CONTENT），确认最终内容是否为空
+        logger.info("LLM 回填信封:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
         return envelope
     except Exception as e:
         logger.error(f"LLM request failed: {e}，回填失败占位信封")

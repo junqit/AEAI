@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 class AEZhipuProvider(AEBaseProvider):
     """Zhipu (智谱) API 提供商"""
 
+    MAX_CONCURRENCY: int = 10
+
     def __init__(self):
         super().__init__()
         self.zhipu_model = None
