@@ -38,20 +38,29 @@ class AEFlowRole(Enum):
     task = "task"            # 原子任务（最底层执行单元，不再拆解）
     reviewer = "reviewer"    # 评审者
     llm = "llm"              # LLM 直接作答（不拆解、不执行脚本，直接请求 LLM）
+    script = "script"        # 脚本执行（调用预置脚本/工具完成具体操作，不拆解）
 
 
-# 角色层级有序表（从上到下）：expert > workgroup > employee > task
+# 角色层级有序表（从上到下）：expert > workgroup > employee > task > llm/script
+# llm、script 为叶子工具（不可再分解）；expert/workgroup/employee/task 可直接选其下层（含 llm/script）
 AE_ROLE_HIERARCHY: List[AEFlowRole] = [
     AEFlowRole.expert, AEFlowRole.workgroup, AEFlowRole.employee, AEFlowRole.task,
+    AEFlowRole.llm, AEFlowRole.script,
 ]
+
+# 叶子角色：不可再分解（不向下拆解）
+AE_LEAF_ROLES: set = {AEFlowRole.llm, AEFlowRole.script}
 
 
 def roles_below(role: AEFlowRole) -> List[AEFlowRole]:
     """返回严格低于 role 的所有角色（按层级从上到下）。
 
-    expert → [workgroup, employee, task]；workgroup → [employee, task]；
-    employee → [task]；task → []（原子，无可拆解的更低层）。
+    expert → [workgroup, employee, task, llm, script]；workgroup → [employee, task, llm, script]；
+    employee → [task, llm, script]；task → [llm, script]；
+    llm/script → []（叶子，不可再分解）。
     """
+    if role in AE_LEAF_ROLES:
+        return []
     try:
         idx = AE_ROLE_HIERARCHY.index(role)
     except ValueError:
@@ -131,6 +140,15 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
             "直接作答。"
             "可做：仅凭 LLM 自身知识回答简单问题，给出准确、完整的结论。"
             "不可做：不拆解任务、不执行脚本、不获取网络/实时数据，遇到需外部数据的问题应交由人员角色。"
+        ),
+    ),
+    AEFlowRole.script: AERoleParamInfo(
+        role=AEFlowRole.script,
+        title="脚本工具",
+        responsibility=(
+            "执行脚本完成任务。"
+            "可做：调用预置脚本/工具完成检索 / 分析 / 生成 / 转换等具体操作，产出可被上游直接整合的结构化结果。"
+            "不可做：不再向下拆解，不规划或调度其他任务，不跨任务决策。"
         ),
     ),
 }

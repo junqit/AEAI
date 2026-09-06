@@ -92,15 +92,17 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
     def outResult_summary(self) -> str:
         """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
 
-        - 有 roleGoal（角色 flow 经 receiveOptimizeInput 设置）：
-          「{AE_USER_QUESTION_PREFIX}{roleGoal} 我的回答：{answer}」
-        - 无 roleGoal：回退到 title 作为上下文，
-          「{title} 我的回答：{answer}」，避免只剩裸「我的回答：{answer}」丢失上下文。
+        三段式（条件出现、换行分隔），体现实为「以某问题、以某身份、给出结果」的条理：
+        - 问题段（有 roleGoal 时）：「{AE_USER_QUESTION_PREFIX}{roleGoal}」
+        - 身份段（有 title 时）：「以「{title}」身份」
+        - 结果段（必有）：「给出结果：{answer}」
         """
         answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
         question = self.roleGoal or ""
+        parts = []
         if question:
-            return f"{AE_USER_QUESTION_PREFIX}{question} 我的回答：{answer}"
+            parts.append(f"{AE_USER_QUESTION_PREFIX}{question}")
         if self.title:
-            return f"{self.title} 我的回答：{answer}"
-        return f"我的回答：{answer}"
+            parts.append(f"以「{self.title}」身份")
+        parts.append(f"给出结果：{answer}")
+        return "\n".join(parts)
