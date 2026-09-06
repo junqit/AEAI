@@ -53,7 +53,7 @@ class AERoleChoice:
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        question = self.roleGoal or (self.input.parameter.get(AE_CONTENT, "") if self.input is not None else "")
+        question = ((self.input.goal or self.input.parameter.get(AE_CONTENT, "")) if self.input is not None else "")
         if len(question) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{question}"})
         # 角色选择规则（system）：必须解决问题 + 网络请求类必选角色
@@ -164,10 +164,10 @@ class AERoleChoice:
                 logger.warning("[%s][d=%s] 子任务 role 非法或不在可选范围，跳过: spec=%r",
                                self.title, self.deepth, spec)
                 continue
-            # llm 直接作答：输入用精炼后的问题（self.roleGoal），而非 LLM 生成的 goal——
+            # llm 直接作答：输入用精炼后的问题（self.input.goal），而非 LLM 生成的 goal——
             # goal 易生成「将用户输入的…改写为…」类元指令，污染下游 roleinfo 生成错误角色。
-            if role_enum == AEFlowRole.llm and self.roleGoal:
-                content = self.roleGoal
+            if role_enum == AEFlowRole.llm and self.input is not None and self.input.goal:
+                content = self.input.goal
             content = str(content or "")
             sub = self._instantiate_role_flow(role_enum, target_ident)
             if is_subflow:

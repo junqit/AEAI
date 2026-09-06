@@ -1,7 +1,7 @@
 """AETaskRole - 原子任务角色执行 Flow（继承 AERoleExcutor，_role()=task）。
 
 task 为最底层执行单元：角色目标就绪后直接分解为脚本任务完成目标（必须完成；
-roleGoal 为空由 AERoleExcutor.receiveOptimizeInput 错误完成，脚本为空由 receiveScripts 错误完成）。
+input.goal 为空由 AERoleExcutor.receiveOptimizeInput 错误完成，脚本为空由 receiveScripts 错误完成）。
 脚本生成与执行能力（Script Generator）在本类实现。
 """
 import logging
@@ -50,7 +50,7 @@ class AETaskRole(AERoleExcutor):
 
     def requestRoleSelect(self) -> None:
         """task：不选角色，直接分解为脚本完成任务目标（必须完成；脚本为空时 receiveScripts 以错误完成闭环）。"""
-        self.requestScripts(self.roleGoal)
+        self.requestScripts(self.input.goal if self.input is not None else "")
 
     # ==================== task 执行能力（Script Generator）====================
 
@@ -128,6 +128,6 @@ class AETaskRole(AERoleExcutor):
         messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: _REALTIME_DATA_NOTE})
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
-            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.roleGoal}",
+            AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.goal if self.input is not None else ''}",
         })
         return messages

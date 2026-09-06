@@ -2,10 +2,10 @@
 AEScript - 脚本 Flow，继承 AEFlow。
 
 脚本信息（title / script / type）通过 update 方法设置。
-执行由 AEScriptRunner 完成；执行失败时自动请求 LLM 修正脚本并重试（最多 MAX_RETRIES 次）。
-脚本执行成功后，先以「名称 + 脚本内容 + 执行结果」请求 LLM 评判是否符合预期（0-100 分），
-≥PASS_SCORE 才完成；否则以「名称 + python 源码」重新请求 LLM 重生成脚本再执行再验证，
-验证不达标无次数限制地重试直到通过；执行失败修正仍受 MAX_RETRIES 约束。
+执行由 AEScriptRunner 完成；脚本必须经 LLM 验证评分 ≥PASS_SCORE 才完成。
+执行失败或验证不达标均请求 LLM 修正/重生成脚本后重试，直到验证通过；设双重保护——
+重试达 MAX_RETRIES 次或连续 SAME_ERROR_LIMIT 次相同错误，判定 LLM 修不动，
+以失败摘要（试了多少次+最后错误）反馈完成，不以空结果结束。
 """
 import logging
 import re
@@ -35,13 +35,17 @@ class AEScriptType(str, Enum):
 class AEScript(AEFlow):
     """脚本 Flow：title=作用，script=脚本内容，type=脚本类型。
 
-    执行失败时自动请求 LLM 修正脚本并重试（最多 MAX_RETRIES 次）。
-    执行成功后经 LLM 验证（0-100 分），≥PASS_SCORE 才完成；不达标则无次数限制地重生成脚本重试，直到通过。
+    脚本必须经 LLM 验证评分 ≥PASS_SCORE(80) 才完成；执行失败或验证不达标均请求 LLM 修正/重生成
+    脚本后重试。双重保护：重试达 MAX_RETRIES 或连续 SAME_ERROR_LIMIT 次相同错误，判定 LLM 修不动，
+    以失败摘要（重试次数+最后错误）反馈完成，不以空结果结束。
     """
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
-    MAX_RETRIES = 3  # 脚本执行失败修正的最大重试次数（验证不达标重生成无次数限制）
-    # LLM 验证通过阈值（0-100），≥此分才视为执行符合预期
+    # 执行失败修正的最大重试次数（验证不达标重生成不受此限，但受连续相同错误保护）
+    MAX_RETRIES = 100
+    # 连续相同错误上限：LLM 反复修不对同一错误达此次数即判定修不动
+    SAME_ERROR_LIMIT = 5
+    # LLM 验证通过阈值（0-100），≥此分才视为执行符合预期；未达此分（含执行失败）一律重试
     PASS_SCORE = 80
 
     script: str = ""
@@ -68,7 +72,7 @@ class AEScript(AEFlow):
         AEScript 非角色 flow（不经问题优化），故以 title（脚本用途）作为上下文。
         验证通过时附带 LLM 验证分数，便于汇总时知晓该结果已经过校验。
         """
-        answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
+        answer = self.output.outResult or ""
         base = f"{self.title} 我的回答：{answer}" if self.title else f"我的回答：{answer}"
         if self._verified_score is not None:
             base += f"（LLM 验证通过 score={self._verified_score}/100）"
@@ -80,6 +84,8 @@ class AEScript(AEFlow):
         self.status = AEFlowStatus.processing
         self._retry_count = 0
         self._last_error = ""
+        self._prev_error = ""
+        self._same_error_count = 0
         self._pending_stdout = ""
         self._verify_count = 0
         self._verified_score = None
@@ -88,7 +94,11 @@ class AEScript(AEFlow):
         return True
 
     def _run_script(self) -> None:
-        """执行脚本；成功则交 LLM 验证，失败且有重试次数则请求 LLM 修正，否则以空结果完成。"""
+        """执行脚本；成功则交 LLM 验证（必须 ≥PASS_SCORE 才完成），失败则请求 LLM 修正后重试。
+
+        双重保护：重试达 MAX_RETRIES 或连续 SAME_ERROR_LIMIT 次相同错误，判定 LLM 修不动，
+        以失败摘要（重试次数+最后错误）反馈完成，不以空结果结束。
+        """
         from .AEScriptRunner import get_runner
         try:
             runner = get_runner(self.type)
@@ -98,14 +108,27 @@ class AEScript(AEFlow):
             self._verify(stdout)
         except Exception as e:
             self._last_error = str(e)  # 完整错误（含 stdout/stderr）供 LLM 修正脚本使用
-            logger.error("[%s][d=%s] 脚本执行失败(type=%s, retry=%d/%d)",
-                         self.title, self.deepth, self.type, self._retry_count, self.MAX_RETRIES)
-            if self._retry_count < self.MAX_RETRIES:
-                self._retry_count += 1
-                self._request_script_fix(self._last_error)
+            self._retry_count += 1
+            # 连续相同错误计数：LLM 反复修不对同一错误时提前放弃
+            if self._last_error == self._prev_error:
+                self._same_error_count += 1
             else:
-                logger.warning("[%s][d=%s] 重试次数用完(%d)，以空结果完成", self.title, self.deepth, self.MAX_RETRIES)
-                self._complete("")
+                self._same_error_count = 1
+                self._prev_error = self._last_error
+            # 保护：重试上限或连续相同错误上限 → 判定 LLM 修不动，把失败情况反馈给上层（不以空结果结束）
+            if self._retry_count >= self.MAX_RETRIES or self._same_error_count >= self.SAME_ERROR_LIMIT:
+                failure_summary = (
+                    f"脚本执行失败：重试 {self._retry_count}/{self.MAX_RETRIES} 次，"
+                    f"连续相同错误 {self._same_error_count}/{self.SAME_ERROR_LIMIT} 次，"
+                    f"LLM 未能修正脚本。最后错误：{self._last_error}"
+                )
+                logger.warning("[%s][d=%s] %s，以失败摘要反馈完成", self.title, self.deepth, failure_summary)
+                self._complete(failure_summary)
+                return
+            logger.error("[%s][d=%s] 脚本执行失败(type=%s, retry=%d/%d, 连续相同错误=%d/%d)，请求 LLM 修正后重试",
+                         self.title, self.deepth, self.type, self._retry_count, self.MAX_RETRIES,
+                         self._same_error_count, self.SAME_ERROR_LIMIT)
+            self._request_script_fix(self._last_error)
 
     def _complete(self, stdout: str) -> None:
         """以执行结果完成本 flow，回传父 flow。"""

@@ -7,7 +7,7 @@ AEFlow - Flow 基类，实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
   - AEFlowDelegate 实现（继承 AEFlowDelegateImpl 实例方法）：flow_send_llm_request / add_flow / receive_flow_input
 
 本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）；角色相关信息（title/responsibility/
-roleGoal/rolePrompt 及 role_brief/outResult_summary/汇总拼消息）属 Roles.AERoleBase，不在本类。
+rolePrompt 及 role_brief/outResult_summary/汇总拼消息）属 Roles.AERoleBase，不在本类。
 问题优化由 Roles.AERoleQuestionOptimize 提供；角色信息由 Roles.AERoleInformation 提供（AERoleBase 继承）。
 """
 import json
@@ -82,17 +82,17 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         return True
 
     def flow_receive_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.start) -> bool:
-        """status=complete：置状态、赋值 outResult，直接调 delegate.sub_flow_complete 通知父 flow。"""
+        """status=complete：置状态、赋值 output.outResult，直接调 delegate.sub_flow_complete 通知父 flow。"""
         if self.status == AEFlowStatus.complete:
             logger.error(
-                "[%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s outResult=%r",
+                "[%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s out_schema=%r",
                 type(self).__name__, self.deepth, event, out_schema,
             )
             return True
         self.status = AEFlowStatus.complete
-        self.outResult = out_schema
+        answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
+        self.output.outResult = answer
         if self.delegate is not None:
-            answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
             complete_input = AEFlowInput(content=answer, ident=self.output.ident)
             complete_input.state = AEFlowStatus.complete
             self.delegate.receive_flow_input(complete_input)
@@ -160,5 +160,29 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             "- 仅对重复、冗余的部分去重\n"
             "- 按逻辑整理，使结论清晰可读"
         )
+
+    def flow_complete_info(self) -> dict:
+        """本 flow 的完成信息（含子 flow 递归），供上层汇总成整体 JSON 树。
+
+        自拼 ident/title/responsibility/question/goal/answer 与子 flow 的 flow_complete_info；
+        title/responsibility 由角色层（AERoleInfo）持有，goal 由 AEFlowInput 持有，此处安全取值。
+        """
+        info = {
+            "ident": self.ident,
+            "title": getattr(self, "title", "") or "",
+            "responsibility": getattr(self, "responsibility", "") or "",
+            "question": "",
+            "goal": (self.input.goal if self.input is not None else ""),
+            "answer": "",
+            "children": [sub.flow_complete_info() for sub in self._flows.values()],
+        }
+        # question 取 flow 的输入（父 flow 传入的问题/子任务内容）
+        inp = getattr(self, "input", None)
+        if inp is not None and getattr(inp, "parameter", None) is not None:
+            info["question"] = inp.parameter.get(AE_CONTENT, "") or ""
+        # answer 取 flow 产出（output.outResult，由 flow_receive_complete 填充）
+        if self.output is not None:
+            info["answer"] = self.output.outResult or ""
+        return info
 
     # ==================== AEFlowDelegate 实现 ====================

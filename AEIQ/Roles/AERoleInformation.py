@@ -1,5 +1,5 @@
 """AERoleInformation - 角色信息能力 mixin：生成 title / responsibility / rolePrompt，由 AERoleBase 继承。
-角色信息属性（role / title / responsibility / rolePrompt / roleGoal）由基类 AERoleInfo 持有。"""
+角色信息属性（role / title / responsibility / rolePrompt）由基类 AERoleInfo 持有。"""
 import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY

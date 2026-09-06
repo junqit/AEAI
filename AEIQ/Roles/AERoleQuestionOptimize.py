@@ -5,7 +5,7 @@ AERoleQuestionOptimize - 问题优化能力 mixin。
 抽出至本 mixin，由 AERoleBase 继承获得（与 AERoleInformation / AERoleChoice 等能力 mixin 同级，位于 Roles 包内）。
 
 requestOptimizeInput 以 role_brief 作为系统提示、以 rolePrompt 作为「针对用户问题的优化指令」，
-让 LLM 生成一段「问题优化提示」；receiveOptimizeInput 接收回包并存入 self.roleGoal
+让 LLM 生成一段「问题优化提示」；receiveOptimizeInput 接收回包并存入 self.input.goal
 （不完成 flow）。
 """
 import logging
@@ -26,7 +26,7 @@ class AERoleQuestionOptimizeFunction(AEFunctional):
 
 class AERoleQuestionOptimize(AERoleInfo):
     """问题优化能力 mixin：问题优化相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。
-    roleGoal（优化后的问题）由基类 AERoleInfo 持有。"""
+    goal（优化后的问题）由 AEFlowInput 持有（self.input.goal）。"""
 
     def requestOptimizeInput(self) -> None:
         """组装并发送 LLM 请求：对用户问题做二次解释与补全缺失，输出「优化后的问题」本身，
@@ -34,7 +34,7 @@ class AERoleQuestionOptimize(AERoleInfo):
 
         - messages: system(role_brief，含身份与能力) / system(问题优化指令) / user(用户问题，AE_USER_QUESTION_PREFIX 前缀；无问题时退化为 user 指令)
         - out_schema: {AE_CONTENT: 优化后的问题 占位}，由 LLM 填充
-        - 走 receiveOptimizeInput：回包后赋值 roleGoal（不完成 flow）
+        - 走 receiveOptimizeInput：回包后赋值 input.goal（不完成 flow）
 
         注：本步骤只做问题优化（二次解释 + 补全缺失），不直接回答；rolePrompt 是作答步骤
         （requestLLMAnswer）的指令，此处不用，避免把「转化为可执行目标/作答」倾向带入问题优化。
@@ -85,13 +85,15 @@ class AERoleQuestionOptimize(AERoleInfo):
         prompt = data.get(AE_CONTENT) if isinstance(data, dict) else None
         if prompt is None and isinstance(data, str):
             prompt = data
-        self.roleGoal = prompt or ""
+        if self.input is not None:
+            self.input.goal = prompt or ""
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"
             "  role: %s\n  deepth: %s\n  title: %s\n  优化后的问题: %s\n"
             "========================================",
             self.title, self.deepth,
-            self.role, self.deepth, self.title, self.roleGoal,
+            self.role, self.deepth, self.title,
+            (self.input.goal if self.input is not None else ""),
         )
         return True

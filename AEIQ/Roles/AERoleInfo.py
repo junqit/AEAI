@@ -1,6 +1,6 @@
 """AERoleInfo - 角色信息属性基类。
 
-持有角色相关属性（role / title / responsibility / rolePrompt / roleGoal），
+持有角色相关属性（role / title / responsibility / rolePrompt），
 经 cooperative __init__ 初始化。AERoleInformation / AERoleQuestionOptimize / AERoleBase 继承本类。
 """
 from typing import Optional
@@ -20,4 +20,3 @@ class AERoleInfo:
         self.title: str = ""             # 职称（运行时由 receiveRoleInfomation 或子类 __init__ 填充）
         self.responsibility: str = ""    # 职责要求（同上）
         self.rolePrompt: str = ""        # 角色 prompt（由 receiveRolePrompt 赋值）
-        self.roleGoal: str = ""  # 角色目标（由 receiveOptimizeInput 赋值）

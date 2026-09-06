@@ -2,7 +2,7 @@
 AELLMRole - LLM 直接作答角色 Flow，继承 AERoleExcutor。
 
 已是选定角色（无需再选角色）：共用 AERoleExcutor 前置链路（角色信息 → rolePrompt → 问题优化），
-在 receiveOptimizeInput 之后（roleGoal 就绪）决策「是否需要多个 LLM 进行分析」：
+在 receiveOptimizeInput 之后（input.goal 就绪）决策「是否需要多个 LLM 进行分析」：
   - choice=True（入口）：覆写 requestRoleSelect 发起 requestMultiLLMDecision 决策请求
     （仅决策，不在此发起多 LLM 查询）。回包 receiveMultiLLMDecision：
       单一问题 → 自身 requestLLMAnswer 作答；
@@ -45,7 +45,7 @@ class AELLMRole(AERoleExcutor):
         return f"{self.title}：{self.responsibility}"
 
     def requestRoleSelect(self) -> None:
-        """覆写 AERoleExcutor.receiveOptimizeInput 之后的 hook：roleGoal 就绪后决策。
+        """覆写 AERoleExcutor.receiveOptimizeInput 之后的 hook：input.goal 就绪后决策。
         choice=False 直接作答；choice=True 发起「是否多 LLM 查询」决策请求。
         """
         if not self.choice:
@@ -55,8 +55,8 @@ class AELLMRole(AERoleExcutor):
 
     def requestMultiLLMDecision(self) -> None:
         """请求 LLM 判断是否需要拆分为多个独立子问题分别查询。回包经 receiveMultiLLMDecision 处理。"""
-        # roleGoal 已由 receiveOptimizeInput 设置（AERoleExcutor 在为空时已错误完成）
-        if not self.roleGoal:
+        # input.goal 已由 receiveOptimizeInput 设置（AERoleExcutor 在为空时已错误完成）
+        if not (self.input.goal if self.input is not None else ""):
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可作答问题"},
@@ -67,7 +67,7 @@ class AELLMRole(AERoleExcutor):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.roleGoal}"})
+        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.goal if self.input is not None else ''}"})
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
@@ -113,7 +113,7 @@ class AELLMRole(AERoleExcutor):
 
     def requestLLMAnswer(self) -> None:
         """直接请求 LLM 作答（不拆解、不执行脚本）。回包经 flow_receive_complete 完成本 flow。"""
-        if not self.roleGoal:
+        if not (self.input.goal if self.input is not None else ""):
             # 无可作答问题：以错误完成本 flow，避免父 flow 干等卡死导致整体失败
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete(
@@ -125,7 +125,7 @@ class AELLMRole(AERoleExcutor):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.roleGoal}"})
+        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.goal if self.input is not None else ''}"})
         # 以收到的 rolePrompt 作为作答指令（空则回退默认直接作答指令）
         messages.append({
             AE_ROLE: AEConentRole.USER.value,

@@ -12,9 +12,10 @@ AE_LLM_OUT = "llm_out"
 class AEFlowOutput:
     """Flow 输出数据"""
 
-    def __init__(self, ident: str, out_schema: dict = None):
+    def __init__(self, ident: str, out_schema: dict = None, outResult: str = ""):
         self.ident: str = ident
         self.out_schema: dict = out_schema or {}
+        self.outResult: str = outResult
 
     def add_param(self, key: str, value: Any) -> None:
         """向 out_schema 首层直接添加一个参数：key -> value。"""

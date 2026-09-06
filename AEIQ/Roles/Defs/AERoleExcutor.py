@@ -64,10 +64,10 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
         return True
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收角色目标：基类存储后 roleGoal 为空则错误完成；否则调 requestRoleSelect 推进。"""
-        result = super().receiveOptimizeInput(data)  # AERoleQuestionOptimize 存储 roleGoal
-        if not result or not self.roleGoal:
-            logger.warning("[%s][d=%s] roleGoal 为空，以错误完成本 flow 避免卡死",
+        """接收角色目标：基类存储后 input.goal 为空则错误完成；否则调 requestRoleSelect 推进。"""
+        result = super().receiveOptimizeInput(data)  # AERoleQuestionOptimize 存储 input.goal
+        if not result or not (self.input.goal if self.input is not None else ""):
+            logger.warning("[%s][d=%s] input.goal 为空，以错误完成本 flow 避免卡死",
                            self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "问题优化失败"},

@@ -6,7 +6,7 @@ AERoleBase - 角色 Flow 基类。
 如 AERefiner / AERoleExcutor 显式继承，避免 AERoleBase 基类传递依赖 AERoleExcutor）；
 角色信息能力（title / responsibility / rolePrompt 生成）在 Roles.AERoleInformation 中；
 问题优化能力（requestOptimizeInput / receiveOptimizeInput）在 Roles.AERoleQuestionOptimize 中，
-均由本类继承获得。角色信息属性（title / responsibility / roleGoal / rolePrompt）
+均由本类继承获得。角色信息属性（title / responsibility / rolePrompt）
 由本类 __init__ 持有（非 AEFlow 基类职责）。
 结果汇总编排（summarize_to_llm）由 AEIQFlow 实现，本类继承 AEIQFlow 获得。本类另覆写角色上下文
 hook（summarize_extend_messages / outResult_summary）提供角色信息——flow 基类不体现 role 信息。
@@ -93,12 +93,12 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
 
         三段式（条件出现、换行分隔），体现实为「以某问题、以某身份、给出结果」的条理：
-        - 问题段（有 roleGoal 时）：「{AE_USER_QUESTION_PREFIX}{roleGoal}」
+        - 问题段（有 input.goal 时）：「{AE_USER_QUESTION_PREFIX}{input.goal}」
         - 身份段（有 title 时）：「以「{title}」身份」
         - 结果段（必有）：「给出结果：{answer}」
         """
-        answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
-        question = self.roleGoal or ""
+        answer = self.output.outResult or ""
+        question = (self.input.goal if self.input is not None else "")
         parts = []
         if question:
             parts.append(f"{AE_USER_QUESTION_PREFIX}{question}")

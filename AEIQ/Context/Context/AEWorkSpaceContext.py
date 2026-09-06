@@ -1,10 +1,13 @@
+import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
 from WorkFlows.FlowWork.AEFlow import AE_IDENT
+from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 
 if TYPE_CHECKING:
     from .AELLMPayload import AELLMPayload
@@ -44,3 +47,12 @@ class AEWorkSpaceContext(AEBaseContext):
             logger.error(f"[WorkSpace] chat 内层 out_schema 非 map: {out_schema!r}")
             return
         chat.receive_llm_response(out_schema)
+        # 收到 chat 最终结论（chat 完成）时，把 chat 内所有 flow 信息整理成树形 JSON 存储
+        if chat.status == AEFlowStatus.complete:
+            tree = chat.flow_complete_info()
+            out_dir = Path(__file__).parent.parent.parent / "ChatTrees"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"{chat.ident}.json"
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(tree, f, ensure_ascii=False, indent=2)
+            logger.info(f"[WorkSpace] chat flow 树已存储: {out_path}")

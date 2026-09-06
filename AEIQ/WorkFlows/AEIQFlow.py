@@ -29,7 +29,7 @@ class AEIQFlow(AEFlow):
         messages = []
         messages.extend(self.summarize_extend_messages())
         for f in self._flows.values():
-            if f.outResult is not None:
+            if f.output.outResult:
                 try:
                     summary = f.outResult_summary()
                     messages.append({
@@ -39,7 +39,7 @@ class AEIQFlow(AEFlow):
                 except Exception as e:
                     logger.error("[%s][d=%s] summarize 子 flow outResult_summary 异常: %s", type(self).__name__, self.deepth, e, exc_info=True)
             else:
-                logger.warning("[%s][d=%s] summarize 子 flow outResult is None, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
+                logger.warning("[%s][d=%s] summarize 子 flow output.outResult 为空, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: self.subflow_summarize_prompt(),

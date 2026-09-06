@@ -4,7 +4,7 @@ AEFlow 继承本类以获得这些元信息属性。
 
 本类只管工作流元信息与流转所需的结构（generateFlowOutput）；registerFunctional 依赖
 self.excutor（由 AEFlow 持有），故置于 WorkFlows.AEFlow。角色相关信息（title / responsibility /
-roleGoal / rolePrompt 及 role_brief / outResult_summary / 汇总等）属 Roles.AERoleBase，
+rolePrompt 及 role_brief / outResult_summary / 汇总等）属 Roles.AERoleBase，
 不在本类声明或读取。
 
 ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
@@ -63,8 +63,6 @@ class AEFlowInfo:
         self.output: AEFlowOutput = flowOutput
 
         self.input: Optional[AEFlowInput] = flowInput
-
-        self.outResult: Optional[dict] = None
 
         self.status: AEFlowStatus = AEFlowStatus.default
 

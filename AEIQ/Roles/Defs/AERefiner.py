@@ -40,8 +40,8 @@ class AERefiner(AERoleExcutor):
         self.role = None
 
     def outResult_summary(self) -> str:
-        """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回 outResult 的回答。"""
-        answer = self.outResult.get(AE_CONTENT, "") if isinstance(self.outResult, dict) else ""
+        """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回 output.outResult 的回答。"""
+        answer = self.output.outResult or ""
         return f"{AE_USER_QUESTION_PREFIX}{answer}"
 
     def receiveRoleSelect(self, data: dict) -> bool:
@@ -62,7 +62,7 @@ class AERefiner(AERoleExcutor):
             self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
             return True
         logger.info("[%s][d=%s] 创建 %d 个兄弟 flow，自身完成", self.title, self.deepth, created)
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: self.roleGoal}, AEFlowCompletEvent.start)
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: (self.input.goal if self.input is not None else "")}, AEFlowCompletEvent.start)
         return True
 
     def on_flow_start(self, flowInput) -> bool:

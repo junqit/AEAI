@@ -4,3 +4,6 @@ __pycache__/
 
 # 百度网盘凭证（含 secretkey，勿提交）
 CloudSorage/baidu/credentials.py
+
+# chat flow 树快照（运行时产物，勿提交）
+AEIQ/ChatTrees/

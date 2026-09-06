@@ -20,9 +20,10 @@ AE_CONTENT = "content"
 class AEFlowInput:
     """Flow 输入数据"""
 
-    def __init__(self, content: str = "", ident: str = ""):
+    def __init__(self, content: str = "", ident: str = "", goal: str = ""):
         self.parameter: Dict[str, Any] = {}
         if content:
             self.parameter[AE_CONTENT] = content
         self.state: AEFlowStatus = AEFlowStatus.start
         self.ident: str = ident
+        self.goal: str = goal  # 角色/任务目标（优化后的问题，由 receiveOptimizeInput 填充）
