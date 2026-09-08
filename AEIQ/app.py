@@ -16,6 +16,8 @@ from fastapi import FastAPI
 from AEIQConfig import config
 from Context.NetRoutCenter.AENetRouteCenter import AENetRouteCenter
 from Network.Socket.Connection.AESocketServer import get_socket_server
+from Network.AENetworkEngine import AENetworkEngine
+from Network.Socket.Connection.AENetSocketClient import AENetSocketType
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -45,6 +47,10 @@ ae_net_route_center = AENetRouteCenter(socket_interface=socket_server)
 socket_server.add_listener(ae_net_route_center)
 
 logger.info("Layered architecture assembled: Network -> Business")
+
+# 4. 出站客户端网络引擎：连接本机 :8888 入站服务
+#    socket 初始化在引擎内部经 AENetSocketClient 完成（app 层不直接操作 socket）
+ae_network_engine = AENetworkEngine("127.0.0.1", 8888, AENetSocketType.UDP)
 # ========================================
 
 
@@ -56,10 +62,16 @@ async def lifespan(app: FastAPI):
         socket_server.start()
     logger.info("UDP Socket server started on 0.0.0.0:8888")
 
+    # 出站引擎连接本机 :8888（须在入站服务启动后）
+    await ae_network_engine.connect()
+    logger.info("AENetworkEngine connected to 127.0.0.1:8888 (UDP)")
+
     yield
 
     # shutdown
     logger.info("Application shutting down...")
+    await ae_network_engine.disconnect()
+    logger.info("AENetworkEngine disconnected")
     socket_server.stop()
     logger.info("UDP Socket server stopped")
 

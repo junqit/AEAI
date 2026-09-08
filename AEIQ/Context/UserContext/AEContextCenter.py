@@ -53,16 +53,26 @@ class AEContextCenter(AEContextDelegate):
         """转发 NetRsp 给上层 delegate。"""
         self._delegate.send_response(response)
 
+    # LLM 铁律（置顶 system）：约束作答质量与复杂问题处理
+    _LLM_IRON_RULE = (
+        "【铁律】仔细阅读用户问题，不得给出简单、敷衍或弱智回答。"
+        "简单或指向明确的问题可直接分析作答；复杂问题须先研判自身能否独立解决——"
+        "若不能（需外部数据或实时信息），必须通过工具拉取网络实时信息或数据来补充与研判，"
+        "确保结论完整准确，不得凭空臆造或敷衍。"
+    )
+
     def send_llm_request(self, payload) -> None:
-        """转发 LLM 请求给上层 delegate；注入 DirectoryContext 的环境参数 prompt。"""
+        """转发 LLM 请求给上层 delegate；注入 DirectoryContext 环境参数 prompt 与铁律 system 指令。"""
+        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
         directory = self.find_by_type(AEContextType.directory)
         if directory is not None:
-            from Roles.AERoleType import AEConentRole, AE_ROLE
-            from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
             for env_param in reversed(list(payload.env_params)):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
+        # 铁律置顶（最高优先级 system）：约束 LLM 仔细读题、不敷衍、复杂问题须拉取网络实时信息
+        payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: self._LLM_IRON_RULE})
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================
