@@ -65,10 +65,11 @@ class AEReceiveBuffer:
     def _skip_to_next_magic_code(self) -> None:
         from .AEPacket import MAGIC_CODE
 
-        magic_bytes = MAGIC_CODE.to_bytes(4, byteorder='big')
+        # 魔数 0x1EAE 为 2 字节；搜索 2 字节序列以重新同步（对标 Swift findNextMagicCode）
+        magic_bytes = MAGIC_CODE.to_bytes(2, byteorder='big')
 
-        for i in range(1, len(self._buffer) - 3):
-            if self._buffer[i:i+4] == magic_bytes:
+        for i in range(1, len(self._buffer) - 1):
+            if self._buffer[i:i+2] == magic_bytes:
                 logger.warning(f"Found next magic code at offset {i}, skipping {i} bytes")
                 self._buffer = self._buffer[i:]
                 return

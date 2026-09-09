@@ -7,6 +7,7 @@
 3. 通过回调通知已解析的数据
 """
 
+import json
 import threading
 import logging
 from typing import Callable, Dict, Optional
@@ -14,6 +15,7 @@ from .AEReceiveBuffer import AEReceiveBuffer
 from .AEPacket import AEPacket, AEDataType, UNIQUE_ID_SENTINEL
 from .AEPacketPool import AEPacketPool
 from ...Core import AENetReq, AENetRsp
+from ...Core.AENetReq import AENetMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -168,26 +170,44 @@ class AEPacketParser:
 
     def _dispatch_by_type(self, data_type_value: int, data: bytes) -> None:
         try:
-            if data_type_value == AEDataType.REQUEST.value:
-                request = AENetReq.from_bytes(data)
-                self._notify_request(request)
-
-            elif data_type_value == AEDataType.RESPONSE.value:
-                response = AENetRsp.from_bytes(data)
-                self._notify_response(response)
-
-            elif data_type_value == AEDataType.HEARTBEAT.value:
-                pass
-            elif data_type_value == AEDataType.PING.value:
-                pass
-            elif data_type_value == AEDataType.PONG.value:
-                pass
+            if data_type_value == AEDataType.DATA.value:
+                self._dispatch_data(data)
+            elif data_type_value in (AEDataType.HEARTBEAT.value,
+                                     AEDataType.PING.value,
+                                     AEDataType.PONG.value):
+                pass  # 传输层信号（心跳/ping/pong），不上业务层
             else:
                 logger.warning(f"Unknown data type: 0x{data_type_value:04X}")
-
         except Exception as e:
             logger.error(f"Error parsing packet data: {e}")
             self._notify_error(e)
+
+    def _dispatch_data(self, data: bytes) -> None:
+        """对标 Swift dispatch：DATA 载荷按 header.type(Int) 区分请求/响应。"""
+        try:
+            obj = json.loads(data.decode("utf-8"))
+        except Exception as e:
+            logger.error(f"无法解析数据包为 JSON: {e}")
+            self._notify_error(e)
+            return
+
+        header = obj.get("header") or {}
+        msg_type = header.get("type")
+
+        if msg_type == AENetMessageType.RESPONSE.value:
+            try:
+                self._notify_response(AENetRsp.from_map(obj))
+            except Exception as e:
+                logger.error(f"AENetRsp.from_map 解析失败: {e}")
+                self._notify_error(e)
+        elif msg_type == AENetMessageType.REQUEST.value:
+            try:
+                self._notify_request(AENetReq.from_map(obj))
+            except Exception as e:
+                logger.error(f"AENetReq.from_map 解析失败: {e}")
+                self._notify_error(e)
+        else:
+            logger.warning(f"未知消息类型 type: {msg_type}")
 
     def _notify_request(self, request: AENetReq) -> None:
         if self._on_request_callback:

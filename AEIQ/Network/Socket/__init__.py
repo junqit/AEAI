@@ -1,5 +1,6 @@
 from .Packet import (
-    AEPacket, AEPacketHeader, AEDataType, MAGIC_CODE, calculate_crc16, calculate_checksum,
+    AEPacket, AEPacketHeader, AEDataType, AEFlag, LAST_PACKET_SEQ,
+    MAGIC_CODE, calculate_crc16, calculate_checksum,
     AEReceiveBuffer, AEPacketParser,
     AEPacketReceiveBuffer, ParsedPacketResult, PacketReceivedCallback,
 )
@@ -16,6 +17,8 @@ __all__ = [
     'AEPacket',
     'AEPacketHeader',
     'AEDataType',
+    'AEFlag',
+    'LAST_PACKET_SEQ',
     'MAGIC_CODE',
     'calculate_crc16',
     'calculate_checksum',

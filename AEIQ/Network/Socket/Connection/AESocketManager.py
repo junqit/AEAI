@@ -48,22 +48,18 @@ class AESocketManager:
         self._listeners.remove(listener)
 
     def on_packet_received(self, result: ParsedPacketResult) -> None:
-        """接收解析完成的数据，注册用户后通过 listener 转给上层"""
-
-        if result.data_type == AEDataType.REQUEST:
-            request: AENetReq = result.payload
-            if request.user:
-                self._register_user(request.user, result.client_addr)
-
+        """接收解析完成的数据，注册用户后通过 listener 转给上层。
+        请求（AENetReq）转交业务层；响应/传输层信号不处理（对标 Swift：服务端不接收响应业务）。"""
+        payload = result.payload
+        if isinstance(payload, AENetReq):
+            if payload.user:
+                self._register_user(payload.user, result.client_addr)
             for listener in self._listeners:
                 try:
-                    listener.on_request_received(request)
+                    listener.on_request_received(payload)
                 except Exception as e:
                     logger.error("[AESocketManager] listener.on_request_received 异常: %s", e, exc_info=True)
-        elif result.data_type == AEDataType.PING:
-            pass
-        elif result.data_type == AEDataType.HEARTBEAT:
-            pass
+        # AENetRsp / 传输层信号：服务端不处理
 
     def send_request(self, request: AENetReq) -> bool:
         """发送 AENetReq，委托给用户对应的 AESocketWrapper"""

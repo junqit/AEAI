@@ -125,7 +125,9 @@ class AERoleChoice:
             AEFlowRole.llm: AELLMRole,
         }
         cls = role_class[role_enum]
-        return cls(flowOutput=AEFlowOutput(ident=ident, out_schema={AE_CONTENT: llm_generate("任务结论")}))
+        # llm 角色直接作答用户，out_schema 用"对用户的回复"；其余角色产出为任务结论，保留"任务结论"
+        placeholder = "对用户的回复" if role_enum == AEFlowRole.llm else "任务结论"
+        return cls(flowOutput=AEFlowOutput(ident=ident, out_schema={AE_CONTENT: llm_generate(placeholder)}))
 
     def _create_role_flows(self, roles: list, is_subflow: bool = True) -> int:
         """根据工作流列表创建角色 flow 并启动。

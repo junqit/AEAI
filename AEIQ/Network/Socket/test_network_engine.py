@@ -32,9 +32,10 @@ RECV_BUF = 65536
 
 
 def _echo_response_for(request: AENetReq) -> AENetRsp:
-    """根据请求的 requestId 构造回显响应。"""
+    """根据请求的 requestId / path 构造回显响应。"""
     rid = request.req.requestId if request.req else None
-    return AENetRsp(code=200, req=AENetReqInfo(requestId=rid), rsp={"echo": True})
+    path = request.req.path if request.req else None
+    return AENetRsp(code=200, req=AENetReqInfo(requestId=rid, path=path), rsp={"echo": True})
 
 
 class UDPEchoPeer:
@@ -69,9 +70,9 @@ class UDPEchoPeer:
             self._buffer.receive(data, addr)
 
     def _on_packet(self, result):
-        if result.data_type == AEDataType.REQUEST:
+        if isinstance(result.payload, AENetReq):
             rsp = _echo_response_for(result.payload)
-            for pkt in AEPacket.packets_from_data(AEDataType.RESPONSE, rsp.to_bytes()):
+            for pkt in AEPacket.packets_from_data(AEDataType.DATA, rsp.to_bytes()):
                 try:
                     self.sock.sendto(pkt.to_bytes(), result.client_addr)
                 except OSError:
@@ -150,7 +151,7 @@ class TCPEchoPeer:
 
     def _on_request(self, request: AENetReq):
         rsp = _echo_response_for(request)
-        for pkt in AEPacket.packets_from_data(AEDataType.RESPONSE, rsp.to_bytes()):
+        for pkt in AEPacket.packets_from_data(AEDataType.DATA, rsp.to_bytes()):
             try:
                 self.conn.sendall(pkt.to_bytes())
             except OSError:
@@ -236,9 +237,10 @@ class TestAENetworkEngineUDP(unittest.IsolatedAsyncioTestCase):
         engine = AENetworkEngine("127.0.0.1", peer.port, AENetSocketType.UDP, heartbeat_interval=999)
         try:
             await engine.connect()
-            req = AENetReq(req=AENetReqInfo(requestId="deadbeef"))
+            req = AENetReq(req=AENetReqInfo(requestId="deadbeef", path="/context/info"))
             rsp = await asyncio.wait_for(engine.send(req), timeout=5.0)
             self.assertEqual(rsp.req.requestId, "deadbeef")
+            self.assertEqual(rsp.req.path, "/context/info")
         finally:
             await engine.disconnect()
             peer.stop()

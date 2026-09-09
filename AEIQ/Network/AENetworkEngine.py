@@ -201,7 +201,7 @@ class AENetworkEngine:
         with self._pending_lock:
             self._pending[request_id] = future
 
-        self._enqueue_package(AEDataType.REQUEST, request.to_bytes())
+        self._enqueue_package(AEDataType.DATA, request.to_bytes())
         return await future
 
     def send_nowait(self, request: AENetReq) -> None:
@@ -209,7 +209,7 @@ class AENetworkEngine:
         if self.state != AESocketState.CONNECTED:
             raise AESocketError(AESocketError.NOT_CONNECTED, "未连接，发送失败")
         self._ensure_request_id(request)
-        self._enqueue_package(AEDataType.REQUEST, request.to_bytes())
+        self._enqueue_package(AEDataType.DATA, request.to_bytes())
 
     def _ensure_request_id(self, request: AENetReq) -> None:
         if request.req is None:
@@ -267,10 +267,10 @@ class AENetworkEngine:
     # ==================== 接收（解析器回调，工作线程触发） ====================
 
     def _on_parsed_result(self, result: ParsedPacketResult) -> None:
-        """UDP：AEPacketReceiveBuffer 解析完成回调。"""
-        if result.data_type == AEDataType.RESPONSE:
+        """UDP：AEPacketReceiveBuffer 解析完成回调。按 payload 类型分发（DATA 载荷已含 req/rsp）。"""
+        if isinstance(result.payload, AENetRsp):
             self._on_response(result.payload)
-        elif result.data_type == AEDataType.REQUEST:
+        elif isinstance(result.payload, AENetReq):
             self._on_request(result.payload)
 
     def _on_response(self, rsp: AENetRsp) -> None:

@@ -6,6 +6,7 @@ AEPacket 接收缓冲区
 2. 解析线程串行：data → AEPacket → AEDataType 对应消息体 → 回调上层
 """
 
+import json
 import threading
 import logging
 from queue import Queue, Empty
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from .AEPacket import AEPacketHeader, AEPacket, AEDataType, UNIQUE_ID_SENTINEL, calculate_crc16
 from .AEPacketPool import AEPacketPool
 from ...Core import AENetReq, AENetRsp
+from ...Core.AENetReq import AENetMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -161,35 +163,45 @@ class AEPacketReceiveBuffer:
 
     def _dispatch_by_type(self, data_type_value: int, data: bytes, client_addr: tuple) -> None:
         """按数据类型解析消息体并回调上层。"""
+        if data_type_value == AEDataType.DATA.value:
+            self._dispatch_data(data, client_addr)
+        elif data_type_value in (AEDataType.HEARTBEAT.value,
+                                 AEDataType.PING.value,
+                                 AEDataType.PONG.value):
+            # 传输层信号：仅保活链路，不上传业务层
+            return
+        else:
+            logger.warning(f"Unknown data type: 0x{data_type_value:04X}")
+            return
+
+    def _dispatch_data(self, data: bytes, client_addr: tuple) -> None:
+        """对标 Swift dispatch：DATA 载荷按 header.type(Int) 区分请求/响应并回调上层。"""
         try:
-            if data_type_value == AEDataType.REQUEST.value:
-                payload = AENetReq.from_bytes(data)
-                ae_type = AEDataType.REQUEST
-            elif data_type_value == AEDataType.RESPONSE.value:
-                payload = AENetRsp.from_bytes(data)
-                ae_type = AEDataType.RESPONSE
-            elif data_type_value == AEDataType.HEARTBEAT.value:
-                # 心跳包：仅保活链路，不上传业务层
-                return
-            elif data_type_value == AEDataType.PING.value:
-                payload = data
-                ae_type = AEDataType.PING
-            elif data_type_value == AEDataType.PONG.value:
-                payload = data
-                ae_type = AEDataType.PONG
-            else:
-                logger.warning(f"Unknown data type: 0x{data_type_value:04X}")
-                return
-
-            result = ParsedPacketResult(
-                data_type=ae_type,
-                payload=payload,
-                client_addr=client_addr,
-                raw_data=data,
-            )
-
-            if self._on_packet_received:
-                self._on_packet_received(result)
-
+            obj = json.loads(data.decode("utf-8"))
         except Exception as e:
-            logger.error(f"Error dispatching packet from {client_addr}: {e}", exc_info=True)
+            logger.error(f"无法解析数据包为 JSON from {client_addr}: {e}", exc_info=True)
+            return
+
+        header = obj.get("header") or {}
+        msg_type = header.get("type")
+
+        try:
+            if msg_type == AENetMessageType.REQUEST.value:
+                payload = AENetReq.from_map(obj)
+            elif msg_type == AENetMessageType.RESPONSE.value:
+                payload = AENetRsp.from_map(obj)
+            else:
+                logger.warning(f"未知消息类型 type:{msg_type} from {client_addr}")
+                return
+        except Exception as e:
+            logger.error(f"解析消息体失败 from {client_addr}: {e}", exc_info=True)
+            return
+
+        result = ParsedPacketResult(
+            data_type=AEDataType.DATA,
+            payload=payload,
+            client_addr=client_addr,
+            raw_data=data,
+        )
+        if self._on_packet_received:
+            self._on_packet_received(result)
