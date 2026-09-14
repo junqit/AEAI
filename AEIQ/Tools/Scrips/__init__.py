@@ -1,4 +1,3 @@
-from .AEScript import AEScript, AEScriptType
 from .AEScriptRunner import (
     AEScriptRunner,
     AEPythonRunner,
@@ -9,8 +8,6 @@ from .AEScriptRunner import (
 )
 
 __all__ = [
-    "AEScript",
-    "AEScriptType",
     "AEScriptRunner",
     "AEPythonRunner",
     "AEShellRunner",

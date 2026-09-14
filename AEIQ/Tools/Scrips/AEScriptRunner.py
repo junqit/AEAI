@@ -13,7 +13,7 @@ import platform
 import subprocess
 from typing import Dict, Type, Optional
 
-from .AEScript import AEScript, AEScriptType
+from Roles.Defs.AEScript import AEScript, AEScriptType
 
 logger = logging.getLogger(__name__)
 

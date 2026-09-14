@@ -61,8 +61,9 @@ class AERoleChoice:
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
                 "角色选择规则：\n"
-                "- 所选角色必须能够切实解决用户的问题或目标，不得给出无法解决或拒绝的答案；\n"
-                "- 若问题需要获取网络数据、实时数据、资讯等需通过网络请求的内容，必须选择角色（不得选 llm）。"
+                "- 可以选择 1 个或多个角色（可组合分工）来完成用户的问题或目标，最终须准确、完整、逻辑严谨地解决。\n"
+                "- 简单、可直接作答的知识性问题可选 llm 直答；需要网络/实时数据（新闻、天气、股价、汇率、资讯等）的问题必须选角色执行，不得选 llm。\n"
+                "- 所选角色必须能切实解决目标的对应部分（在其能力范围内），不得选无法解决的角色，不得拒绝或推诿。"
             ),
         })
         # 候选角色花名册（system）：candidates 已含 llm（当 cur_role 为 None 时）
@@ -84,23 +85,22 @@ class AERoleChoice:
                 f"目标：{AE_USER_QUESTION_PREFIX}\n\n"
                 f"请基于上述目标和可选角色的能力，拆解为可独立执行的工作流，输出 JSON 数组填入 workflows 字段。\n"
                 f"每个工作流包含：\n"
-                f"  - title：简短标题\n"
-                f"  - goal：该工作流的具体目标，必须可独立完成\n"
-                f"  - role：执行角色，从可选角色中选（{', '.join(allowed)}）\n\n"
+                f"  - title：角色名称，从可选角色中选（{', '.join(allowed)}）\n"
+                f"  - goal：该工作流的目标或需要解决的问题，必须可独立完成，且落在所选角色的能力范围内\n\n"
                 f"要求：\n"
-                f"1. 所列工作流合起来必须完整解决目标，不得遗漏\n"
-                f"2. 每个工作流必须能独立完成，不依赖其他工作流的结果\n"
-                f"3. 工作流数量尽可能少，避免过度拆解\n"
-                f"4. 不需要创建总结或汇总类工作流，系统会自动汇总全部结果"
+                f"1. 每个工作流必须先选定角色（title），再按该角色的能力与职责给出 goal——goal 须是该角色能力范围内可独立完成的子目标或待解决问题；不得与所选角色能力不符、越权或随意编造\n"
+                f"2. 所列工作流合起来必须完整解决目标，不得遗漏\n"
+                f"3. 每个工作流必须能独立完成，不依赖其他工作流的结果\n"
+                f"4. 工作流数量尽可能少，避免过度拆解\n"
+                f"5. 不需要创建总结或汇总类工作流，系统会自动汇总全部结果"
             ),
         })
         
         flow_out = self.generateFlowOutput(AERoleFunction.receiveRoleSelect)
         flow_out.set_llm_out({
             "workflows": [{
-                AE_TITLE: llm_generate("标题"),
-                "goal": llm_generate("工作流目标，可独立完成且必须能解决目标"),
-                "role": llm_generate(f"执行角色 type，从可选角色中选，如 {' / '.join(allowed)}"),
+                AE_TITLE: llm_generate(f"角色名称，从可选角色中选，如 {' / '.join(allowed)}"),
+                "goal": llm_generate("该工作流的目标或需要解决的问题，可独立完成且必须能解决"),
             }]
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
@@ -133,7 +133,7 @@ class AERoleChoice:
         """根据工作流列表创建角色 flow 并启动。
 
         Args:
-            roles: 工作流列表，每项含 role / goal / title。
+            roles: 工作流列表，每项含 title / goal。
             is_subflow: True → 加入自己的 _flows（self.add_flow，AE_IDENT=self.ident）；
                         False → 加入 delegate 作为兄弟 flow（delegate.add_flow，AE_IDENT=delegate.ident）。
 
@@ -151,8 +151,8 @@ class AERoleChoice:
                 content = spec
                 role_enum = None
             elif isinstance(spec, dict):
-                content = spec.get("goal") or spec.get(AE_TITLE) or ""
-                role_str = (spec.get("role") or "").strip()
+                content = spec.get("goal") or ""
+                role_str = (spec.get(AE_TITLE) or "").strip()
                 if role_str.lower().startswith("type:"):
                     role_str = role_str.split(":", 1)[1].strip()
                 try:

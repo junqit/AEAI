@@ -139,7 +139,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         responsibility=(
             "直接作答。"
             "可做：仅凭 LLM 自身知识回答简单问题，给出准确、完整的结论。"
-            "不可做：不拆解任务、不执行脚本、不获取网络/实时数据，遇到需外部数据的问题应交由人员角色。"
+            "不可做：不拆解任务、不执行脚本、不获取网络/实时数据，遇到需外部数据的问题应交由其他角色处理。"
         ),
     ),
     AEFlowRole.script: AERoleParamInfo(
