@@ -12,7 +12,7 @@ from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
-from Roles.AERoleType import AE_USER_QUESTION_PREFIX, AEFlowRole, ROLE_PARAMS
+from Roles.AERoleType import AEFlowRole, ROLE_PARAMS
 from Roles.Defs.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,9 @@ class AERefiner(AERoleExcutor):
         self.role = None
 
     def outResult_summary(self) -> str:
-        """覆写：以统一前缀（AE_USER_QUESTION_PREFIX）返回 output.outResult 的回答。"""
+        """覆写：直接返回 output.outResult 的回答。"""
         answer = self.output.outResult or ""
-        return f"{AE_USER_QUESTION_PREFIX}{answer}"
+        return answer
 
     def receiveRoleSelect(self, data: dict) -> bool:
         """覆写：按 role 创建兄弟 flow 加入 delegate，自身完成（delegate 编排全部兄弟 flow）。"""

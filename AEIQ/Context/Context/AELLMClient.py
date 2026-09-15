@@ -98,20 +98,26 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _parse_content_json(reply: str):
-    """解析 LLM 回包为填充内容（dict / list）；失败返回 None。
+    """解析 LLM 回包为填充内容（dict / list）；非 JSON 纯正文回退用原文作 content。
 
     用 json_repair 容错解析：LLM 常产出字符串值内裸换行、非法转义（如正则 \\d）、
-    尾逗号等不合规 JSON，json_repair 可修复后直接返回解析对象，避免解析失败回填
-    空信封导致下游 flow 拿到空结果。
+    尾逗号等不合规 JSON，json_repair 可修复后直接返回解析对象。
+    LLM 对长正文（如 chat 终答）常直接输出 prose 而不包裹 {"content": ...}，
+    repair_json 此时返回 ""（空串，非 None）；检测到非 dict/list 时回退用原文作 AE_CONTENT，
+    避免 is None 判漏导致下游 flow 拿到空 content。
     """
     if not reply:
         return None
     stripped = _strip_code_fence(reply)
     try:
-        return repair_json(stripped, return_objects=True)
+        parsed = repair_json(stripped, return_objects=True)
     except Exception as e:
         logger.error("内容 JSON 解析失败: %s\nreply(前2000字符)=%s", e, reply[:2000])
         return None
+    if not isinstance(parsed, dict):
+        logger.warning("LLM 未按 JSON 结构输出（得到 %s），回退用原文作 content", type(parsed).__name__)
+        return {AE_CONTENT: reply}
+    return parsed
 
 
 async def close_client():

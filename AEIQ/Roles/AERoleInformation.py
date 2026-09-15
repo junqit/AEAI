@@ -6,7 +6,7 @@ from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT, AE_RES
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE
 from Roles.AERoleInfo import AERoleInfo
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class AERoleInformation(AERoleInfo):
         if len(user_question) > 0:
             messages.append({
                 AE_ROLE: AEConentRole.SYSTEM.value,
-                AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
+                AE_CONTENT: user_question,
             })
 
         # 以当前角色 ROLE_PARAMS（AERoleType.ROLE_PARAMS）作为生成规则，确保 title/responsibility 贴合角色性质
@@ -48,7 +48,7 @@ class AERoleInformation(AERoleInfo):
         })
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: f"请根据{AE_USER_QUESTION_PREFIX}与上述角色生成规则，生成工作名称与职责范围。",
+            AE_CONTENT: "请根据上述用户问题与角色生成规则，生成工作名称与职责范围。",
         })
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
         flow_out.set_llm_out({

@@ -19,7 +19,7 @@ from WorkFlows.AEIQFlow import AEIQFlow
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
-from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AE_USER_QUESTION_PREFIX, AEConentRole, AE_ROLE
+from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
 from Roles.AERoleInformation import AERoleInformation
 from Roles.AERoleQuestionOptimize import AERoleQuestionOptimize
 
@@ -79,12 +79,16 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         """组装身份与能力范围信息，供 LLM 明确本 flow 的角色定位。
 
         返回形如「你的身份是：X；你的能力范围是：Y」的描述；对应字段为空时省略对应分句。
+        末尾追加按角色能力适配的铁律（get_role_iron_law），替代 AEContextCenter 的 blanket 注入。
         """
         parts = []
         if len(self.title) > 0:
             parts.append(f"你的身份是：{self.title}")
         if len(self.responsibility) > 0:
             parts.append(f"你的能力范围是：{self.responsibility}")
+        iron_law = get_role_iron_law(self.role)
+        if iron_law:
+            parts.append(iron_law)
         if len(parts) == 0:
             return ""
         return "".join(parts)
@@ -93,7 +97,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
 
         三段式（条件出现、换行分隔），体现实为「以某问题、以某身份、给出结果」的条理：
-        - 问题段（有 input.goal 时）：「{AE_USER_QUESTION_PREFIX}{input.goal}」
+        - 问题段（有 input.goal 时）：直接以 input.goal 作为问题段
         - 身份段（有 title 时）：「以「{title}」身份」
         - 结果段（必有）：「给出结果：{answer}」
         """
@@ -101,7 +105,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         question = (self.input.goal if self.input is not None else "")
         parts = []
         if question:
-            parts.append(f"{AE_USER_QUESTION_PREFIX}{question}")
+            parts.append(question)
         if self.title:
             parts.append(f"以「{self.title}」身份")
         parts.append(f"给出结果：{answer}")

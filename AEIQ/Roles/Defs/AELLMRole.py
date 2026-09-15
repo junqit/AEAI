@@ -13,7 +13,7 @@ _role()=llm；requestRoleSelect 覆写为决策入口（替代默认的角色选
 import logging
 
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERoleType import AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE, AEFlowRole
+from Roles.AERoleType import AEConentRole, AE_ROLE, AEFlowRole
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
@@ -67,7 +67,7 @@ class AELLMRole(AERoleExcutor):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.goal if self.input is not None else ''}"})
+        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: (self.input.goal if self.input is not None else "")})
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
@@ -125,11 +125,11 @@ class AELLMRole(AERoleExcutor):
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{self.input.goal if self.input is not None else ''}"})
+        messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: (self.input.goal if self.input is not None else "")})
         # 以收到的 rolePrompt 作为作答指令（空则回退默认直接作答指令）
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: self.rolePrompt or f"请直接回答{AE_USER_QUESTION_PREFIX}",
+            AE_CONTENT: self.rolePrompt or "请直接回答上述问题",
         })
         flow_out = self.generateFlowOutput(AEFunctional.flow_receive_complete)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

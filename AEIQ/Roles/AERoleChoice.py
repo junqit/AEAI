@@ -16,7 +16,7 @@ from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import (
     AEFlowRole, ROLE_PARAMS, roles_below,
-    AEConentRole, AE_USER_QUESTION_PREFIX, AE_ROLE,
+    AEConentRole, AE_ROLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,8 +54,6 @@ class AERoleChoice:
         if len(role_brief) > 0:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
         question = ((self.input.goal or self.input.parameter.get(AE_CONTENT, "")) if self.input is not None else "")
-        if len(question) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{question}"})
         # 角色选择规则（system）：必须解决问题 + 网络请求类必选角色
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
@@ -82,7 +80,7 @@ class AERoleChoice:
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"目标：{AE_USER_QUESTION_PREFIX}\n\n"
+                f"目标：{question}\n\n"
                 f"请基于上述目标和可选角色的能力，拆解为可独立执行的工作流，输出 JSON 数组填入 workflows 字段。\n"
                 f"每个工作流包含：\n"
                 f"  - title：角色名称，从可选角色中选（{', '.join(allowed)}）\n"
@@ -110,19 +108,21 @@ class AERoleChoice:
         """按 role 映射实例化对应角色 flow（懒导入避免循环）。
 
         注册表覆盖 ROLE_PARAMS 全部角色：expert/workgroup/employee→对应子类，
-        task→AETaskRole，llm→AELLMRole；未注册的 role 抛 KeyError。
+        task→AETaskRole，llm→AELLMRole，script→AEScript；未注册的 role 抛 KeyError。
         """
         from Roles.Defs.AELLMRole import AELLMRole
         from Roles.Defs.AEExpertRole import AEExpertRole
         from Roles.Defs.AEWorkgroupRole import AEWorkgroupRole
         from Roles.Defs.AEEmployeeRole import AEEmployeeRole
         from Roles.Defs.AETaskRole import AETaskRole
+        from Roles.Defs.AEScript import AEScript
         role_class = {
             AEFlowRole.expert: AEExpertRole,
             AEFlowRole.workgroup: AEWorkgroupRole,
             AEFlowRole.employee: AEEmployeeRole,
             AEFlowRole.task: AETaskRole,
             AEFlowRole.llm: AELLMRole,
+            AEFlowRole.script: AEScript,
         }
         cls = role_class[role_enum]
         # llm 角色直接作答用户，out_schema 用"对用户的回复"；其余角色产出为任务结论，保留"任务结论"

@@ -13,7 +13,7 @@ import logging
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE, AE_USER_QUESTION_PREFIX
+from Roles.AERoleType import AEConentRole, AE_ROLE
 from Roles.AERoleInfo import AERoleInfo
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         """组装并发送 LLM 请求：对用户问题做二次解释与补全缺失，输出「优化后的问题」本身，
         不得直接回答该问题。
 
-        - messages: system(role_brief，含身份与能力) / system(问题优化指令) / user(用户问题，AE_USER_QUESTION_PREFIX 前缀；无问题时退化为 user 指令)
+        - messages: system(role_brief，含身份与能力) / system(问题优化指令) / user(用户问题；无问题时退化为 user 指令)
         - out_schema: {AE_CONTENT: 优化后的问题 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 input.goal（不完成 flow）
 
@@ -47,7 +47,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         # 不用 rolePrompt——它是作答步骤（requestLLMAnswer）的指令，倾向「转化为可执行目标/作答」，
         # 用在此处会让模型直接回答问题（如罗列能力范围），而非优化问题。
         instruction = (
-            f"对{AE_USER_QUESTION_PREFIX}做问题优化：在保持原意的前提下，对用户问题进行二次解释与补全缺失，"
+            "对用户问题做问题优化：在保持原意的前提下，对用户问题进行二次解释与补全缺失，"
             "重述并补全其中隐含或缺失的信息，使其更清晰、更完整、更易于理解，且契合你的专业能力与约束范围。\n"
             "要求：\n"
             "- 输出必须是「一个问题」（优化后的用户问题本身）；\n"
@@ -61,7 +61,7 @@ class AERoleQuestionOptimize(AERoleInfo):
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
             messages.append({
                 AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: f"{AE_USER_QUESTION_PREFIX}{user_question}",
+                AE_CONTENT: user_question,
             })
         else:
             # 无待优化问题：指令作为 user 消息，确保存在 user 轮次
