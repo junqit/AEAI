@@ -110,3 +110,31 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
             parts.append(f"以「{self.title}」身份")
         parts.append(f"给出结果：{answer}")
         return "\n".join(parts)
+
+    def flow_complete_info(self) -> dict:
+        """覆写：在基类 info 上补角色（role 枚举）、深度（deepth）与 delegate（父 flow）信息，
+        供 chat 完成时树形 JSON 呈现角色、层级与归属链。
+
+        基类已有 ident/title/responsibility/question/goal/answer/children；此处补：
+        - role：本 flow 所属 AEFlowRole 枚举值（角色层才有，为 None 时省略）；
+        - deepth：本 flow 在树中的层级深度（根=1，子=父+1）；
+        - dep：delegate（父 flow，弱引用）的 {ident, title}；delegate 为 None
+          （根 flow）或 weakref 已失效（ReferenceError）时 dep=None。
+        """
+        info = super().flow_complete_info()
+        role = getattr(self, "role", None)
+        if role is not None:
+            info["role"] = role.value
+        info["deepth"] = self.deepth
+        delegate = getattr(self, "delegate", None)
+        dep_info = None
+        if delegate is not None:
+            try:
+                dep_info = {
+                    "ident": getattr(delegate, "ident", ""),
+                    "title": getattr(delegate, "title", "") or "",
+                }
+            except ReferenceError:  # weakref 已失效
+                dep_info = None
+        info["dep"] = dep_info
+        return info

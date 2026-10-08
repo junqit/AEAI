@@ -5,13 +5,13 @@ AEScript - 脚本 Flow，继承 AERoleExcutor（拥有角色执行的同等能�
 流程：start_flow → LLM 按当前 ruby/python/shell 能力与已装工具包选脚本类型 → LLM 生成脚本内容
 → 执行 → LLM 验证评分。目标（expected_output）由上层经公共接口 receive_flow_input 写入 self.input.goal；
 脚本必须经 LLM 验证评分 ≥PASS_SCORE 才完成。执行失败或验证不达标均请求 LLM 修正/重生成脚本后
-重试，循环直至验证通过；仅以连续 SAME_ERROR_LIMIT 次相同错误兜底——判 LLM 修不动，以已有结果反馈完成。
-执行态（重试/验证记账 + 每次结果）存于 AEScriptState，不污染入站 input / 出站 output 契约；
-outResult 存储每次执行结果（不论 verify 是否通过）。
+重试，循环直至验证通过。
+执行记账（历次执行/验证记录）由 AEScript 实例直接持有（self.attempts），
+不污染入站 input / 出站 output 契约；outResult 由历次 attempt 组装（每次执行结果，不论 verify 是否通过）。
 """
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
@@ -41,31 +41,33 @@ class AEScriptType(str, Enum):
 
 
 @dataclass
-class AEScriptState:
-    """AEScript 执行态：验证循环 + 每次结果记账（非入站/出站契约，仅执行期存活）。
+class AEScriptAttempt:
+    """单次执行记账：脚本内容 + 执行结果 + 验证评分（含理由）。
 
-    不限重试次数，循环直至验证通过；仅以连续 SAME_ERROR_LIMIT 次相同错误兜底（判 LLM 修不动）。
-    results 记录每次执行 stdout（不论 verify 是否通过）。
+    stdout 与 error 互斥：执行成功记 stdout（error 空）；执行失败记 error（stdout 空）。
+    score/reason 仅在执行成功且经 LLM 验证后由 receiveScriptVerify 回填到该次 attempt。
+    attempt 于收到脚本时创建（receiveScriptGenerate/receiveScriptFix），执行结果与验证评分随后
+    回填到同一实例；AEScript 不另存脚本内容，当前 attempt = self.attempts[-1]。
+    last_error/pending_stdout/verified_score/verify_count 等均由历次 attempt 派生，不另存冗余字段。
     """
-    last_error: str = ""
-    prev_error: str = ""
-    same_error_count: int = 0
-    pending_stdout: str = ""
-    verify_count: int = 0
-    verified_score: Optional[int] = None
-    verified_reason: str = ""
-    results: List[str] = field(default_factory=list)
+    script: str = ""
+    stdout: str = ""
+    error: str = ""
+    score: Optional[int] = None
+    reason: str = ""
 
 
 class AEScript(AERoleExcutor):
     """脚本 Flow：目标（expected_output）= self.input.goal（上层经公共接口 receive_flow_input 注入）；
-    type/script 由本 flow 经 LLM 选型 + 生成后执行。
+    type 由本 flow 经 LLM 选型后贯穿执行；脚本内容由 LLM 生成并存于每次 attempt
+    （AEScriptAttempt.script），不在实例上冗余留存，当前 attempt = self.attempts[-1]。
 
-    流程：on_flow_start（置 self.input + 执行态）→ start_flow → _request_script_type（LLM 选型）→
+    流程：on_flow_start（置 self.input + 执行记账）→ start_flow → _request_script_type（LLM 选型）→
     receiveScriptType → _request_script_generate（LLM 生成内容）→ receiveScriptGenerate →
-    _run_script（每次 stdout 记入 results）→ _verify（≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。
-    执行失败亦经 _request_script_fix 重试。循环直至验证通过；仅连续 SAME_ERROR_LIMIT 次相同错误兜底，
-    判 LLM 修不动，以已有结果反馈完成。outResult = results（每次结果，不论对错）。
+    _run_script（执行结果回填到当前 attempt）→ _verify（≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。
+    执行失败亦经 _request_script_fix 重试。循环直至验证通过。outResult 由历次 attempt 组装（每次结果，不论对错）。
+
+    实例执行记账：self.attempts（历次 AEScriptAttempt，含脚本/结果/评分）为信息源。
     """
 
     @classmethod
@@ -73,10 +75,8 @@ class AEScript(AERoleExcutor):
         return AEFlowRole.script
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
-    SAME_ERROR_LIMIT = 5
     PASS_SCORE = 80
 
-    script: str = ""        # 脚本代码（由本 flow 选型+生成）
     type: str = ""
 
     def outResult_summary(self) -> str:
@@ -89,16 +89,16 @@ class AEScript(AERoleExcutor):
         else:
             body = str(results)
         base = f"我的回答：\n{body}"
-        state = getattr(self, "_state", None)
-        if state is not None and state.verified_score is not None:
-            base += f"\n（LLM 验证通过 score={state.verified_score}/100）"
+        score = self.attempts[-1].score if self.attempts else None
+        if score is not None:
+            base += f"\n（LLM 验证通过 score={score}/100）"
         return base
 
     def on_flow_start(self, flowInput) -> bool:
-        """启动：置 self.input（入站契约）+ 执行态，交 start_flow（选型→生成→执行→验证循环）。"""
+        """启动：置 self.input（入站契约）+ 执行记账（历次执行），交 start_flow（选型→生成→执行→验证循环）。"""
         self.input = flowInput
         self.status = AEFlowStatus.processing
-        self._state = AEScriptState()
+        self.attempts = []
         self.start_flow()
         return True
 
@@ -176,7 +176,8 @@ class AEScript(AERoleExcutor):
                     "执行环境：python 用 python -c、shell 用 sh -c、ruby 用 ruby -e，"
                     "脚本内容原样传入解释器，stdout 作为结果返回，30 秒超时，macOS 下全只读沙箱。\n"
                     "要求：\n"
-                    "- 必须切实产出目标/期望输出，不得拒绝、推诿或用占位符/伪代码绕过\n"
+                    "- 必须切实解决上述目标/期望输出所指的用户目标与问题，不得拒绝、推诿或用占位符/伪代码绕过\n"
+                    "- 不得瞎写：禁止捏造数据或结果，所需数据须真实获取或计算得出，不得用伪造值冒充目标/期望输出\n"
                     "- 可无人值守执行，禁止交互输入（input/gets/read），参数硬编码或用环境变量\n"
                     "- 只读沙箱执行，禁止写文件（创建/修改/删除、open 写模式、> / >> 重定向等），中间结果用 stdout 输出\n"
                     "- 联网获取数据优先用爬虫，使用国内可访问的地址，避免境外 API"
@@ -191,12 +192,15 @@ class AEScript(AERoleExcutor):
         self.send_llm_payload(payload)
 
     def receiveScriptGenerate(self, data: dict) -> bool:
-        """接收 LLM 生成的脚本内容（type 已由 receiveScriptType 选定），置 self.script 后执行。"""
+        """接收 LLM 生成的脚本内容（type 已由 receiveScriptType 选定），创建 attempt 后执行。
+
+        每次收到新脚本即创建 AEScriptAttempt（脚本内容唯一存 attempt），执行结果/验证评分均回填到
+        该 attempt；AEScript 不持有脚本内容，当前 attempt = self.attempts[-1]。空脚本以错误完成。"""
         script = data.get("script") if isinstance(data, dict) else None
         if script is None and isinstance(data, str):
             script = data
-        self.script = (script or "").strip()
-        if not self.script:
+        script = (script or "").strip()
+        if not script:
             logger.warning("[%s][d=%s] 生成脚本为空，以错误完成", self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
@@ -204,53 +208,66 @@ class AEScript(AERoleExcutor):
                 AEFlowCompletEvent.error,
             )
             return True
+        self.attempts.append(AEScriptAttempt(script=script))
         self._run_script()
         return True
 
     def _run_script(self) -> None:
-        """执行脚本；成功则记录结果并交 LLM 验证，失败则请求 LLM 修正后重试（不限次数）。
+        """执行当前 attempt（self.attempts[-1]）的脚本；成功回填 stdout 并交 LLM 验证，
+        失败回填 error 并请求 LLM 修正后重试（不限次数）。
 
-        循环直至验证通过；仅以连续 SAME_ERROR_LIMIT 次相同错误兜底——判 LLM 修不动，以已有结果反馈完成。
+        attempt 在收到脚本时已创建（receiveScriptGenerate/receiveScriptFix），此处只回填执行结果；
+        验证评分由 receiveScriptVerify 回填到同一 attempt。循环直至验证通过。
         """
         from Tools.Scrips.AEScriptRunner import get_runner
+        att = self.attempts[-1]
         try:
             runner = get_runner(self.type)
-            stdout = runner.run(self.script)
-            self._state.results.append(stdout)
-            logger.info("[%s][d=%s] 脚本执行成功(type=%s)", self.title, self.deepth, self.type)
-            self._verify(stdout)
+            stdout = runner.run(att.script)
         except Exception as e:
-            self._state.last_error = str(e)
-            if self._state.last_error == self._state.prev_error:
-                self._state.same_error_count += 1
-            else:
-                self._state.same_error_count = 1
-                self._state.prev_error = self._state.last_error
-            if self._state.same_error_count >= self.SAME_ERROR_LIMIT:
-                failure_summary = (
-                    f"脚本执行失败：连续相同错误 {self._state.same_error_count}/{self.SAME_ERROR_LIMIT} 次，"
-                    f"LLM 未能修正脚本。最后错误：{self._state.last_error}"
-                )
-                logger.warning("[%s][d=%s] %s，以已有结果反馈完成", self.title, self.deepth, failure_summary)
-                self._state.results.append(f"[失败] {failure_summary}")
-                self._complete()
-                return
-            logger.error("[%s][d=%s] 脚本执行失败(type=%s, 连续相同错误=%d/%d)，请求 LLM 修正后重试",
-                         self.title, self.deepth, self.type, self._state.same_error_count, self.SAME_ERROR_LIMIT)
-            self._request_script_fix(self._state.last_error)
+            err = str(e)
+            att.error = err
+            logger.error("[%s][d=%s] 脚本执行失败(type=%s)，请求 LLM 修正后重试",
+                         self.title, self.deepth, self.type)
+            self._request_script_fix(err)
+            return
+        att.stdout = stdout
+        logger.info("[%s][d=%s] 脚本执行成功(type=%s)", self.title, self.deepth, self.type)
+        self._verify(stdout)
+
+    def _build_results(self) -> List[str]:
+        """由历次 attempt 组装出站结果：每次执行结果（成功记 stdout，失败记 [失败] 错误），不论对错。"""
+        out = []
+        for att in self.attempts:
+            out.append(f"[失败] {att.error}" if att.error else att.stdout)
+        return out
 
     def _complete(self) -> None:
-        """以执行结果完成本 flow，回传父 flow。outResult = results（每次结果，不论对错）。"""
+        """以执行结果完成本 flow，回传父 flow。outResult 由历次 attempt 组装（每次结果，不论对错）。"""
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._state.results})
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._build_results()})
 
     def _apply_script_env(self, payload) -> None:
-        """脚本相关 LLM 请求携带 python/ruby/shell 能力与已装工具包信息（去掉默认 system 环境）。"""
+        """脚本相关 LLM 请求携带脚本能力与已装工具包信息（去掉默认 system 环境）。
+
+        选型前（self.type 未定）携带 python/ruby/shell 全部能力，供 LLM 比较后选型；
+        选型后（self.type 已定）仅携带选定类型对应能力，聚焦上下文、减少无关噪声。
+        """
         from Context.Context.AELLMPayload import AEEnvParamType
         payload.remove_env_param(AEEnvParamType.system)
-        payload.add_env_param(AEEnvParamType.python)
-        payload.add_env_param(AEEnvParamType.ruby)
-        payload.add_env_param(AEEnvParamType.shell)
+        type_env = {
+            AEScriptType.python.value: AEEnvParamType.python,
+            AEScriptType.shell.value: AEEnvParamType.shell,
+            AEScriptType.ruby.value: AEEnvParamType.ruby,
+        }
+        env = type_env.get(self.type)
+        if env is None:
+            # 选型前：type 未定，携带全部三种能力供 LLM 评估选型
+            payload.add_env_param(AEEnvParamType.python)
+            payload.add_env_param(AEEnvParamType.ruby)
+            payload.add_env_param(AEEnvParamType.shell)
+        else:
+            payload.add_env_param(env)
 
     def _verify(self, stdout: str) -> None:
         """执行成功后请求 LLM 评判结果是否符合目标/期望输出（0-100）。
@@ -259,14 +276,13 @@ class AEScript(AERoleExcutor):
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.AERoleType import AEConentRole, AE_ROLE
-        self._state.pending_stdout = stdout
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
                     f"目标/期望输出:\n{self._goal()}\n"
-                    f"脚本内容:\n{self.script}\n"
-                    f"执行结果(stdout):\n{stdout}\n"
+                    f"脚本内容:\n{self.attempts[-1].script}\n"
+                    f"程序输出:\n{stdout}\n"
                 ),
             },
             {
@@ -289,24 +305,31 @@ class AEScript(AERoleExcutor):
         self.send_llm_payload(payload)
 
     def receiveScriptVerify(self, data: dict) -> bool:
-        """接收 LLM 验证评分：≥PASS_SCORE 完成本 flow；否则重生成脚本重试（不限次数），直到通过。"""
+        """接收 LLM 验证评分：≥PASS_SCORE 完成本 flow；否则带历次执行记录请求 LLM 修正（不含评分）。
+
+        评分与理由回填到最近一次 attempt（记账留存），但不随修正请求交给 LLM——修正请求只带
+        历次脚本内容与执行结果，供 LLM 对照目标定位差距。verify_count / pending_stdout 等
+        均由历次 attempt 派生，不另存字段。
+        """
         score = self._parse_score(data.get("score")) if isinstance(data, dict) else 0
         reason = data.get("reason", "") if isinstance(data, dict) else ""
-        self._state.verify_count += 1
+        if self.attempts:
+            self.attempts[-1].score = score
+            self.attempts[-1].reason = reason
+        verify_count = sum(1 for a in self.attempts if a.score is not None)
+        pending_stdout = self.attempts[-1].stdout if self.attempts else ""
         logger.info("[%s][d=%s] 收到 LLM 验证评分: score=%d/100 (通过阈值 %d), reason=%s [第%d次验证]",
-                    self.title, self.deepth, score, self.PASS_SCORE, reason, self._state.verify_count)
+                    self.title, self.deepth, score, self.PASS_SCORE, reason, verify_count)
         if score >= self.PASS_SCORE:
-            self._state.verified_score = score
-            self._state.verified_reason = reason
             logger.info("[%s][d=%s] 脚本验证通过(score=%d≥%d)，记录执行结果:\n%s",
-                        self.title, self.deepth, score, self.PASS_SCORE, self._state.pending_stdout)
+                        self.title, self.deepth, score, self.PASS_SCORE, pending_stdout)
             self._complete()
             return True
-        logger.warning("[%s][d=%s] 脚本验证未通过(score=%d<%d)，重新生成脚本重试[第%d次]",
-                       self.title, self.deepth, score, self.PASS_SCORE, self._state.verify_count)
+        logger.warning("[%s][d=%s] 脚本验证未通过(score=%d<%d)，带历次执行记录重新生成脚本重试[第%d次]",
+                       self.title, self.deepth, score, self.PASS_SCORE, verify_count)
         self._request_script_fix(
-            f"脚本执行成功但结果不符合预期（符合度评分 {score}/{self.PASS_SCORE}，低于阈值）。"
-            f"评分理由：{reason}。请重新生成脚本，使执行结果更符合目标/期望输出。"
+            "历次执行结果均未符合目标/期望输出，请对照目标与历次脚本/结果修正脚本。",
+            include_history=True,
         )
         return True
 
@@ -324,31 +347,53 @@ class AEScript(AERoleExcutor):
             n = 0
         return max(0, min(100, n))
 
-    def _request_script_fix(self, problem: str) -> None:
-        """请求 LLM 根据问题说明、脚本能力与内容修正脚本。
+    def _request_script_fix(self, problem: str, include_history: bool = False) -> None:
+        """请求 LLM 修正脚本，使其产出目标/期望输出。
 
-        problem 同时覆盖两种触发：脚本执行失败（含完整错误）与验证评分不达标（含分数与理由）。
+        include_history=True（验证不达标触发）：把历次执行的脚本内容与执行结果（不含评分）
+        全部交给 LLM，供其对照目标定位差距后修正；problem 不含分数/理由。
+        include_history=False（执行失败触发）：仅给当前脚本与错误（problem）。
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.AERoleType import AEConentRole, AE_ROLE
+        if include_history and self.attempts:
+            history_lines = []
+            for i, att in enumerate(self.attempts):
+                history_lines.append(f"—— 第 {i + 1} 次 ——")
+                history_lines.append(f"脚本内容:\n{att.script}")
+                if att.error:
+                    history_lines.append(f"执行结果: 执行失败 → {att.error}")
+                else:
+                    history_lines.append(f"程序输出:\n{att.stdout}")
+            assistant_content = (
+                f"脚本类型: {self.type}\n"
+                f"目标/期望输出:\n{self._goal()}\n"
+                f"历次执行记录（脚本内容 + 执行结果，不含评分）:\n"
+                + "\n".join(history_lines) + "\n"
+                f"问题说明:\n{problem}\n"
+                "请依据目标/期望输出与历次执行结果修正脚本，使其执行后在 stdout 产出目标/期望输出。"
+            )
+        else:
+            assistant_content = (
+                f"脚本类型: {self.type}\n"
+                f"目标/期望输出:\n{self._goal()}\n"
+                f"当前脚本内容:\n{self.attempts[-1].script}\n"
+                f"问题说明:\n{problem}\n"
+                "请依据问题说明修正脚本，使其产出目标/期望输出。"
+            )
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
-                AE_CONTENT: (
-                    f"脚本类型: {self.type}\n"
-                    f"目标/期望输出:\n{self._goal()}\n"
-                    f"当前脚本内容:\n{self.script}\n"
-                    f"问题说明:\n{problem}\n"
-                    "请根据问题说明修正脚本，使其产出目标/期望输出。"
-                ),
+                AE_CONTENT: assistant_content,
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
                 AE_CONTENT: (
                     "请输出修正后的完整脚本内容（仅脚本代码本身，不要解释、不要 markdown 代码块标记）。"
-                    "修正后的脚本必须真正解决上述问题说明指出的问题——不得回避、不得用占位符、"
-                    "伪代码或注释绕过、不得输出与原脚本实质等价或仅作无关微调的代码，"
-                    "必须给出能实际运行并产出目标/期望输出的修正实现。"
+                    "修正后的脚本必须同时解决上述目标/期望输出与问题说明——不得回避问题，"
+                    "不得用占位符、伪代码或注释绕过，不得输出与原脚本实质等价或仅作无关微调的代码。"
+                    "修正后的脚本必须能正确执行，且执行后在 stdout 产出目标/期望输出——"
+                    "产出内容必须能通过执行脚本实际获取到，不得依赖文件。"
                     "脚本在只读沙箱中执行，禁止任何文件写入（创建/修改/删除/重命名、open(... 'w'/'a')、"
                     "> / >> 重定向等），需输出结果一律用 stdout；若原问题由写文件引起，须改为不写文件。"
                 ),
@@ -358,15 +403,19 @@ class AEScript(AERoleExcutor):
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self._apply_script_env(payload)
-        logger.info("[%s][d=%s] 请求 LLM 修正脚本", self.title, self.deepth)
+        logger.info("[%s][d=%s] 请求 LLM 修正脚本%s",
+                    self.title, self.deepth, "（含历次执行记录）" if include_history else "")
         self.send_llm_payload(payload)
 
     def receiveScriptFix(self, data: dict) -> bool:
-        """接收 LLM 修正后的脚本，更新 self.script 并重新执行。"""
+        """接收 LLM 修正后的脚本，创建新 attempt 并重新执行。
+
+        修正脚本视为新脚本，创建新 AEScriptAttempt（脚本内容存 attempt），交 _run_script 回填执行结果。"""
         fixed = data.get("script") if isinstance(data, dict) else None
         if fixed is None and isinstance(data, str):
             fixed = data
-        self.script = (fixed or "").strip()
+        fixed = (fixed or "").strip()
+        self.attempts.append(AEScriptAttempt(script=fixed))
         logger.info("[%s][d=%s] 收到修正脚本，重新执行", self.title, self.deepth)
         self._run_script()
         return True

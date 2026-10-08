@@ -17,7 +17,7 @@ class AEQwenModel:
 
     # 模型路径（本地部署模型）
     MODEL_PATH = "/Users/worker/Downloads/Qwen3.5-122B-A10B-4bit"
-    DEFAULT_BASE_URL = "http://10.220.146.132:10000/v1/chat/completions"
+    DEFAULT_BASE_URL = "http://10.192.186.141:10000/v1/chat/completions"
     DEFAULT_API_KEY = "asdf"
     DEFAULT_MAX_TOKENS = 262144
     REQUEST_TIMEOUT = 600  # 请求超时时间（秒，10 分钟）
