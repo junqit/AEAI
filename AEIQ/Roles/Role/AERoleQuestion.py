@@ -40,28 +40,21 @@ class AERoleQuestion(AERole):
         （requestLLMAnswer）的指令，此处不用，避免把「转化为可执行目标/作答」倾向带入问题优化。
         """
         messages = []
-        role_brief = self.role_brief()
-        if len(role_brief) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        # 问题优化指令：二次解释与补全缺失，输出优化后的「问题」本身，严禁直接回答。
-        # 不用 rolePrompt——它是作答步骤（requestLLMAnswer）的指令，倾向「转化为可执行目标/作答」，
-        # 用在此处会让模型直接回答问题（如罗列能力范围），而非优化问题。
+        # 问题优化指令：本步骤只优化问题、不回答（role_brief 的「必须能给出答案」铁律属作答步，此处不用，避免冲突）。
         instruction = (
-            "对用户问题做问题优化：在保持原意的前提下，对用户问题进行二次解释与补全缺失，"
-            "重述并补全其中隐含或缺失的信息，使其更清晰、更完整、更易于理解，且契合你的专业能力与约束范围。\n"
+            "【问题优化任务】对用户问题做优化：在保持原意的前提下，二次解释与补全缺失，"
+            "重述并补全其中隐含或缺失的信息，使其更清晰、更完整、更易于理解。\n"
             "要求：\n"
-            "- 输出必须是「一个问题」（优化后的用户问题本身）；\n"
-            "- 严禁直接回答该问题，严禁罗列或描述你的能力范围；\n"
+            "- 输出且仅输出【一个优化后的问题】（问题形式，不是回答）；\n"
+            "- 严禁回答用户问题、严禁寒暄或任何对话性回复（如「你好，有什么可以帮你的」是回答，禁止）；\n"
             "- 不得扩展原意、不得改变问题意图。"
         )
         user_question = self.input.get_content() if self.input is not None else ""
+        # 指令 + 用户问题拼接为一条 user 消息
         if len(user_question) > 0:
-            # 指令放 system、待优化问题放 user——user 才是模型要处理的内容，
-            # 避免 DeepSeek 等模型把 user 指令本身当作待优化问题原样改写
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: instruction})
             messages.append({
                 AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: user_question,
+                AE_CONTENT: instruction + "\n\n用户问题：\n" + user_question,
             })
         else:
             # 无待优化问题：指令作为 user 消息，确保存在 user 轮次
