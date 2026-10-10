@@ -10,5 +10,5 @@
 - llm      : AELLMRole（LLM 直接作答 flow，亦在此包内）
 - refiner  : AERefiner（问题精炼 flow，继承 AERoleExcutor，亦在此包内）
 
-AERoleExcutor（本包）为上述角色类的基类，提供执行/角色选择能力与 _role()=task 默认。
+AERoleExcutor 为上述角色类的基类，提供执行/角色选择能力与 _role()=task 默认。
 """

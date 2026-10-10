@@ -58,7 +58,7 @@ class AEContextCenter(AEContextDelegate):
 
         铁律已下沉到各角色 role_brief（get_role_iron_law，按角色能力适配），不再在此 blanket 注入。
         """
-        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
         from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
         directory = self.find_by_type(AEContextType.directory)
         if directory is not None:

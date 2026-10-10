@@ -7,7 +7,7 @@ from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
 from Context.Context.AELLMPayload import AELLMPayload
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE
+from Roles.Role.AERoleType import AEConentRole, AE_ROLE
 
 logger = logging.getLogger(__name__)
 

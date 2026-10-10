@@ -12,8 +12,8 @@ from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import llm_generate
-from Roles.AERoleType import AEFlowRole
-from Roles.Defs.AERoleExcutor import AERoleExcutor
+from Roles.Role.AERoleType import AEFlowRole
+from Roles.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
 

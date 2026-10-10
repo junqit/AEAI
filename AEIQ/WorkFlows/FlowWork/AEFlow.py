@@ -8,7 +8,7 @@ AEFlow - Flow 基类，实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
 
 本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）；角色相关信息（title/responsibility/
 rolePrompt 及 role_brief/outResult_summary/汇总拼消息）属 Roles.AERoleBase，不在本类。
-问题优化由 Roles.AERoleQuestionOptimize 提供；角色信息由 Roles.AERoleInformation 提供（AERoleBase 继承）。
+问题优化由 Roles.AERoleQuestion 提供；角色信息由 Roles.AERoleInformation 提供（AERoleBase 继承）。
 """
 import json
 import logging
@@ -165,7 +165,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """本 flow 的完成信息（含子 flow 递归），供上层汇总成整体 JSON 树。
 
         自拼 ident/title/responsibility/question/goal/answer 与子 flow 的 flow_complete_info；
-        title/responsibility 由角色层（AERoleInfo）持有，goal 由 AEFlowInput 持有，此处安全取值。
+        title/responsibility 由角色层（AERole）持有，goal 由 AEFlowInput 持有，此处安全取值。
         """
         info = {
             "ident": self.ident,

@@ -1,16 +1,8 @@
 """
 AERoleBase - 角色 Flow 基类。
 
-所有角色 Flow 继承本类。角色常量/枚举（AEConentRole / AEFlowRole / ROLE_PARAMS 等）
-在 Roles.AERoleType 中；角色选择能力在 Roles.AERoleChoice 中（由需要角色选择/直答的子类
-如 AERefiner / AERoleExcutor 显式继承，避免 AERoleBase 基类传递依赖 AERoleExcutor）；
-角色信息能力（title / responsibility / rolePrompt 生成）在 Roles.AERoleInformation 中；
-问题优化能力（requestOptimizeInput / receiveOptimizeInput）在 Roles.AERoleQuestionOptimize 中，
-均由本类继承获得。角色信息属性（title / responsibility / rolePrompt）
-由本类 __init__ 持有（非 AEFlow 基类职责）。
-结果汇总编排（summarize_to_llm）由 AEIQFlow 实现，本类继承 AEIQFlow 获得。本类另覆写角色上下文
-hook（summarize_extend_messages / outResult_summary）提供角色信息——flow 基类不体现 role 信息。
-本类仅定义 AERoleBase 角色基类（需 import AEIQFlow，故与常量分文件，避免循环导入）。
+提供角色上下文 hook：role_brief（身份与能力范围）、summarize_extend_messages（汇总扩展消息）、
+outResult_summary（上下文与结果总结）、flow_description / flow_complete_info（描述与完成信息）。
 """
 import logging
 from typing import Optional
@@ -19,17 +11,17 @@ from WorkFlows.AEIQFlow import AEIQFlow
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
-from Roles.AERoleType import AERoleParamInfo, AEFlowRole, ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
-from Roles.AERoleInformation import AERoleInformation
-from Roles.AERoleQuestionOptimize import AERoleQuestionOptimize
+from Roles.Role.AERoleType import AERoleParamInfo, ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
+from Roles.Role.AERoleInformation import AERoleInformation
+from Roles.Role.AERoleQuestion import AERoleQuestion
+from Roles.Role.AERoleChoice import AERoleChoice
+from Roles.Role.AERoleWorkflow import AERoleWorkflow
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
-    """角色 Flow 基类。角色选择能力（AERoleChoice）由需要的子类显式继承；
-    角色信息能力（AERoleInformation）与问题优化能力（AERoleQuestionOptimize）由本类继承。
-    能力 mixin 列于 AEFlow 之前，确保 cooperative __init__ 链优先经各 mixin 初始化其属性。"""
+class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow, AEIQFlow):
+    """角色 Flow 基类：提供角色上下文 hook（role_brief / summarize_extend_messages / outResult_summary 等）。"""
 
     roleParamInfo: Optional[AERoleParamInfo] = None
 
@@ -43,16 +35,6 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
             lines.append(f"- type: {role.value}；职称：{info.title}；职责：{info.responsibility}")
         return "\n".join(lines)
 
-    @classmethod
-    def _role(cls) -> AEFlowRole:
-        """子类返回所属角色枚举（角色定义类覆写；未定义静态角色的 flow 调用将抛错）。"""
-        raise NotImplementedError
-
-    @classmethod
-    def param_info(cls) -> AERoleParamInfo:
-        """返回本角色参数信息（直接取 ROLE_PARAMS，不重定义）。"""
-        return ROLE_PARAMS[cls._role()]
-
     # ==================== 角色上下文 hook（供 summarize_to_llm 调用）====================
 
     def flow_description(self) -> str:
@@ -61,7 +43,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         if self.title:
             parts.append(f"[{self.title}]")
         if self.role is not None:
-            parts.append(f"[{self.role.value}]")
+            parts.append(f"[{self.role.role.value}]")
         parts.append(super().flow_description())
         return "".join(parts)
 
@@ -86,7 +68,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
             parts.append(f"你的身份是：{self.title}")
         if len(self.responsibility) > 0:
             parts.append(f"你的能力范围是：{self.responsibility}")
-        iron_law = get_role_iron_law(self.role)
+        iron_law = get_role_iron_law(self.role.role if self.role is not None else None)
         if iron_law:
             parts.append(iron_law)
         if len(parts) == 0:

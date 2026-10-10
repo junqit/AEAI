@@ -1,12 +1,12 @@
 """AERoleInformation - 角色信息能力 mixin：生成 title / responsibility / rolePrompt，由 AERoleBase 继承。
-角色信息属性（role / title / responsibility / rolePrompt）由基类 AERoleInfo 持有。"""
+角色信息属性（role / title / responsibility / rolePrompt）由基类 AERole 持有。"""
 import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import AEConentRole, AE_ROLE
-from Roles.AERoleInfo import AERoleInfo
+from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+from Roles.Role.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,12 @@ class AERoleInformationFunction(AEFunctional):
     receiveRolePrompt = "receiveRolePrompt"
 
 
-class AERoleInformation(AERoleInfo):
+class AERoleInformation(AERole):
     """角色信息能力 mixin：提供 title / responsibility / rolePrompt 生成请求。
-    角色信息属性由基类 AERoleInfo 经 cooperative __init__ 持有。"""
+    角色信息属性由基类 AERole 经 cooperative __init__ 持有。"""
 
     def requestRoleInformation(self) -> None:
-        """请求 LLM 生成 title / responsibility：以当前角色 ROLE_PARAMS 为生成规则，确保贴合角色性质。回包经 receiveRoleInfomation 写入（串联 requestRolePrompt 由 AERoleExcutor 覆写推进）。"""
+        """请求 LLM 生成 title / responsibility：据当前问题生成「工作名称」与「职责范围」。回包经 receiveRoleInfomation 写入。"""
         messages = []
         user_question = self.input.get_content() if self.input else ""
         if len(user_question) > 0:
@@ -31,34 +31,22 @@ class AERoleInformation(AERoleInfo):
                 AE_CONTENT: user_question,
             })
 
-        # 以当前角色 ROLE_PARAMS（AERoleType.ROLE_PARAMS）作为生成规则，确保 title/responsibility 贴合角色性质
-        # 各字段存在才追加对应行，避免空值占位（与 role_brief 的条件拼接一致）
-        param = self.param_info()
-        rule_lines = ["【角色生成规则】"]
-        if param.role is not None:
-            rule_lines.append(f"当前角色类型：{param.role.value}")
-        if param.title:
-            rule_lines.append(f"默认定位：{param.title}")
-        if param.responsibility:
-            rule_lines.append(f"默认职责：{param.responsibility}")
-        rule_block = "\n".join(rule_lines) + "\n\n"
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
-                f"{rule_block}"
-                "依据上述角色定位生成「工作名称」与「职责范围」，要求：\n"
-                "- 生成内容须与默认定位/职责同性质，不得偏离当前角色类型；\n"
-                "- 职责范围须明确职责边界与禁止事项；客观、完整，不得包含用户问题本身。"
+                "生成解决当前问题所需的「工作名称」与「职责范围」，要求：\n"
+                "- 工作名称：准确、完整地解决当前问题所需的角色名称；\n"
+                "- 职责范围：明确解决问题所需的能力（能做什么、如何解决），并明确职责边界与禁止事项；客观、完整，不得包含用户问题本身。"
             ),
         })
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: "请根据上述用户问题与角色生成规则，生成工作名称与职责范围。",
+            AE_CONTENT: "请据上述用户问题与角色生成规则，生成「准确、完整解决当前问题所需的角色名称」与「解决问题的能力范围」。",
         })
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
         flow_out.set_llm_out({
-            AE_TITLE: llm_generate("工作名称，体现专业领域与定位"),
-            AE_RESPONSIBILITY: llm_generate("职责范围，明确职责边界与禁止事项"),
+            AE_TITLE: llm_generate("准确、完整解决当前问题所需的角色名称"),
+            AE_RESPONSIBILITY: llm_generate("解决问题的能力范围，明确能做什么、如何解决及边界"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

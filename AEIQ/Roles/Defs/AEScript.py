@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
-from Roles.Defs.AERoleExcutor import AERoleExcutor
-from Roles.AERoleType import AEFlowRole
+from Roles.AERoleExcutor import AERoleExcutor
+from Roles.Role.AERoleType import AEFlowRole
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
@@ -116,7 +116,7 @@ class AEScript(AERoleExcutor):
     def _request_script_type(self) -> None:
         """请求 LLM 按当前 ruby/python/shell 能力与已安装工具包，选择最适合实现目标的脚本类型。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -158,7 +158,7 @@ class AEScript(AERoleExcutor):
     def _request_script_generate(self) -> None:
         """类型已选定，请求 LLM 生成该类型脚本内容以产出目标/期望输出。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -275,7 +275,7 @@ class AEScript(AERoleExcutor):
         ≥PASS_SCORE 才完成；<PASS_SCORE 由 receiveScriptVerify 触发重生成。
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -355,7 +355,7 @@ class AEScript(AERoleExcutor):
         include_history=False（执行失败触发）：仅给当前脚本与错误（problem）。
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.AERoleType import AEConentRole, AE_ROLE
+        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
         if include_history and self.attempts:
             history_lines = []
             for i, att in enumerate(self.attempts):

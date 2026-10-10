@@ -13,11 +13,11 @@ _role()=llm；requestRoleSelect 覆写为决策入口（替代默认的角色选
 import logging
 
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.AERoleType import AEConentRole, AE_ROLE, AEFlowRole
+from Roles.Role.AERoleType import AEConentRole, AE_ROLE, AEFlowRole
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from Roles.Defs.AERoleExcutor import AERoleExcutor
+from Roles.AERoleExcutor import AERoleExcutor
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
-from Chat.AEChat import AEChat
+from Roles.AERoleExcutor import AERoleExcutor
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AEFlowStatus, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
@@ -29,7 +29,7 @@ class AEBaseContext:
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
-        self._chat_map: Dict[str, AEChat] = {}
+        self._chat_map: Dict[str, AERoleExcutor] = {}
         # 并行队列：独立线程池管理 chat flow 执行，不依赖外部 asyncio 事件循环
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-flow")
 
@@ -58,13 +58,13 @@ class AEBaseContext:
         pass
 
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
-        """创建 AEChat 并提交到并行队列执行。"""
+        """创建 AERoleExcutor 并提交到并行队列执行。"""
         if question is None:
             logger.error("[Context] 收到的 AENetQues 为空，忽略")
             return
         from .AELLMPayload import llm_generate
         chat_ident = uuid.uuid4().hex
-        chat = AEChat(
+        chat = AERoleExcutor(
             ident=chat_ident,
             flowOutput=AEFlowOutput(ident=chat_ident, out_schema={AE_CONTENT: llm_generate("对用户的回复")}),
         )

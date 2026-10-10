@@ -15,25 +15,24 @@ class AEConentRole(Enum):
 
 
 class AEFlowRole(Enum):
-    """Flow 角色类型：专家 / 工作组 / 员工 / 评审者
+    """Flow 角色类型：专家 / 工作组 / 员工 / 原子任务 / LLM / 脚本
 
     AEIQ 的 Flow 体系采用「组织化协作」模型：一个用户问题被拆解为多个维度的目标，
-    由不同角色分工完成。各角色构成一条「专家 → 工作组 → 员工 → 评审者」的协作链路：
+    由不同角色分工完成。各角色构成一条「专家 → 工作组 → 员工 → 原子任务/LLM/脚本」的协作链路：
 
         expert（专家）
           └─ workgroup（工作组）× N（各维度，相互独立、可并行）
-               └─ employee（员工）× N（执行具体子任务）
-          └─ reviewer（评审者）对产出进行质量把关与收敛
+               └─ employee（员工）× N（执行多环节流水线）
+                    └─ task / llm / script（叶子：原子任务 / LLM 直接作答 / 脚本执行）
 
     角色之间通过 FlowInput / FlowOutput 传递上下文与结果，专家负责整体规划与收口，
-    评审者负责验收，工作组与员工负责分解与执行。
+    工作组与员工负责分解与执行，task/llm/script 为叶子执行单元。
     """
 
     expert = "expert"        # 专家
     workgroup = "workgroup"  # 工作组
     employee = "employee"    # 员工
     task = "task"            # 原子任务（最底层执行单元，不再拆解）
-    reviewer = "reviewer"    # 评审者
     llm = "llm"              # LLM 直接作答（不拆解、不执行脚本，直接请求 LLM）
     script = "script"        # 脚本执行（调用预置脚本/工具完成具体操作，不拆解）
 
@@ -96,29 +95,29 @@ class AERoleParamInfo:
 ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     AEFlowRole.expert: AERoleParamInfo(
         role=AEFlowRole.expert,
-        title="领域专家",
+        title="统筹专家",
         responsibility=(
             "统筹整体规划与最终收口，不直接执行。"
-            "可做：把用户目标分解为若干独立维度并分配给工作组；所有维度结论到齐后整合为最终交付。"
-            "不可做：不直接执行任何维度/流水线/任务（那是 workgroup/employee/task）；不调用模型或脚本产出中间结果。"
+            "可做：把用户目标分解为若干独立维度并分配下去；所有维度结论到齐后整合为最终交付。"
+            "不可做：不直接执行任何维度/流水线或任务；不直接产出中间结果。"
         ),
     ),
     AEFlowRole.workgroup: AERoleParamInfo(
         role=AEFlowRole.workgroup,
-        title="工作组",
+        title="维度协调",
         responsibility=(
             "负责单一维度的拆解与整合，不直接执行。"
-            "可做：承接专家分配的某一个维度目标，拆解为若干可独立执行的员工任务，整合本维度结论交回专家。"
-            "不可做：不做整体规划与收口（那是 expert）；不跨维度；不直接执行任务（那是 employee/task）。"
+            "可做：承接上层分配的某一个维度目标，拆解为若干可独立执行的子任务，整合本维度结论交回上层。"
+            "不可做：不做整体规划与收口；不跨维度；不直接执行任务。"
         ),
     ),
     AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
-        title="员工",
+        title="流水线执行",
         responsibility=(
             "执行一条多环节流水线。"
             "可做：完成一条含多环节（检索/分析/生成/转换等）的流水线，调用模型或工具逐环节推进，产出本流水线结果。"
-            "不可做：不做单一原子任务（那是 task）；不跨流水线/维度；不拆解整体目标（那是 expert/workgroup）；不调度其他流水线。"
+            "不可做：不做单一不可再分的任务；不跨流水线/维度；不拆解整体目标；不调度其他流水线。"
         ),
     ),
     AEFlowRole.task: AERoleParamInfo(
@@ -127,16 +126,16 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         responsibility=(
             "执行一个不可再分的原子任务。"
             "可做：完成单一、不可再分的目标，由模型判断用'直接作答'还是'跑脚本'完成，产出单一结果。"
-            "不可做：不做多环节流水线（那是 employee）；不拆解、不规划、不调度其他角色、不跨任务。"
+            "不可做：不做多环节流水线；不拆解、不规划、不调度、不跨任务。"
         ),
     ),
     AEFlowRole.llm: AERoleParamInfo(
         role=AEFlowRole.llm,
-        title="LLM AI 作答",
+        title="LLM 作答",
         responsibility=(
             "仅凭训练数据直接作答，不用工具。"
-            "可做：仅凭 LLM 训练好的历史数据回答简单知识性问题，给出准确、完整的结论。"
-            "不可做：不拆解、不执行脚本（那是 script）、不获取网络/实时数据；仅基于训练好的历史数据作答；需实时或外部数据交由其他角色。"
+            "可做：仅凭训练好的历史数据回答简单知识性问题，给出准确、完整的结论。"
+            "不可做：不拆解、不执行脚本、不获取网络/实时数据；仅基于训练好的历史数据作答；不得凭空臆造。"
         ),
     ),
     AEFlowRole.script: AERoleParamInfo(
@@ -145,7 +144,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
         responsibility=(
             "运行脚本完成程序化操作，不做模型推理。"
             "可做：生成并运行 python/shell/ruby 脚本完成：检索（网络爬虫、API 调用、本地文件读取）、计算（数值运算、统计、日期时间）、分析（数据解析、日志分析、正则匹配）、转换（格式转换 JSON/CSV/文本、编码、数据清洗）、生成（按规则产出文本/代码/结构化数据）、系统（系统与环境信息），产出 stdout 结果。"
-            "不可做：不做需模型推理/判断的原子任务（那是 task）；不拆解、不规划、不调度、不多环节编排。"
+            "不可做：不做需模型推理/判断的任务；不拆解、不规划、不调度、不多环节编排。"
         ),
     ),
 }

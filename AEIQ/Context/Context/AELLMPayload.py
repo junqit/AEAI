@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Dict, Any
 
 from common.aellm_enums import AELLMType, AEAiLevel
-from Roles.AERoleType import AEConentRole, AE_ROLE
+from Roles.Role.AERoleType import AEConentRole, AE_ROLE
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 

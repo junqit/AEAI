@@ -1,5 +1,5 @@
 """
-AERoleChoice - 角色选择能力 mixin。
+AESubRoleChoice - 当前 ROLE 的子工作角色选择 mixin。
 
 提供 requestRoleSelect / receiveRoleSelect（据问题与各角色能力返回一个或多个任务，按 role 派发对应角色 flow；
 空则以错误完成闭环），
@@ -14,7 +14,7 @@ from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.AERoleType import (
+from Roles.Role.AERoleType import (
     AEFlowRole, ROLE_PARAMS, roles_below,
     AEConentRole, AE_ROLE,
 )
@@ -27,8 +27,8 @@ class AERoleFunction(AEFunctional):
     receiveRoleSelect = "receiveRoleSelect"  # 接收 LLM 选定的角色，传入 map
 
 
-class AERoleChoice:
-    """角色选择能力 mixin：按问题选择角色并派发（AERoleExcutor 或 AELLMRole）。"""
+class AESubRoleChoice:
+    """当前 ROLE 的子工作角色选择 mixin：按问题选择子角色并派发（AERoleExcutor 或 AELLMRole）。"""
 
     def requestRoleSelect(self) -> None:
         """请求 LLM 据问题与各角色能力返回一个或多个执行任务（每项含 role），或空数组（llm 直接作答）。
@@ -41,7 +41,7 @@ class AERoleChoice:
         if cur_role is None:
             candidates = list(ROLE_PARAMS.keys())  # 全部角色（含 llm 直答）
         else:
-            candidates = roles_below(cur_role)  # 仅二级角色（不含 llm）
+            candidates = roles_below(cur_role.role)  # 仅二级角色（不含 llm）
             if not candidates:
                 # 无可选下层角色，以错误完成闭环
                 self.flow_receive_complete(
@@ -144,7 +144,7 @@ class AERoleChoice:
         if not is_subflow and self.delegate is None:
             return 0
         target_ident = self.ident if is_subflow else self.delegate.ident
-        allowed_roles = list(ROLE_PARAMS.keys()) if self.role is None else roles_below(self.role)
+        allowed_roles = list(ROLE_PARAMS.keys()) if self.role is None else roles_below(self.role.role)
         allowed_set = set(allowed_roles)
         created = 0
         for spec in roles:
