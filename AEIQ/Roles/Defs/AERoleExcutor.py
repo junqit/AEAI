@@ -55,24 +55,48 @@ class AERoleExcutor(AERoleBase, AERoleChoice):
         self.requestRoleInformation()
         return True
 
+    def receiveRoleInfomation(self, data: dict) -> bool:
+        """接收角色信息：判断基类处理结果决定下一步（闭环 / 推进）。
+        基类写入 title/responsibility，成功返回 True；失败（任一为空）返回 False（基类不闭环）。
+        成功则推进 requestRolePrompt；失败则以错误完成本 flow 闭环避免卡死，并返回 False 如实反映失败。"""
+        result = super().receiveRoleInfomation(data)
+        if not result or not self.title or not self.responsibility:
+            logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "角色信息（title/responsibility）生成失败"},
+                AEFlowCompletEvent.error,
+            )
+            return False
+        self.requestRolePrompt()
+        return result
+
     def receiveRolePrompt(self, data: dict) -> bool:
-        """接收 rolePrompt：基类校验 map 并存储（失败则错误完成）；rolePrompt 就绪后请求问题优化。"""
-        super().receiveRolePrompt(data)
-        if not self.rolePrompt:
-            return True  # 基类已错误完成（非 map 或为空）
+        """接收 rolePrompt：判断基类处理结果决定下一步（闭环 / 推进）。
+        基类校验 map 并存储 rolePrompt，成功返回 True；失败（非 map 或为空）返回 False（基类不闭环）。
+        成功则推进 requestOptimizeInput；失败则以错误完成本 flow 闭环避免卡死，并返回 False。"""
+        result = super().receiveRolePrompt(data)
+        if not result or not self.rolePrompt:
+            logger.warning("[%s][d=%s] rolePrompt 为空或回包非 map，以错误完成本 flow 避免卡死", self.title, self.deepth)
+            self.flow_receive_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "rolePrompt 生成失败"},
+                AEFlowCompletEvent.error,
+            )
+            return False
         self.requestOptimizeInput()
-        return True
+        return result
 
     def receiveOptimizeInput(self, data: dict) -> bool:
         """接收角色目标：基类存储后 input.goal 为空则错误完成；否则调 requestRoleSelect 推进。"""
         result = super().receiveOptimizeInput(data)  # AERoleQuestionOptimize 存储 input.goal
-        if not result or not (self.input.goal if self.input is not None else ""):
+        if not result or not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] input.goal 为空，以错误完成本 flow 避免卡死",
                            self.title, self.deepth)
             self.flow_receive_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "问题优化失败"},
                 AEFlowCompletEvent.error,
             )
-            return True
+            return False
         self.requestRoleSelect()
         return result

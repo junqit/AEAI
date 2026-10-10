@@ -97,20 +97,20 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         """
         if flowInput.ident == self.ident:
             # 检查状态顺序（int Enum 直接比较），self.status 必须早于 input.state 才可接收
-            if self.status.value > flowInput.state.value:
+            if self.status.value > flowInput.get_state().value:
                 logger.warning(
                     "[d=%s] receive_flow_input 状态不允许：self=%s input=%s，忽略",
-                    self.deepth, self.status, flowInput.state,
+                    self.deepth, self.status, flowInput.get_state(),
                 )
                 return False
 
-            if flowInput.state == AEFlowStatus.start:
+            if flowInput.get_state() == AEFlowStatus.start:
                 return self.on_flow_start(flowInput)
 
-            if flowInput.state == AEFlowStatus.processing:
+            if flowInput.get_state() == AEFlowStatus.processing:
                 return self.on_flow_processing(flowInput)
 
-            if flowInput.state == AEFlowStatus.complete:
+            if flowInput.get_state() == AEFlowStatus.complete:
                 return self.sub_flow_complete(flowInput)
 
             return False
@@ -149,7 +149,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             next_flow = self.nextFlow()
             if next_flow is not None:
                 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-                next_flow.receive_flow_input(AEFlowInput(content=flowInput.parameter.get(AE_CONTENT, ""), ident=next_flow.ident))
+                next_flow.receive_flow_input(AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident))
         return True
 
     def add_flow(self, sub_flow) -> None:

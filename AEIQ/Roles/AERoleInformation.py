@@ -2,8 +2,7 @@
 角色信息属性（role / title / responsibility / rolePrompt）由基类 AERoleInfo 持有。"""
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
-from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.AERoleType import AEConentRole, AE_ROLE
@@ -23,9 +22,9 @@ class AERoleInformation(AERoleInfo):
     角色信息属性由基类 AERoleInfo 经 cooperative __init__ 持有。"""
 
     def requestRoleInformation(self) -> None:
-        """请求 LLM 生成 title / responsibility：以当前角色 ROLE_PARAMS 为生成规则，确保贴合角色性质。回包经 receiveRoleInfomation 写入并触发 requestRolePrompt。"""
+        """请求 LLM 生成 title / responsibility：以当前角色 ROLE_PARAMS 为生成规则，确保贴合角色性质。回包经 receiveRoleInfomation 写入（串联 requestRolePrompt 由 AERoleExcutor 覆写推进）。"""
         messages = []
-        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input else ""
+        user_question = self.input.get_content() if self.input else ""
         if len(user_question) > 0:
             messages.append({
                 AE_ROLE: AEConentRole.SYSTEM.value,
@@ -33,14 +32,20 @@ class AERoleInformation(AERoleInfo):
             })
 
         # 以当前角色 ROLE_PARAMS（AERoleType.ROLE_PARAMS）作为生成规则，确保 title/responsibility 贴合角色性质
+        # 各字段存在才追加对应行，避免空值占位（与 role_brief 的条件拼接一致）
         param = self.param_info()
+        rule_lines = ["【角色生成规则】"]
+        if param.role is not None:
+            rule_lines.append(f"当前角色类型：{param.role.value}")
+        if param.title:
+            rule_lines.append(f"默认定位：{param.title}")
+        if param.responsibility:
+            rule_lines.append(f"默认职责：{param.responsibility}")
+        rule_block = "\n".join(rule_lines) + "\n\n"
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
-                "【角色生成规则】\n"
-                f"当前角色类型：{param.role.value}\n"
-                f"默认定位：{param.title}\n"
-                f"默认职责：{param.responsibility}\n\n"
+                f"{rule_block}"
                 "依据上述角色定位生成「工作名称」与「职责范围」，要求：\n"
                 "- 生成内容须与默认定位/职责同性质，不得偏离当前角色类型；\n"
                 "- 职责范围须明确职责边界与禁止事项；客观、完整，不得包含用户问题本身。"
@@ -59,16 +64,14 @@ class AERoleInformation(AERoleInfo):
         self.send_llm_payload(payload)
 
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """写入 title / responsibility；均非空则请求 rolePrompt，任一为空则以错误完成本 flow 避免卡死。"""
+        """写入 title / responsibility（不串联、不闭环；由 AERoleExcutor 覆写判断并推进）。
+        成功（均非空）返回 True；任一为空返回 False（不在此闭环，由覆写层错误完成）。"""
         if not isinstance(data, dict):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get(AE_RESPONSIBILITY, "") or ""
         if not self.title or not self.responsibility:
-            logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "角色信息（title/responsibility）生成失败"}, AEFlowCompletEvent.error)
-            return True
-        self.requestRolePrompt()
+            return False
         return True
 
     def requestRolePrompt(self) -> None:
@@ -93,22 +96,13 @@ class AERoleInformation(AERoleInfo):
         self.send_llm_payload(payload)
 
     def receiveRolePrompt(self, data: dict) -> bool:
-        """存入 self.rolePrompt（不完成 flow）。data 须为 {"rolePrompt": <...>} map；非 map 或 rolePrompt 为空则以错误完成闭环。"""
+        """存入 self.rolePrompt（不串联、不闭环；由 AERoleExcutor 覆写判断并推进）。
+        成功（非空 map）返回 True；非 map 或 rolePrompt 为空返回 False（不在此闭环）。"""
         if not isinstance(data, dict):
-            logger.warning("[%s][d=%s] rolePrompt 回包非 map，以错误完成: %r", self.title, self.deepth, data)
-            self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "rolePrompt 生成失败（回包非 map）"},
-                AEFlowCompletEvent.error,
-            )
-            return True
+            data = {}
         prompt = data.get("rolePrompt") or ""
         if not prompt:
-            logger.warning("[%s][d=%s] rolePrompt 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "rolePrompt 生成失败"},
-                AEFlowCompletEvent.error,
-            )
-            return True
+            return False
         self.rolePrompt = prompt
         logger.info(
             "[%s][d=%s] 角色信息就绪:\n"

@@ -5,6 +5,8 @@ Qwen API 模型类
 import requests
 import logging
 from typing import Optional, List, Dict, Any, Callable
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from AEAiLevel import AEAiLevel
 from common.llm_utils import extract_message_text, fire_progress
@@ -21,6 +23,17 @@ class AEQwenModel:
     DEFAULT_API_KEY = "asdf"
     DEFAULT_MAX_TOKENS = 262144
     REQUEST_TIMEOUT = 600  # 请求超时时间（秒，10 分钟）
+    # (connect, read)：连接 10s 超时（"No route to host" 实际瞬时失败），读 600s 等模型生成
+    REQUEST_TIMEOUTS = (10, REQUEST_TIMEOUT)
+
+    # 瞬态错误重试：VPN 隧道抖动 / 路由瞬断（Errno 65 No route to host）/ 5xx / 限流时自动重试，
+    # 避免单次 requests.post 碰上瞬时网络抖动即整请求失败。
+    # urllib3 默认不重试 POST（视为非幂等），故显式 allowed_methods 含 POST——
+    # "No route to host" 时连接未建立、服务端未收到请求，重试安全。
+    RETRY_TOTAL = 3
+    RETRY_BACKOFF_FACTOR = 1  # 退避间隔：1s、2s、4s
+    RETRY_STATUS_FORCELIST = (429, 500, 502, 503, 504)
+    RETRY_ALLOWED_METHODS = frozenset(["GET", "POST"])
 
     def __init__(self, base_url: str = None, api_key: str = None, model_path: str = None, max_tokens: int = None):
         """
@@ -37,8 +50,24 @@ class AEQwenModel:
         self.model_path = model_path or self.MODEL_PATH
         self.max_tokens = max_tokens or self.DEFAULT_MAX_TOKENS
         self.is_loaded = False
+        self.session: Optional[requests.Session] = self._build_session()
 
         logger.info(f"🚀 初始化 Qwen 模型 - base_url={self.base_url}, model={self.model_path}")
+
+    def _build_session(self) -> requests.Session:
+        """构建带瞬态错误重试的 requests Session"""
+        retry = Retry(
+            total=self.RETRY_TOTAL,
+            backoff_factor=self.RETRY_BACKOFF_FACTOR,
+            status_forcelist=self.RETRY_STATUS_FORCELIST,
+            allowed_methods=self.RETRY_ALLOWED_METHODS,
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
 
     def load(self):
         """
@@ -52,6 +81,9 @@ class AEQwenModel:
             return
 
         try:
+            # cleanup 后重建 session
+            if self.session is None:
+                self.session = self._build_session()
             # 允许通过环境变量覆盖配置
             import os
             if os.getenv("QWEN_API_URL"):
@@ -125,7 +157,8 @@ class AEQwenModel:
             logger.info(f"🚀 发送请求到 Qwen API: {url}")
 
             # 发送 POST 请求（Qwen 本地 API 不支持流式响应）
-            response = requests.post(url, headers=headers, json=payload, timeout=self.REQUEST_TIMEOUT)
+            # 经 self.session 走带瞬态重试的 adapter：连接抖动 / 5xx 自动重试
+            response = self.session.post(url, headers=headers, json=payload, timeout=self.REQUEST_TIMEOUTS)
 
             elapsed = (datetime.now() - start_time).total_seconds()
 
@@ -164,7 +197,7 @@ class AEQwenModel:
             result: API 响应结果
 
         Returns:
-            str: 提取的文本内容
+            str: 提取的内容文本
         """
         if isinstance(result, dict):
             # OpenAI 兼容格式：choices[0].message.content
@@ -202,6 +235,9 @@ class AEQwenModel:
     def cleanup(self):
         """清理资源"""
         self.is_loaded = False
+        if self.session is not None:
+            self.session.close()
+            self.session = None
         logger.info("🧹 Qwen API 资源已清理")
 
 

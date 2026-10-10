@@ -79,14 +79,14 @@ class AEBaseContext:
 
     def receive_flow_input(self, flowInput: AEFlowInput) -> bool:
         """收到回复后直接 response——AE_CONTENT 转为 reply 发送响应。"""
-        if flowInput.state != AEFlowStatus.complete:
+        if flowInput.get_state() != AEFlowStatus.complete:
             return False
         chat = self._chat_map.get(flowInput.ident)
         if chat is None:
             logger.warning("[Context] complete 但 _chat_map 未找到 chat(ident=%s)", flowInput.ident)
             return False
         self._chat_map.pop(flowInput.ident, None)
-        reply = flowInput.parameter.get(AE_CONTENT, "")
+        reply = flowInput.get_content()
         logger.info("[Context] chat 完成: %s", reply[:100])
         rsp = AENetRsp(
             code=AENetRspCode.success,

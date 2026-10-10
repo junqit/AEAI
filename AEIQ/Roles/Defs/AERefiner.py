@@ -62,7 +62,7 @@ class AERefiner(AERoleExcutor):
             self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
             return True
         logger.info("[%s][d=%s] 创建 %d 个兄弟 flow，自身完成", self.title, self.deepth, created)
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: (self.input.goal if self.input is not None else "")}, AEFlowCompletEvent.start)
+        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: (self.input.get_goal() if self.input is not None else "")}, AEFlowCompletEvent.start)
         return True
 
     def on_flow_start(self, flowInput) -> bool:

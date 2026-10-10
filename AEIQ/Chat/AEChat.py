@@ -98,7 +98,7 @@ class AEChat(AEIQFlow):
             self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return False
         from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AE_CONTENT
-        child_input = AEFlowInput(content=flowInput.parameter.get(AE_CONTENT, ""), ident=next_flow.ident)
+        child_input = AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident)
         next_flow.receive_flow_input(child_input)
         return True
 

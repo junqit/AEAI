@@ -28,7 +28,7 @@ class AETaskRole(AERoleExcutor):
     def requestRoleSelect(self) -> None:
         """task：不选角色，直接创建 AEScript 处理目标（不再 LLM 拆解；AEScript 自行选型+生成+执行）。
         目标经公共接口 receive_flow_input 写入 AEScript.self.input.goal。"""
-        goal = self.input.goal if self.input is not None else ""
+        goal = self.input.get_goal() if self.input is not None else ""
         if not goal:
             logger.warning("[%s][d=%s] 无可作答目标，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_receive_complete(
@@ -42,4 +42,6 @@ class AETaskRole(AERoleExcutor):
         script_flow = AEScript(flowOutput=flowOutput)
         self.add_flow(script_flow)
         # 公共接口：把目标传给 AEScript（self.input.goal）
-        script_flow.receive_flow_input(AEFlowInput(content="", ident=script_flow.ident, goal=goal))
+        _task_input = AEFlowInput(content="", ident=script_flow.ident)
+        _task_input.set_goal(goal)
+        script_flow.receive_flow_input(_task_input)

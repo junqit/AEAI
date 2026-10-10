@@ -94,7 +94,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         self.output.outResult = answer
         if self.delegate is not None:
             complete_input = AEFlowInput(content=answer, ident=self.output.ident)
-            complete_input.state = AEFlowStatus.complete
+            complete_input.set_state(AEFlowStatus.complete)
             self.delegate.receive_flow_input(complete_input)
         return True
 
@@ -172,14 +172,14 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             "title": getattr(self, "title", "") or "",
             "responsibility": getattr(self, "responsibility", "") or "",
             "question": "",
-            "goal": (self.input.goal if self.input is not None else ""),
+            "goal": (self.input.get_goal() if self.input is not None else ""),
             "answer": "",
             "children": [sub.flow_complete_info() for sub in self._flows.values()],
         }
         # question 取 flow 的输入（父 flow 传入的问题/子任务内容）
         inp = getattr(self, "input", None)
-        if inp is not None and getattr(inp, "parameter", None) is not None:
-            info["question"] = inp.parameter.get(AE_CONTENT, "") or ""
+        if inp is not None and isinstance(inp, AEFlowInput):
+            info["question"] = inp.get_content() or ""
         # answer 取 flow 产出（output.outResult，由 flow_receive_complete 填充）
         if self.output is not None:
             info["answer"] = self.output.outResult or ""

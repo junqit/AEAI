@@ -102,7 +102,7 @@ class AERoleBase(AERoleInformation, AERoleQuestionOptimize, AEIQFlow):
         - 结果段（必有）：「给出结果：{answer}」
         """
         answer = self.output.outResult or ""
-        question = (self.input.goal if self.input is not None else "")
+        question = (self.input.get_goal() if self.input is not None else "")
         parts = []
         if question:
             parts.append(question)

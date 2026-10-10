@@ -111,7 +111,7 @@ class AEScript(AERoleExcutor):
         """目标/期望输出：优先 self.input.goal；经 _create_role_flows 直接派发时仅有 content，回退取 content。"""
         if self.input is None:
             return ""
-        return self.input.goal or self.input.parameter.get(AE_CONTENT, "") or ""
+        return self.input.get_goal() or self.input.get_content() or ""
 
     def _request_script_type(self) -> None:
         """请求 LLM 按当前 ruby/python/shell 能力与已安装工具包，选择最适合实现目标的脚本类型。"""

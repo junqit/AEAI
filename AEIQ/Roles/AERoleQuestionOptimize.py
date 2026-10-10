@@ -54,7 +54,7 @@ class AERoleQuestionOptimize(AERoleInfo):
             "- 严禁直接回答该问题，严禁罗列或描述你的能力范围；\n"
             "- 不得扩展原意、不得改变问题意图。"
         )
-        user_question = self.input.parameter.get(AE_CONTENT, "") if self.input is not None else ""
+        user_question = self.input.get_content() if self.input is not None else ""
         if len(user_question) > 0:
             # 指令放 system、待优化问题放 user——user 才是模型要处理的内容，
             # 避免 DeepSeek 等模型把 user 指令本身当作待优化问题原样改写
@@ -86,7 +86,7 @@ class AERoleQuestionOptimize(AERoleInfo):
         if prompt is None and isinstance(data, str):
             prompt = data
         if self.input is not None:
-            self.input.goal = prompt or ""
+            self.input.set_goal(prompt or "")
         logger.info(
             "[%s][d=%s] 优化完成:\n"
             "========================================\n"
@@ -94,6 +94,6 @@ class AERoleQuestionOptimize(AERoleInfo):
             "========================================",
             self.title, self.deepth,
             self.role, self.deepth, self.title,
-            (self.input.goal if self.input is not None else ""),
+            (self.input.get_goal() if self.input is not None else ""),
         )
         return True
