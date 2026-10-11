@@ -127,12 +127,13 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     ),
     AEFlowRole.task: AERoleParamInfo(
         role=AEFlowRole.task,
-        title="原子任务",
+        title="任务执行",
         responsibility=(
-            "执行一个不可再分的原子任务。"
-            "可做：完成单一、不可再分的目标，由模型判断用'直接作答'还是'跑脚本'完成，产出单一结果。"
-            "不可做：不做多环节流水线；不拆解、不规划、不调度、不跨任务。"
+            "执行一个完整的任务，可拆解为多个步骤。"
+            "可做：完成一个完整目标，将其拆解为若干步骤逐步执行，由模型判断各步骤用'直接作答'还是'跑脚本'完成，产出最终结果。"
+            "不可做：不做多维度规划与收口；不跨任务；不调度其他任务。"
         ),
+        workflow_rule="将任务拆解为若干可独立完成的步骤，逐步执行产出最终结果。",
     ),
     AEFlowRole.llm: AERoleParamInfo(
         role=AEFlowRole.llm,
