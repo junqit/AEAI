@@ -58,7 +58,7 @@ class AELLMRole(AERoleExcutor):
         # input.goal 已由 receiveOptimizeInput 设置（AERoleExcutor 在为空时已错误完成）
         if not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可作答问题"},
                 AEFlowCompletEvent.error,
             )
@@ -112,11 +112,11 @@ class AELLMRole(AERoleExcutor):
         return True
 
     def requestLLMAnswer(self) -> None:
-        """直接请求 LLM 作答（不拆解、不执行脚本）。回包经 flow_receive_complete 完成本 flow。"""
+        """直接请求 LLM 作答（不拆解、不执行脚本）。回包经 receive_summarize_result 完成本 flow。"""
         if not (self.input.get_goal() if self.input is not None else ""):
             # 无可作答问题：以错误完成本 flow，避免父 flow 干等卡死导致整体失败
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可作答问题"},
                 AEFlowCompletEvent.error,
             )
@@ -131,6 +131,6 @@ class AELLMRole(AERoleExcutor):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: self.rolePrompt or "请直接回答上述问题",
         })
-        flow_out = self.generateFlowOutput(AEFunctional.flow_receive_complete)
+        flow_out = self.generateFlowOutput(AEFunctional.receive_summarize_result)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.send_llm_payload(payload)

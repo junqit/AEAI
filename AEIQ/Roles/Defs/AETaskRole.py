@@ -31,7 +31,7 @@ class AETaskRole(AERoleExcutor):
         goal = self.input.get_goal() if self.input is not None else ""
         if not goal:
             logger.warning("[%s][d=%s] 无可作答目标，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: "无可作答目标"},
                 AEFlowCompletEvent.error,

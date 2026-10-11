@@ -74,7 +74,7 @@ class AEChat(AEIQFlow):
         refiner = AERefiner(flowOutput=refiner_output)
         self.add_flow(refiner)
 
-   #  def subflow_summarize_prompt(self) -> str:
+   #  def summarize_prompt(self) -> str:
    #      """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
 
    #      summarize_to_llm 由 AERoleBase 实现，AEChat 仅覆写本指令定制口吻。
@@ -90,12 +90,12 @@ class AEChat(AEIQFlow):
         """启动 chat flow：基类置 input 并切到 processing 后，启动首个子 flow。"""
         if not super().on_flow_start(flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
+            self.flow_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：当前状态非初始态"}, AEFlowCompletEvent.error)
             return False
         next_flow = self.nextFlow()
         if next_flow is None:
             logger.warning("[%s][d=%s] on_flow_start 失败：无 default 状态子 flow 可启动", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
+            self.flow_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return False
         from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AE_CONTENT
         child_input = AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident)

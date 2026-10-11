@@ -44,7 +44,7 @@ class AESubRoleChoice:
             candidates = roles_below(cur_role.role)  # 仅二级角色（不含 llm）
             if not candidates:
                 # 无可选下层角色，以错误完成闭环
-                self.flow_receive_complete(
+                self.flow_complete(
                     {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "无可选下层角色"},
                     AEFlowCompletEvent.error,
                 )
@@ -190,14 +190,14 @@ class AESubRoleChoice:
             workflows = []
         if not workflows:
             logger.warning("[%s][d=%s] 返回空工作流，以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "未返回可执行工作流"},
                 AEFlowCompletEvent.error,
             )
             return True
         if self.delegate is None:
             logger.warning("[%s][d=%s] delegate 未设置，以错误完成", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.ident, AE_CONTENT: "delegate 未设置"},
                 AEFlowCompletEvent.error,
             )
@@ -205,7 +205,7 @@ class AESubRoleChoice:
         created = self._create_role_flows(workflows, is_subflow=True)
         if created == 0:
             logger.warning("[%s][d=%s] 全部工作流 role 非法被跳过，以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.ident, AE_CONTENT: "全部工作流 role 非法被跳过"},
                 AEFlowCompletEvent.error,
             )

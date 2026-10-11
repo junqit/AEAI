@@ -77,7 +77,7 @@ class AEFlowInfo:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
 
         Args:
-            functional: 功能性方法名（AEFunctional 或其子类常量，如 AEFunctional.flow_receive_complete），
+            functional: 功能性方法名（AEFunctional 或其子类常量，如 AEFunctional.receive_summarize_result），
                         直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 
@@ -86,7 +86,7 @@ class AEFlowInfo:
         """
         from Context.Context.AELLMPayload import llm_generate
 
-        if functional == AEFunctional.flow_receive_complete and self.output is not None:
+        if functional == AEFunctional.receive_summarize_result and self.output is not None:
             llm_out = self.output.out_schema
         else:
             llm_out = {AE_CONTENT: llm_generate("给出最准确的答案，不可随意！！")}

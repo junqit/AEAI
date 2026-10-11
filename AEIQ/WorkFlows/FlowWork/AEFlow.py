@@ -81,23 +81,6 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         self.status = AEFlowStatus.processing
         return True
 
-    def flow_receive_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.start) -> bool:
-        """status=complete：置状态、赋值 output.outResult，直接调 delegate.sub_flow_complete 通知父 flow。"""
-        if self.status == AEFlowStatus.complete:
-            logger.error(
-                "[%s][d=%s] flow_receive_complete 重复完成，忽略（幂等保护）: event=%s out_schema=%r",
-                type(self).__name__, self.deepth, event, out_schema,
-            )
-            return True
-        self.status = AEFlowStatus.complete
-        answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
-        self.output.outResult = answer
-        if self.delegate is not None:
-            complete_input = AEFlowInput(content=answer, ident=self.output.ident)
-            complete_input.set_state(AEFlowStatus.complete)
-            self.delegate.receive_flow_input(complete_input)
-        return True
-
     def nextFlow(self) -> "Optional[AEFlowInterface]":
         """
         获取下一个待执行的子 flow：按 add_flow 顺序首个状态为 default 的子 flow。
@@ -137,7 +120,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """flow 描述信息（hook）：返回 [d=deepth]，子类覆写可追加 role / title。"""
         return f"[d={self.deepth}]"
 
-    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / subflow_summarize_prompt）====================
+    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_prompt）====================
 
     def summarize_extend_messages(self) -> list:
         """汇总扩展 message（hook，非私有，可被子类覆写）：返回需追加到汇总 messages 头部的额外消息列表。
@@ -148,7 +131,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """
         return []
 
-    def subflow_summarize_prompt(self) -> str:
+    def summarize_prompt(self) -> str:
         """汇总 user 指令（hook，非私有，可被子类覆写）：子类可覆写以定制口吻（如 Chat.AEChat 面向用户的人性化回答）。
 
         由 AEFlowDelegateImpl.summarize_to_llm 在所有子 flow 完成后调用。
@@ -180,7 +163,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         inp = getattr(self, "input", None)
         if inp is not None and isinstance(inp, AEFlowInput):
             info["question"] = inp.get_content() or ""
-        # answer 取 flow 产出（output.outResult，由 flow_receive_complete 填充）
+        # answer 取 flow 产出（output.outResult，由 receive_summarize_result 填充）
         if self.output is not None:
             info["answer"] = self.output.outResult or ""
         return info

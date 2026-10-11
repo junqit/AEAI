@@ -13,14 +13,14 @@ AEFlowDelegateImpl 为协议方法的实例实现（mixin），由 AEFlow 继承
 
 本类管工作流流转（结果路由 / 子 flow 编排 / 完成聚合触发）与结果汇总编排（summarize_to_llm，
 非私有，可被子类单独实现）；汇总扩展消息 hook（summarize_extend_messages）与 outResult_summary
-属角色信息，由 Roles.AERoleBase 覆写，subflow_summarize_prompt 由 Chat.AEChat 覆写
+属角色信息，由 Roles.AERoleBase 覆写，summarize_prompt 由 Chat.AEChat 覆写
 （receive_flow_result 在所有子 flow 完成时调 self.summarize_to_llm()）。flow 基类不体现 role 信息。
 """
 import logging
 from enum import Enum
 from typing import Protocol, TYPE_CHECKING, runtime_checkable, Optional
 
-from .AEFlowOutput import AE_LLM_OUT
+from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_CONTENT
 from .AEFlowInput import AEFlowStatus, AEFlowInput, AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload
@@ -77,6 +77,9 @@ class AEFlowDelegate(Protocol):
         """
         ...
 
+    def receive_flow_complete(self, flow: 'AEFlow') -> bool:
+        """接收 flow 完成结果（AEFlow）。"""
+        ...
 
 
 
@@ -189,9 +192,13 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 结果汇总编排（由 AERoleBase 实现，AEFlow 不参与）====================
 
-    def summarize_to_llm(self) -> None:
-        """AEFlow 默认：直接完成本 flow 闭环，不做 LLM 汇总。由子类（AERoleBase）覆写为 LLM 汇总。"""
-        self.flow_receive_complete(
-            {AE_IDENT: self.ident, AE_CONTENT: ""},
-            AEFlowCompletEvent.start,
-        )
+    def summarize_to_llm(self) -> dict:
+        """AEFlow 默认：返回空结果并调 receive_summarize_result 完成本 flow（不做 LLM 汇总）。
+        由子类（AERoleBase）覆写为 LLM 汇总——覆写时发 LLM 请求，回包经 receive_summarize_result 触发 flow_complete。"""
+        result = {AE_IDENT: self.ident, AE_CONTENT: ""}
+        self.receive_summarize_result(result)
+        return result
+
+    def receive_summarize_result(self, data: dict) -> bool:
+        """接收 summarize_to_llm 的返回结果，调 flow_complete 完成本 flow。"""
+        return self.flow_complete(data)

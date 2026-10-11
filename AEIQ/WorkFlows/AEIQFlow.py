@@ -19,13 +19,13 @@ class AEIQFlow(AEFlow):
         """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论。
 
         汇总编排：summarize_extend_messages（hook）+ 各子 flow outResult_summary（hook）+
-        subflow_summarize_prompt（hook）。由 receive_flow_result 在所有子 flow 完成时调用。
+        summarize_prompt（hook）。由 receive_flow_result 在所有子 flow 完成时调用。
         """
         logger.info(
             "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
             type(self).__name__, self.deepth, len(self._flows), len(self._flows),
         )
-        flow_out = self.generateFlowOutput(AEFunctional.flow_receive_complete)
+        flow_out = self.generateFlowOutput(AEFunctional.receive_summarize_result)
         messages = []
         messages.extend(self.summarize_extend_messages())
         for f in self._flows.values():
@@ -42,7 +42,7 @@ class AEIQFlow(AEFlow):
                 logger.warning("[%s][d=%s] summarize 子 flow output.outResult 为空, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: self.subflow_summarize_prompt(),
+            AE_CONTENT: self.summarize_prompt(),
         })
 
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)

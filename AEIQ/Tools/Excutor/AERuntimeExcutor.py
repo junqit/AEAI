@@ -30,7 +30,7 @@ class AEFunctional(str):
     """
     flow_receive_default = "flow_receive_default"
     flow_receive_processing = "flow_receive_processing"
-    flow_receive_complete = "flow_receive_complete"
+    receive_summarize_result = "receive_summarize_result"
 
 
 @dataclass

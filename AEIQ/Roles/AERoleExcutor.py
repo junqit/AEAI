@@ -3,7 +3,7 @@
 执行链：
   receive_flow_input → requestRoleInformation → receiveRoleInfomation
   → requestOptimizeInput → receiveOptimizeInput → requestRoleChoice → receiveRoleChoice
-  → requestWorkflow → receiveWorkflow → flow_receive_complete
+  → requestWorkflow → receiveWorkflow → receive_summarize_result
 
 role 在 roleChoice 后确认（init 时 self.role=None）。
 """
@@ -35,7 +35,7 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         """启动：基类置 input；未启动则错误完成，避免父 flow 等待卡死。"""
         if not super().on_flow_start(flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "flow 启动失败"},
                 AEFlowCompletEvent.error,
             )
@@ -50,7 +50,7 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         result = super().receiveRoleInfomation(data)
         if not result or not self.title or not self.responsibility:
             logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: "角色信息（title/responsibility）生成失败"},
                 AEFlowCompletEvent.error,
@@ -64,7 +64,7 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         result = super().receiveRoleChoice(data)
         if not result or self.role is None:
             logger.warning("[%s][d=%s] 角色选择失败，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: "角色选择失败"},
                 AEFlowCompletEvent.error,
@@ -80,7 +80,7 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         if not result or not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] input.goal 为空，以错误完成本 flow 避免卡死",
                            self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident, AE_CONTENT: "问题优化失败"},
                 AEFlowCompletEvent.error,
             )
@@ -93,13 +93,13 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         result = super().receiveWorkflow(data)
         if not result:
             logger.warning("[%s][d=%s] 任务拆解为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: "任务拆解为空"},
                 AEFlowCompletEvent.error,
             )
             return False
-        self.flow_receive_complete(
+        self.flow_complete(
             {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
              AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
         )

@@ -202,7 +202,7 @@ class AEScript(AERoleExcutor):
         script = (script or "").strip()
         if not script:
             logger.warning("[%s][d=%s] 生成脚本为空，以错误完成", self.title, self.deepth)
-            self.flow_receive_complete(
+            self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: ["脚本生成失败：LLM 未返回脚本代码"]},
                 AEFlowCompletEvent.error,
@@ -245,7 +245,7 @@ class AEScript(AERoleExcutor):
     def _complete(self) -> None:
         """以执行结果完成本 flow，回传父 flow。outResult 由历次 attempt 组装（每次结果，不论对错）。"""
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._build_results()})
+        self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._build_results()})
 
     def _apply_script_env(self, payload) -> None:
         """脚本相关 LLM 请求携带脚本能力与已装工具包信息（去掉默认 system 环境）。

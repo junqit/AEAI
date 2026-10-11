@@ -54,15 +54,15 @@ class AERefiner(AERoleExcutor):
         delegate_ident = self.delegate.ident
         if not workflows:
             logger.warning("[%s][d=%s] 返回空工作流，以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: "未返回可执行工作流"}, AEFlowCompletEvent.error)
+            self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: "未返回可执行工作流"}, AEFlowCompletEvent.error)
             return True
         created = self._create_role_flows(workflows, is_subflow=False)
         if created == 0:
             logger.warning("[%s][d=%s] 全部工作流 role 非法被跳过，以错误完成闭环", self.title, self.deepth)
-            self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
+            self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: "全部工作流 role 非法被跳过"}, AEFlowCompletEvent.error)
             return True
         logger.info("[%s][d=%s] 创建 %d 个兄弟 flow，自身完成", self.title, self.deepth, created)
-        self.flow_receive_complete({AE_IDENT: delegate_ident, AE_CONTENT: (self.input.get_goal() if self.input is not None else "")}, AEFlowCompletEvent.start)
+        self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: (self.input.get_goal() if self.input is not None else "")}, AEFlowCompletEvent.start)
         return True
 
     def on_flow_start(self, flowInput) -> bool:
