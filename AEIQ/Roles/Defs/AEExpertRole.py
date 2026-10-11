@@ -1,5 +1,5 @@
-"""AEExpertRole - 领域专家角色执行 Flow（继承 AERoleExcutor，_role()=expert）。"""
-from Roles.Role.AERoleType import AEFlowRole
+"""AEExpertRole - 领域专家角色执行 Flow（_role()=expert）。"""
+from Roles.RoleBase.AERoleType import AEFlowRole
 from Roles.AERoleExcutor import AERoleExcutor
 
 

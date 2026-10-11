@@ -1,3 +1,3 @@
-from .Role.AERoleType import AEConentRole
+from .RoleBase.AERoleType import AEConentRole
 
 __all__ = ["AEConentRole"]

@@ -1,9 +1,9 @@
 """
 AEUserContext - 单用户的请求入口与隔离单元。
 
-AENetRouteCenter 通过 user.user_key 命中对应的本类实例，把请求转交本类处理。
-本类持有：用户信息、网络委托（AENetworkDelegate）、持久事件循环；
-Context 的命中/创建/存储与 LLM 回复的分发交由 AEContextCenter 完成。
+通过 user.user_key 命中对应的本类实例，把请求转交本类处理。
+本类持有：用户信息、网络委托、持久事件循环；
+Context 的命中/创建/存储与 LLM 回复的分发委托下层完成。
 """
 import asyncio
 import logging
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class AEUserContext:
-    """单用户请求入口：用户隔离 + 事件循环 + 网络/LLM 发送；Context 管理委托给 AEContextCenter。"""
+    """单用户请求入口：用户隔离 + 事件循环 + 网络/LLM 发送；Context 管理委托给下层。"""
 
     def __init__(self, user: AEUserInfo, delegate: AENetworkDelegate):
         self.user = user
@@ -60,7 +60,7 @@ class AEUserContext:
             self._context_center.handle_context_list(req)
             return
 
-        # 路径分解：create / chat / chat_list / info，交 AEContextCenter 处理（各自内部 resolve）
+        # 路径分解：create / chat / chat_list / info，交下层处理（各自内部 resolve）
         if path == AE_PATH_CONTEXT_CREATE:
             self._context_center.handle_create(cont, req)
             return
@@ -76,22 +76,22 @@ class AEUserContext:
 
         logger.warning("[AEUserContext] _dispatch: 未处理的 path=%s", path)
 
-    # ==================== AEContextDelegate 实现 ====================
-    # 网络请求/回复转发给 delegate（AENetworkDelegate）；
-    # LLM 请求由本类调用客户端，回复交由 AEContextCenter 在本用户内派发。
+    # ==================== 委托实现 ====================
+    # 网络请求/回复转发给 delegate；
+    # LLM 请求由本类调用客户端，回复交由下层管理中心在本用户内派发。
 
     def send_request(self, request: AENetReq) -> None:
-        """Context 需要发送 NetReq 时调用，转发给 delegate"""
+        """Context 需要发送网络请求时调用，转发给 delegate"""
         request.user = self.user
         self.delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        """Context 需要发送 NetRsp 时调用，回填 user 后转发给 delegate（req 由各 handle_* 写入）。"""
+        """Context 需要发送网络回复时调用，回填 user 后转发给 delegate（req 由各 handle_* 写入）。"""
         response.user = self.user
         self.delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:
-        """异步发送 LLM 请求：提交到 loop 立即返回（无返回值）；回复到达后由 AEContextCenter 派发。"""
+        """异步发送 LLM 请求：提交到 loop 立即返回（无返回值）；回复到达后由下层派发。"""
         asyncio.run_coroutine_threadsafe(self._do_llm(payload), self._loop)
 
     async def _do_llm(self, payload) -> None:

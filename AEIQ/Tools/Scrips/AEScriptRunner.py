@@ -1,8 +1,8 @@
 """
 AEScriptRunner - 脚本执行器：python / shell / ruby 三种。
 
-每种执行器以对应解释器运行脚本内容（AEScript.script），返回 stdout。
-执行器本身不持有脚本，仅负责执行；由外部按 AEScript.type 选用。
+每种执行器以对应解释器运行脚本文本，返回 stdout。
+执行器本身不持有脚本，仅负责执行；由外部按脚本类型选用。
 
 权限：在 macOS(Darwin) 下用 sandbox-exec 包裹脚本，强制"全只读"——禁止任何文件写入
 （含创建/修改/删除/重命名），允许读、网络与进程执行；非 macOS 暂无原生只读沙箱，
@@ -106,7 +106,7 @@ class AEScriptRunner:
         return stdout
 
     def run_script(self, script: AEScript, timeout: Optional[float] = None) -> str:
-        """按 AEScript 执行其脚本内容。"""
+        """按脚本对象执行其脚本内容。"""
         return self.run(script.script, timeout=timeout)
 
 
@@ -131,7 +131,7 @@ class AERubyRunner(AEScriptRunner):
     flag = "-e"
 
 
-# 脚本类型(AEScriptType) -> 执行器类
+# 脚本类型 -> 执行器类
 RUNNER_MAP: Dict[AEScriptType, Type[AEScriptRunner]] = {
     AEScriptType.python: AEPythonRunner,
     AEScriptType.shell: AEShellRunner,

@@ -5,7 +5,7 @@
 import logging
 from typing import Optional
 
-from Roles.Role.AERoleType import AERoleParamInfo
+from Roles.RoleBase.AERoleType import AERoleParamInfo
 
 logger = logging.getLogger(__name__)
 

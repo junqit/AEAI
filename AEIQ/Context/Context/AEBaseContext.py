@@ -1,8 +1,6 @@
 import uuid
-import asyncio
 import hashlib
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional, TYPE_CHECKING
 
@@ -30,7 +28,7 @@ class AEBaseContext:
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
         self._chat_map: Dict[str, AERoleExcutor] = {}
-        # 并行队列：独立线程池管理 chat flow 执行，不依赖外部 asyncio 事件循环
+        # 并行队列：独立线程池管理 chat flow 执行
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-flow")
 
     # ==================== 私有方法 ====================
@@ -54,11 +52,11 @@ class AEBaseContext:
         return {AE_IDENT: self.ident, "space": self.space, "type": self.context_type.value}
 
     def receive_llm_response(self, data: dict) -> None:
-        """接收 LLM 回复数据。子类覆写以处理。"""
+        """接收 LLM 回复数据。"""
         pass
 
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
-        """创建 AERoleExcutor 并提交到并行队列执行。"""
+        """创建执行器并提交到并行队列执行。"""
         if question is None:
             logger.error("[Context] 收到的 AENetQues 为空，忽略")
             return
@@ -75,18 +73,16 @@ class AEBaseContext:
         flow_input = AEFlowInput(content=question.content or "", ident=chat_ident)
         self._executor.submit(chat.receive_flow_input, flow_input)
 
-    # ==================== AEFlowDelegate 协议实现 ====================
+    # ==================== 协议实现 ====================
 
-    def receive_flow_input(self, flowInput: AEFlowInput) -> bool:
-        """收到回复后直接 response——AE_CONTENT 转为 reply 发送响应。"""
-        if flowInput.get_state() != AEFlowStatus.complete:
-            return False
-        chat = self._chat_map.get(flowInput.ident)
+    def receive_flow_complete(self, flowOutput: AEFlowOutput) -> bool:
+        """收到完成的 flow 输出后直接 response——outResult 转为 reply 发送响应。"""
+        chat = self._chat_map.get(flowOutput.ident)
         if chat is None:
-            logger.warning("[Context] complete 但 _chat_map 未找到 chat(ident=%s)", flowInput.ident)
+            logger.warning("[Context] complete 但 _chat_map 未找到 chat(ident=%s)", flowOutput.ident)
             return False
-        self._chat_map.pop(flowInput.ident, None)
-        reply = flowInput.get_content()
+        self._chat_map.pop(flowOutput.ident, None)
+        reply = flowOutput.outResult or ""
         logger.info("[Context] chat 完成: %s", reply[:100])
         rsp = AENetRsp(
             code=AENetRspCode.success,

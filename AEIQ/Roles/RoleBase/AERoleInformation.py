@@ -1,25 +1,25 @@
-"""AERoleInformation - 角色信息能力 mixin：生成 title / responsibility / rolePrompt，由 AERoleBase 继承。
-角色信息属性（role / title / responsibility / rolePrompt）由基类 AERole 持有。"""
+"""AERoleInformation - 角色信息能力 mixin：生成 title / responsibility / rolePrompt。
+角色信息属性（role / title / responsibility / rolePrompt）由基类持有。"""
 import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.Role.AERoleType import AEConentRole, AE_ROLE
-from Roles.Role.AERole import AERole
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
 class AERoleInformationFunction(AEFunctional):
-    """AERoleBase 角色信息回包功能性方法名。"""
+    """角色信息回包功能性方法名。"""
     receiveRoleInfomation = "receiveRoleInfomation"
     receiveRolePrompt = "receiveRolePrompt"
 
 
 class AERoleInformation(AERole):
     """角色信息能力 mixin：提供 title / responsibility / rolePrompt 生成请求。
-    角色信息属性由基类 AERole 经 cooperative __init__ 持有。"""
+    角色信息属性由基类经 cooperative __init__ 持有。"""
 
     def requestRoleInformation(self) -> None:
         """请求 LLM 生成 title / responsibility：据当前问题生成「工作名称」与「职责范围」。回包经 receiveRoleInfomation 写入。"""
@@ -46,7 +46,7 @@ class AERoleInformation(AERole):
         self.send_llm_payload(payload)
 
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """写入 title / responsibility（不串联、不闭环；由 AERoleExcutor 覆写判断并推进）。
+        """写入 title / responsibility（不串联、不闭环；由覆写层判断并推进）。
         成功（均非空）返回 True；任一为空返回 False（不在此闭环，由覆写层错误完成）。"""
         if not isinstance(data, dict):
             data = {}
@@ -78,7 +78,7 @@ class AERoleInformation(AERole):
         self.send_llm_payload(payload)
 
     def receiveRolePrompt(self, data: dict) -> bool:
-        """存入 self.rolePrompt（不串联、不闭环；由 AERoleExcutor 覆写判断并推进）。
+        """存入 self.rolePrompt（不串联、不闭环；由覆写层判断并推进）。
         成功（非空 map）返回 True；非 map 或 rolePrompt 为空返回 False（不在此闭环）。"""
         if not isinstance(data, dict):
             data = {}

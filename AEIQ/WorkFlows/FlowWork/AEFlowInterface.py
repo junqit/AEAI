@@ -3,20 +3,18 @@ AEFlowInterface - Flow 接口协议 + AEFlowInterfaceImpl 实例实现（mixin�
 
 - AEFlowInterface（Protocol）：声明所有 Flow 需遵循的接口（ident / status / delegate / receive_llm_response）。
 - AEFlowInterfaceImpl（mixin）：提供 receive_llm_response / flow_receive_llm / send_llm_request
-  的实例实现，由 AEFlow 继承获得。receive_flow_input / add_flow 在 AEFlowDelegateImpl。
+  的实例实现。
 """
 import logging
 from typing import Protocol, runtime_checkable, TYPE_CHECKING, Optional
 
 from .AEFlowOutput import AE_LLM_OUT
-from .AEFlowInput import AEFlowInput, AEFlowStatus
+from .AEFlowInput import AEFlowStatus
 from .AEFlowInfo import AE_IDENT, AE_CONTENT, AE_funcationkey
 from .AEFlowDelegate import AEFlowCompletEvent
-from Context.Context.AELLMPayload import AELLMPayload
 
 if TYPE_CHECKING:
     from .AEFlowDelegate import AEFlowDelegate
-    from .AEFlowOutput import AEFlowOutput
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +42,9 @@ class AEFlowInterface(Protocol):
 
 
 class AEFlowInterfaceImpl(AEFlowInterface):
-    """AEFlowInterfaceImpl 协议方法实现（mixin），由 AEFlow 继承获得这些方法。
+    """AEFlowInterfaceImpl 协议方法实现（mixin）。
 
     提供 receive_llm_response / flow_receive_llm / send_llm_request 的实例实现。
-    receive_flow_input / add_flow 已迁入 AEFlowDelegateImpl。
     """
 
     def receive_llm_response(self, data: dict) -> None:
@@ -119,7 +116,7 @@ class AEFlowInterfaceImpl(AEFlowInterface):
         self.excutor.exec(command, inner)
 
     def flow_complete(self, out_schema: "Optional[dict]", event: "AEFlowCompletEvent" = AEFlowCompletEvent.start) -> bool:
-        """status=complete：置状态、赋值 output.outResult，直接调 delegate.receive_flow_input 通知父 flow。"""
+        """status=complete：置状态、赋值 output.outResult，直接调 delegate.receive_flow_complete 通知父 flow。"""
         if self.status == AEFlowStatus.complete:
             logger.error(
                 "[%s][d=%s] flow_complete 重复完成，忽略（幂等保护）: event=%s out_schema=%r",
@@ -130,7 +127,5 @@ class AEFlowInterfaceImpl(AEFlowInterface):
         answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
         self.output.outResult = answer
         if self.delegate is not None:
-            complete_input = AEFlowInput(content=answer, ident=self.output.ident)
-            complete_input.set_state(AEFlowStatus.complete)
-            self.delegate.receive_flow_input(complete_input)
+            self.delegate.receive_flow_complete(self.output)
         return True

@@ -8,7 +8,6 @@ AERuntimeExcutor - 运行时方法执行器。
 add_default / add_temporary(funcident, script, target)：注册脚本并绑定 target（方法的 self）。
 exec(funcident, inner)：按 funcident 取注册项，以绑定的 target 作 'self'、inner 作 'inner' 注入 namespace 后 exec 执行。
 """
-import json
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -24,7 +23,7 @@ AE_RESULT = "__ae_result__"  # 方法执行结果（脚本内赋值，exec 读�
 class AEFunctional(str):
     """功能性方法名类型（继承 str），供子类继承扩展。
 
-    子类（AERoleFunction / AERoleExcutorFunction 等）继承本类后追加各自的方法名常量。
+    子类继承本类后追加各自的方法名常量。
     值为字符串方法名，由 executor 经 method_call 拼成脚本调用。
     作为 str 子类，可直接用于字符串比较与字典 key，同时作为类型标注约束 generateFlowOutput 入参。
     """

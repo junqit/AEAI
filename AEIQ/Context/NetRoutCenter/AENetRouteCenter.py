@@ -10,20 +10,20 @@ logger = logging.getLogger(__name__)
 
 class AENetRouteCenter:
     """
-    网络路由中心：实现 AESocketListener 接收 NetReq，按 user.user_key 命中/创建 AEUserContext 并转交；
-    同时实现 AENetworkDelegate，为 AEUserContext 提供 NetReq/NetRsp 发送出口。
-    LLM 请求与回程路由由各 AEUserContext 自行处理。
+    网络路由中心：接收网络请求，按 user.user_key 命中/创建用户上下文并转交；
+    同时作为网络委托，为用户上下文提供网络请求/回复的发送出口。
+    LLM 请求与回程路由由各用户上下文自行处理。
     """
 
     def __init__(self, socket_interface: Optional[AESocketInterface] = None):
         self._socket_interface = socket_interface
-        # userKey -> AEUserContext：收到 NetReq 后按 user.user_key 命中/创建并存储
+        # userKey -> 用户上下文：收到网络请求后按 user.user_key 命中/创建并存储
         self.userCenters: Dict[str, AEUserContext] = {}
 
-    # ==================== AESocketListener 接口实现 ====================
+    # ==================== 接口实现 ====================
 
     def on_request_received(self, request: AENetReq) -> None:
-        """按 user.user_key 命中/创建 AEUserContext，转交请求。"""
+        """按 user.user_key 命中/创建用户上下文，转交请求。"""
         if not request.user:
             logger.warning("Request has no user info, ignored")
             return
@@ -43,14 +43,14 @@ class AENetRouteCenter:
 
         center.handle_request(request)
 
-    # ==================== AENetworkDelegate 实现 ====================
+    # ==================== 网络委托实现 ====================
 
     def send_request(self, request: AENetReq) -> None:
-        """Context 需要发送 NetReq 时调用"""
+        """Context 需要发送网络请求时调用"""
         if self._socket_interface:
             self._socket_interface.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        """Context 需要发送 NetRsp 时调用"""
+        """Context 需要发送网络回复时调用"""
         if self._socket_interface:
             self._socket_interface.send_response(response)

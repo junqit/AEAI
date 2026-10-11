@@ -1,9 +1,9 @@
 """
 Socket 连接管理器
 
-存储每个用户对应的 AESocketWrapper，
-接收解析完成的数据后通过 AESocketListener 转给上层业务，
-发送数据时委托给对应用户的 AESocketWrapper 处理
+存储每个用户对应的连接包装，
+接收解析完成的数据后通过监听器转给上层业务，
+发送数据时委托给对应用户的连接包装处理
 """
 
 import socket
@@ -14,7 +14,6 @@ from typing import Dict, Optional, List
 from ...Core.AENetReq import AENetReq, AEUserInfo
 from ...Core.AENetRsp import AENetRsp
 from ..Packet.AEPacketReceiveBuffer import ParsedPacketResult
-from ..Packet.AEPacket import AEDataType
 from .AESocketWrapper import AESocketWrapper
 from .AESocketListener import AESocketListener
 
@@ -27,9 +26,9 @@ class AESocketManager:
 
     职责：
     1. 接收解析完成的数据
-    2. 为每个用户创建/更新 AESocketWrapper
-    3. 通过 AESocketListener 通知上层业务
-    4. 发送数据委托给用户对应的 AESocketWrapper
+    2. 为每个用户创建/更新连接包装
+    3. 通过监听器通知上层业务
+    4. 发送数据委托给用户对应的连接包装
     """
 
     def __init__(self):
@@ -49,7 +48,7 @@ class AESocketManager:
 
     def on_packet_received(self, result: ParsedPacketResult) -> None:
         """接收解析完成的数据，注册用户后通过 listener 转给上层。
-        请求（AENetReq）转交业务层；响应/传输层信号不处理（对标 Swift：服务端不接收响应业务）。"""
+        请求转交业务层；响应/传输层信号不处理（服务端不接收响应业务）。"""
         payload = result.payload
         if isinstance(payload, AENetReq):
             if payload.user:
@@ -59,10 +58,10 @@ class AESocketManager:
                     listener.on_request_received(payload)
                 except Exception as e:
                     logger.error("[AESocketManager] listener.on_request_received 异常: %s", e, exc_info=True)
-        # AENetRsp / 传输层信号：服务端不处理
+        # 响应 / 传输层信号：服务端不处理
 
     def send_request(self, request: AENetReq) -> bool:
-        """发送 AENetReq，委托给用户对应的 AESocketWrapper"""
+        """发送请求，委托给用户对应的连接包装"""
         if not request.user:
             logger.error("Cannot send request: no user info")
             return False
@@ -75,7 +74,7 @@ class AESocketManager:
         return wrapper.send_request(request)
 
     def send_response(self, response: AENetRsp) -> bool:
-        """发送 AENetRsp，委托给用户对应的 AESocketWrapper"""
+        """发送响应，委托给用户对应的连接包装"""
         if not response.user:
             logger.error("Cannot send response: no user info")
             return False

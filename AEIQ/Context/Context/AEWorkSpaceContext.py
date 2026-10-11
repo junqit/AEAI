@@ -21,17 +21,17 @@ class AEWorkSpaceContext(AEBaseContext):
         super().__init__(context_type=AEContextType.workspace, space=space)
 
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
-        """AEFlowDelegate: 转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
+        """转发 flow 的 LLM 请求，经本 Context 的 send_llm_request 上送；
         用 context.ident 包装 out_schema，回程按 ident 路由回本 Context"""
-        # env_param prompt 注入由基类 AEBaseContext.flow_send_llm_request 处理
+        # env_param prompt 注入由基类处理
         super().flow_send_llm_request(payload)
 
     def receive_llm_response(self, data: dict) -> None:
         """
         处理 LLM 回复（dispatch 已按 context.ident 路由并剥掉本层，data 为 chat.ident 层）：
 
-        - 按 data.ident 从 _chat_map 取到 AEChat
-        - 剥掉 chat.ident 层，把内层 llm_out 传给 AEChat.receive_llm_response 继续向下传递
+        - 按 data.ident 从 _chat_map 取到对应 chat
+        - 剥掉 chat.ident 层，把内层 llm_out 传给 chat 继续向下传递
         """
         if not isinstance(data, dict):
             logger.error(f"[WorkSpace] LLM 回复非 map: {data!r}")
@@ -41,7 +41,7 @@ class AEWorkSpaceContext(AEBaseContext):
         if chat is None:
             logger.error(f"[WorkSpace] _chat_map 内未找到 chat_ident={chat_ident!r}")
             return
-        # 剥掉 chat.ident 层，传给 AEChat 继续路由到子 flow
+        # 剥掉 chat.ident 层，传给 chat 继续路由到子 flow
         out_schema = data.get(AE_LLM_OUT)
         if not isinstance(out_schema, dict):
             logger.error(f"[WorkSpace] chat 内层 out_schema 非 map: {out_schema!r}")

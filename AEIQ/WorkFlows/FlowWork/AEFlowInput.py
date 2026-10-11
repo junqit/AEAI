@@ -49,7 +49,7 @@ class AEFlowInput:
         return self._goal
 
     def set_goal(self, goal: str) -> None:
-        """设置角色/任务目标（由 receiveOptimizeInput 填充）。"""
+        """设置角色/任务目标。"""
         self._goal = goal
 
     def get_state(self) -> AEFlowStatus:

@@ -1,11 +1,7 @@
 """
 AEFlowInfo - Flow 元信息基类，持有 ident / input / output / status。
-AEFlow 继承本类以获得这些元信息属性。
 
-本类只管工作流元信息与流转所需的结构（generateFlowOutput）；registerFunctional 依赖
-self.excutor（由 AEFlow 持有），故置于 WorkFlows.AEFlow。角色相关信息（title / responsibility /
-rolePrompt 及 role_brief / outResult_summary / 汇总等）属 Roles.AERoleBase，
-不在本类声明或读取。
+本类只管工作流元信息与流转所需的结构（generateFlowOutput）。
 
 ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
@@ -13,7 +9,6 @@ output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构�
 根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 receive_flow_input 设置。
 """
 import uuid
-from enum import Enum
 from typing import Optional
 
 from .AEFlowInput import AEFlowInput, AEFlowStatus
@@ -24,7 +19,7 @@ from Tools.Excutor.AERuntimeExcutor import AEFunctional
 # out_schema / 路由信封内 ident 字段名
 AE_IDENT = "ident"
 
-# out_schema / 路由信封内 title 字段名（字段常量保留，供 Context 等使用；WorkFlows 信封不再写入）
+# out_schema / 路由信封内 title 字段名（字段常量保留，信封不再写入）
 AE_TITLE = "title"
 
 # out_schema / 路由信封内 responsibility 字段名
@@ -41,7 +36,7 @@ AE_funcationkey = "excutor"
 
 
 class AEFlowInfo:
-    """Flow 元信息：标识、输入/输出数据与执行状态。角色相关信息见 Roles.AERoleBase。"""
+    """Flow 元信息：标识、输入/输出数据与执行状态。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         """Flow 元信息初始化。
@@ -77,8 +72,7 @@ class AEFlowInfo:
         """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
 
         Args:
-            functional: 功能性方法名（AEFunctional 或其子类常量，如 AEFunctional.receive_summarize_result），
-                        直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
+            functional: 功能性方法名，直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
                         路由到对应方法。
 
         llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；

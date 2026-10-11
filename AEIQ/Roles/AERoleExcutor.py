@@ -9,21 +9,20 @@ role 在 roleChoice 后确认（init 时 self.role=None）。
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from Roles.Role.AERoleBase import AERoleBase
-from Roles.Role.AESubRoleChoice import AESubRoleChoice
+from Roles.RoleBase.AERoleBase import AERoleBase
+from Roles.RoleBase.AESubRoleChoice import AESubRoleChoice
 
 logger = logging.getLogger(__name__)
 
 
 class AERoleExcutor(AERoleBase, AESubRoleChoice):
-    """角色执行 Flow：继承 AERoleBase + AESubRoleChoice，由 self.role 决定当前层级行为。
+    """角色执行 Flow：由 self.role 决定当前层级行为。
 
-    - expert/workgroup/employee：有下层 → requestRoleSelect（AESubRoleChoice）派发下层角色
-    - task：AETaskRole 覆写 requestRoleSelect → requestScripts（脚本执行）
+    - expert/workgroup/employee：有下层 → requestRoleSelect 派发下层角色
+    - task：覆写 requestRoleSelect → requestScripts（脚本执行）
     """
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
@@ -60,7 +59,7 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         return result
 
     def receiveRoleChoice(self, data: dict) -> bool:
-        """接收角色选择：基类设 self.role，成功则推进 requestWorkflow（任务拆解）；失败则以错误完成闭环。"""
+        """接收角色选择：基类设 self.role；有拆解规则则推进 requestWorkflow，无则直接完成。"""
         result = super().receiveRoleChoice(data)
         if not result or self.role is None:
             logger.warning("[%s][d=%s] 角色选择失败，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -71,12 +70,18 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
             )
             return False
         self.print_info()
-        self.requestWorkflow()
+        if self.role.workflow_rule:
+            self.requestWorkflow()
+        else:
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
+            )
         return result
 
     def receiveOptimizeInput(self, data: dict) -> bool:
         """接收角色目标：基类存储后 input.goal 为空则错误完成；否则调 requestRoleChoice 推进（角色选择）。"""
-        result = super().receiveOptimizeInput(data)  # AERoleQuestion 存储 input.goal
+        result = super().receiveOptimizeInput(data)  # 存储 input.goal
         if not result or not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] input.goal 为空，以错误完成本 flow 避免卡死",
                            self.title, self.deepth)

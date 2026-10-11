@@ -1,13 +1,13 @@
 """
-网络响应数据模型（对标 Client/CocoaPods/AENetworkEngine Request/AERsp/AENetRsp.swift）
+网络响应数据模型
 
-业务字段（code / cont / req / rsp / user）保持不变；to_map/from_map 同步 Swift 新线协议：
+业务字段（code / cont / req / rsp / user）保持不变；to_map/from_map 协议格式：
   {"header":{"type":1,"requestId":"...","path":"..."}, "code":200, "cont":{...}, "rsp":{...}}
 
-- header 为顶层键（对标 Swift toMap 的 dataMap["header"]，旧 req.headers 已废弃）
+- header 为顶层键（旧 req.headers 已废弃）
 - type 为 Int（AENetMessageType: response=1）
-- user 不上线（服务端路由用，对标 Swift AENetRsp 无 user 字段）
-- path 回显请求路径（Python 扩展；Swift AENetRsp.fromMap 会保留于 rawData，不影响）
+- user 不上线（服务端路由用）
+- path 回显请求路径（Python 扩展）
 """
 import json
 from enum import IntEnum
@@ -46,7 +46,7 @@ class AENetRsp(BaseModel):
     # ==================== Swift 线协议适配 ====================
 
     def to_map(self) -> dict:
-        """对标 Swift AENetRsp.toMap：header{type=RESPONSE,requestId[,path]}；code/cont/rsp 作顶层。
+        """header{type=RESPONSE,requestId[,path]}；code/cont/rsp 作顶层。
         user 不上线（服务端路由用）。path 回显请求路径（Python 扩展）。"""
         header = {"type": int(AENetMessageType.RESPONSE)}
         if self.req:
@@ -61,12 +61,12 @@ class AENetRsp(BaseModel):
             data_map["cont"] = self.cont.model_dump(exclude_none=True)
         if self.rsp is not None:
             data_map["rsp"] = self.rsp
-        # user 不序列化（服务端用于路由，对标 Swift AENetRsp 无 user 字段）
+        # user 不序列化（服务端用于路由）
         return data_map
 
     @classmethod
     def from_map(cls, obj: dict) -> "AENetRsp":
-        """对标 Swift AENetRsp.fromMap：从 header 取 requestId/path；code/cont/rsp 作顶层。"""
+        """从 header 取 requestId/path；code/cont/rsp 作顶层。"""
         header = obj.get("header") or {}
         request_id = header.get("requestId")
         path = header.get("path")

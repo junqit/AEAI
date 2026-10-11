@@ -8,11 +8,11 @@ import logging
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.Role.AERoleType import (
+from Roles.RoleBase.AERoleType import (
     AEFlowRole, ROLE_PARAMS,
     AEConentRole, AE_ROLE,
 )
-from Roles.Role.AERole import AERole
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,13 @@ class AERoleChoiceFunction(AEFunctional):
 
 
 class AERoleChoice(AERole):
-    """角色选择能力 mixin：据已生成的角色名称与解决问题的能力，从 AEFlowRole 中选一个匹配角色。"""
+    """角色选择能力 mixin：据已生成的角色名称与解决问题的能力，从可选角色中选一个匹配角色。"""
 
     def requestRoleChoice(self) -> None:
-        """据已生成的角色名称与解决问题的能力，从全部 AEFlowRole 角色中选一个匹配的来处理当前问题。
+        """据已生成的角色名称与解决问题的能力，从全部角色中选一个匹配的来处理当前问题。
 
-        角色名称（title）与解决问题的能力（responsibility）已生成；据此从可选 AEFlowRole 角色中
-        选一个其基本能力匹配该问题的角色。LLM 返回 AEFlowRole 其中之一。不得拒绝或推诿。
+        角色名称（title）与解决问题的能力（responsibility）已生成；据此从可选角色中
+        选一个其基本能力匹配该问题的角色。LLM 返回角色枚举之一。不得拒绝或推诿。
         """
         candidates = list(ROLE_PARAMS.keys())
         question = ((self.input.get_goal() or self.input.get_content()) if self.input is not None else "")

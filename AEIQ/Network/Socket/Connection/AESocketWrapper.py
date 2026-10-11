@@ -1,6 +1,5 @@
 import socket
 import logging
-from typing import Optional
 
 from ...Core.AENetReq import AENetReq, AEUserInfo
 from ...Core.AENetRsp import AENetRsp
@@ -34,7 +33,7 @@ class AESocketWrapper:
             self._client_addr = client_addr
 
     def _send_data(self, data_type: AEDataType, data: bytes) -> None:
-        """由 AEPacket.packets_from_data 生成 packet 列表，循环 sendto 发送。"""
+        """生成 packet 列表，循环 sendto 发送。"""
         packets = AEPacket.packets_from_data(data_type, data)
         for packet in packets:
             self._server_socket.sendto(packet.to_bytes(), self._client_addr)

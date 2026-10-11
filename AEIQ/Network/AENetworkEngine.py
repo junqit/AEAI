@@ -1,19 +1,13 @@
 """
 AENetworkEngine — 出站客户端网络引擎
 
-对标 Swift AENetSocketEngine：connect/disconnect/状态机/串行分包发送/
+connect/disconnect/状态机/串行分包发送/
 异步接收解析/请求-响应匹配(requestId)/UDP 心跳保活。
 
 混合并发模型：
-- 阻塞 socket + 接收/发送/心跳/解析线程（复用 AEPacketParser / AEPacketReceiveBuffer）
+- 阻塞 socket + 接收/发送/心跳/解析线程
 - 通过 asyncio.Future + loop.call_soon_threadsafe 桥接到 asyncio，
-  使业务层可直接 `await engine.send(req) -> AENetRsp`
-
-复用现有组件，不引入协议副本：
-- 发送分包：AEPacket.packets_from_data
-- TCP 流解析：AEPacketParser（on_response / on_request 回调）
-- UDP 数据报解析：AEPacketReceiveBuffer（on_packet_received 回调）
-- 数据模型：AENetReq / AENetRsp（to_bytes / from_bytes，req.requestId 匹配）
+  使业务层可直接 `await engine.send(req) -> rsp`
 """
 
 import asyncio
@@ -222,7 +216,7 @@ class AENetworkEngine:
 
     @classmethod
     def _generate_request_id(cls) -> str:
-        """生成 8 位十六进制 requestId（对标 Swift AENetReq.generateRequestId：CRC32 风格）。"""
+        """生成 8 位十六进制 requestId（CRC32 风格）。"""
         with cls._counter_lock:
             cls._counter = (cls._counter + 1) & 0xFFFFFFFF
             c = cls._counter
@@ -267,7 +261,7 @@ class AENetworkEngine:
     # ==================== 接收（解析器回调，工作线程触发） ====================
 
     def _on_parsed_result(self, result: ParsedPacketResult) -> None:
-        """UDP：AEPacketReceiveBuffer 解析完成回调。按 payload 类型分发（DATA 载荷已含 req/rsp）。"""
+        """UDP：解析完成回调。按 payload 类型分发（DATA 载荷已含 req/rsp）。"""
         if isinstance(result.payload, AENetRsp):
             self._on_response(result.payload)
         elif isinstance(result.payload, AENetReq):
@@ -287,7 +281,7 @@ class AENetworkEngine:
         logger.error("[AENetworkEngine] 解析错误: %s", error, exc_info=True)
 
     def _on_peer_closed(self) -> None:
-        """TCP 对端关闭：取消所有 pending Future。状态由 client 回调置为 DISCONNECTED。"""
+        """TCP 对端关闭：取消所有 pending Future。"""
         self._cancel_pending("peer closed")
 
     # ==================== 请求/响应匹配（事件循环线程） ====================
@@ -347,5 +341,5 @@ class AENetworkEngine:
     # ==================== 心跳（UDP 保活） ====================
 
     def _send_heartbeat(self) -> None:
-        """发送心跳包，复用同一串行发送队列。对标 Swift sendHeartbeat。"""
+        """发送心跳包，复用同一串行发送队列。"""
         self._enqueue_package(AEDataType.HEARTBEAT, b"{}")

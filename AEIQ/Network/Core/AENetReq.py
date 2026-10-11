@@ -1,12 +1,12 @@
 """
-网络请求数据模型（对标 Client/CocoaPods/AENetworkEngine Request/AEReq/AENetReq.swift）
+网络请求数据模型
 
-业务字段（cont / req / user）保持不变；to_map/from_map 同步 Swift 新线协议：
+业务字段（cont / req / user）保持不变；to_map/from_map 协议格式：
   {"header":{"type":0,"requestId":"...","path":"..."}, "cont":{...}, "user":{...}}
 
-- header 为顶层键（对标 Swift toMap 的 dataMap["header"]，旧 req.headers 已废弃）
-- type 为 Int（AENetMessageType: request=0），对标 Swift AENetMessageType: Int
-- cont / user 作顶层参数承载（对标 Swift parameters 扁平合并）
+- header 为顶层键（旧 req.headers 已废弃）
+- type 为 Int（AENetMessageType: request=0）
+- cont / user 作顶层参数承载
 """
 import json
 from enum import IntEnum
@@ -15,7 +15,7 @@ from typing import Optional
 
 
 class AENetMessageType(IntEnum):
-    """消息类型标识（序列化到 header.type）。对标 Swift AENetMessageType: Int。"""
+    """消息类型标识（序列化到 header.type）。"""
     REQUEST = 0   # 请求
     RESPONSE = 1  # 响应
 
@@ -36,7 +36,7 @@ class AENetCont(BaseModel):
 
 
 class AENetReqInfo(BaseModel):
-    """请求信息（对应 Swift header.requestId / header.path + method）"""
+    """请求信息（header.requestId / header.path + method）"""
     path: Optional[str] = None
     timeout: Optional[float] = None
     requestId: Optional[str] = None
@@ -66,7 +66,7 @@ class AENetReq(BaseModel):
     # ==================== Swift 线协议适配 ====================
 
     def to_map(self) -> dict:
-        """对标 Swift AENetReq.toMap：header{type=REQUEST,requestId,path}；cont/user 作顶层参数。"""
+        """header{type=REQUEST,requestId,path}；cont/user 作顶层参数。"""
         header = {"type": int(AENetMessageType.REQUEST)}
         if self.req:
             if self.req.requestId:
@@ -82,11 +82,11 @@ class AENetReq(BaseModel):
 
     @classmethod
     def from_map(cls, obj: dict) -> "AENetReq":
-        """对标 Swift AENetReq.fromMap：从 header 取 requestId/path；cont/user 作顶层参数。"""
+        """从 header 取 requestId/path；cont/user 作顶层参数。"""
         header = obj.get("header") or {}
         request_id = header.get("requestId")
         path = header.get("path")
-        method = "POST"  # Swift fromMap 固定 POST
+        method = "POST"  # 固定 POST
         req_info = AENetReqInfo(requestId=request_id, path=path, method=method)
 
         cont = AENetCont.model_validate(obj["cont"]) if obj.get("cont") is not None else None

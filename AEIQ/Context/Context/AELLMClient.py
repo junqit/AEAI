@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 LLM_SERVICE_URL = "http://127.0.0.1:9999/aellms/question"
 LLM_HEADERS = {"AE-API-Key": "ae-agent-2024-fixed-key-9527"}
 
-# AsyncClient 绑定到首次创建它的 loop（AEUserContext 的持久 loop），跨请求复用连接池
+# AsyncClient 绑定到首次创建它的 loop，跨请求复用连接池
 _async_client: httpx.AsyncClient = None
 
 

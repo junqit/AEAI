@@ -1,9 +1,9 @@
-"""AETaskRole - 原子任务角色执行 Flow（继承 AERoleExcutor，_role()=task）。
+"""AETaskRole - 原子任务角色执行 Flow（_role()=task）。
 
-task 为最底层执行单元：角色目标（self.input.goal）就绪后直接创建一个 AEScript 处理目标
-（不再 LLM 拆解为多个脚本任务；AEScript 自行按当前 ruby/python/shell 能力选型 + 生成 + 执行 + 验证/重试）。
-目标经公共接口 receive_flow_input 写入 AEScript.self.input.goal。input.goal 为空由
-AERoleExcutor.receiveOptimizeInput 错误完成，避免卡死。
+task 为最底层执行单元：角色目标（self.input.goal）就绪后直接创建一个脚本 flow 处理目标
+（不再 LLM 拆解为多个脚本任务；脚本 flow 自行按当前 ruby/python/shell 能力选型 + 生成 + 执行 + 验证/重试）。
+目标经公共接口 receive_flow_input 写入脚本 flow 的 self.input.goal。input.goal 为空由
+receiveOptimizeInput 错误完成，避免卡死。
 """
 import logging
 
@@ -12,22 +12,22 @@ from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import llm_generate
-from Roles.Role.AERoleType import AEFlowRole
+from Roles.RoleBase.AERoleType import AEFlowRole
 from Roles.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
 
 
 class AETaskRole(AERoleExcutor):
-    """原子任务执行 Flow：目标就绪后创建 AEScript 处理（AEScript 自行选型/生成/执行/验证）。"""
+    """原子任务执行 Flow：目标就绪后创建脚本 flow 处理（脚本 flow 自行选型/生成/执行/验证）。"""
 
     @classmethod
     def _role(cls):
         return AEFlowRole.task
 
     def requestRoleSelect(self) -> None:
-        """task：不选角色，直接创建 AEScript 处理目标（不再 LLM 拆解；AEScript 自行选型+生成+执行）。
-        目标经公共接口 receive_flow_input 写入 AEScript.self.input.goal。"""
+        """task：不选角色，直接创建脚本 flow 处理目标（不再 LLM 拆解；脚本 flow 自行选型+生成+执行）。
+        目标经公共接口 receive_flow_input 写入脚本 flow 的 self.input.goal。"""
         goal = self.input.get_goal() if self.input is not None else ""
         if not goal:
             logger.warning("[%s][d=%s] 无可作答目标，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -41,7 +41,7 @@ class AETaskRole(AERoleExcutor):
         flowOutput = AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("脚本执行结果")})
         script_flow = AEScript(flowOutput=flowOutput)
         self.add_flow(script_flow)
-        # 公共接口：把目标传给 AEScript（self.input.goal）
+        # 公共接口：把目标传给脚本 flow（self.input.goal）
         _task_input = AEFlowInput(content="", ident=script_flow.ident)
         _task_input.set_goal(goal)
         script_flow.receive_flow_input(_task_input)

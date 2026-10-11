@@ -1,5 +1,5 @@
-"""AEEmployeeRole - 员工角色执行 Flow（继承 AERoleExcutor，_role()=employee）。"""
-from Roles.Role.AERoleType import AEFlowRole
+"""AEEmployeeRole - 员工角色执行 Flow（_role()=employee）。"""
+from Roles.RoleBase.AERoleType import AEFlowRole
 from Roles.AERoleExcutor import AERoleExcutor
 
 

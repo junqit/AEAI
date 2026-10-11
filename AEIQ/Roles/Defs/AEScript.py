@@ -1,12 +1,12 @@
 """
-AEScript - 脚本 Flow，继承 AERoleExcutor（拥有角色执行的同等能力）。本类覆写 on_flow_start
+AEScript - 脚本 Flow。本类覆写 on_flow_start
 跳过角色信息/优化/选择链路——脚本是叶子执行单元，无下层角色可选。
 
 流程：start_flow → LLM 按当前 ruby/python/shell 能力与已装工具包选脚本类型 → LLM 生成脚本内容
 → 执行 → LLM 验证评分。目标（expected_output）由上层经公共接口 receive_flow_input 写入 self.input.goal；
 脚本必须经 LLM 验证评分 ≥PASS_SCORE 才完成。执行失败或验证不达标均请求 LLM 修正/重生成脚本后
 重试，循环直至验证通过。
-执行记账（历次执行/验证记录）由 AEScript 实例直接持有（self.attempts），
+执行记账（历次执行/验证记录）由实例直接持有（self.attempts），
 不污染入站 input / 出站 output 契约；outResult 由历次 attempt 组装（每次执行结果，不论 verify 是否通过）。
 """
 import logging
@@ -16,7 +16,7 @@ from enum import Enum
 from typing import List, Optional
 
 from Roles.AERoleExcutor import AERoleExcutor
-from Roles.Role.AERoleType import AEFlowRole
+from Roles.RoleBase.AERoleType import AEFlowRole
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
@@ -116,7 +116,7 @@ class AEScript(AERoleExcutor):
     def _request_script_type(self) -> None:
         """请求 LLM 按当前 ruby/python/shell 能力与已安装工具包，选择最适合实现目标的脚本类型。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -158,7 +158,7 @@ class AEScript(AERoleExcutor):
     def _request_script_generate(self) -> None:
         """类型已选定，请求 LLM 生成该类型脚本内容以产出目标/期望输出。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -275,7 +275,7 @@ class AEScript(AERoleExcutor):
         ≥PASS_SCORE 才完成；<PASS_SCORE 由 receiveScriptVerify 触发重生成。
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
@@ -355,7 +355,7 @@ class AEScript(AERoleExcutor):
         include_history=False（执行失败触发）：仅给当前脚本与错误（problem）。
         """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         if include_history and self.attempts:
             history_lines = []
             for i, att in enumerate(self.attempts):

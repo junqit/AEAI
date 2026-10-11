@@ -1,23 +1,19 @@
 """
-AEFlow - Flow 基类，实现 AEFlowInterface 与 AEFlowDelegate 两个协议。
+AEFlow - Flow 基类。
 
 方法分区：
-  - AEFlowInterface 实现：set_delegate / flow_receive_default|processing|complete / nextFlow / send_llm_payload
-    （receive_flow_input / add_flow / receive_llm_response / flow_receive_llm 由 AEFlowInterfaceImpl 提供）
-  - AEFlowDelegate 实现（继承 AEFlowDelegateImpl 实例方法）：flow_send_llm_request / add_flow / receive_flow_input
+  - set_delegate / flow_receive_default|processing|complete / nextFlow / send_llm_payload
+  - flow_send_llm_request / add_flow / receive_flow_input
 
-本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）；角色相关信息（title/responsibility/
-rolePrompt 及 role_brief/outResult_summary/汇总拼消息）属 Roles.AERoleBase，不在本类。
-问题优化由 Roles.AERoleQuestion 提供；角色信息由 Roles.AERoleInformation 提供（AERoleBase 继承）。
+本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）。
 """
-import json
 import logging
 import uuid
 import weakref
 from typing import Dict, Optional, TYPE_CHECKING
 
-from .AEFlowInfo import AEFlowInfo, AE_IDENT, AE_CONTENT
-from .AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
+from .AEFlowInfo import AEFlowInfo, AE_IDENT
+from .AEFlowDelegate import AEFlowDelegateImpl
 from .AEFlowInterface import AEFlowInterfaceImpl
 from .AEFlowInput import AEFlowStatus, AEFlowInput
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
@@ -34,7 +30,7 @@ if TYPE_CHECKING:
 
 
 class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
-    """Flow 基类，多继承 AEFlowInfo（元信息：ident/input/output/status + generateFlowOutput）/ AEFlowDelegateImpl（delegate 方法）/ AEFlowInterfaceImpl（接口方法 receive_flow_input/add_flow/receive_llm_response）"""
+    """Flow 基类。"""
 
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
         super().__init__(flowOutput=flowOutput, ident=ident, flowInput=flowInput)
@@ -42,7 +38,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         self._flows: "Dict[str, AEFlowInterface]" = {}
         self.excutor = AERuntimeExcutor()
 
-    # ==================== AEFlowInterface 实现 ====================
+    # ==================== 接口实现 ====================
 
     def set_delegate(self, delegate: "AEFlowDelegate") -> None:
         """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
@@ -52,7 +48,7 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """注册临时功能性方法。funcident 为随机字符串键，method 为方法名字符串。
 
         Args:
-            method: 方法名字符串（如 AEFunctional.flow_receive_*），executor 内部经 method_call 拼 script
+            method: 方法名字符串（如 flow_receive_*），executor 内部经 method_call 拼 script
 
         Returns:
             随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段
@@ -120,35 +116,10 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         """flow 描述信息（hook）：返回 [d=deepth]，子类覆写可追加 role / title。"""
         return f"[d={self.deepth}]"
 
-    # ==================== 结果汇总 hook（编排 summarize_to_llm 在 AEFlowDelegateImpl；子类覆写 summarize_extend_messages / summarize_prompt）====================
-
-    def summarize_extend_messages(self) -> list:
-        """汇总扩展 message（hook，非私有，可被子类覆写）：返回需追加到汇总 messages 头部的额外消息列表。
-
-        默认返回空列表——flow 内不体现 role 的任何信息；角色上下文等扩展消息由子类
-        （如 Roles.AERoleBase）覆写本方法提供。由 AEFlowDelegateImpl.summarize_to_llm 在拼装
-        汇总 messages 时调用（messages.extend(self.summarize_extend_messages())）。
-        """
-        return []
-
-    def summarize_prompt(self) -> str:
-        """汇总 user 指令（hook，非私有，可被子类覆写）：子类可覆写以定制口吻（如 Chat.AEChat 面向用户的人性化回答）。
-
-        由 AEFlowDelegateImpl.summarize_to_llm 在所有子 flow 完成后调用。
-        """
-        return (
-            "请根据以上所有子任务的结果，整理形成最终结论。\n"
-            "要求：\n"
-            "- 保留全部信息，不得删除任何内容\n"
-            "- 仅对重复、冗余的部分去重\n"
-            "- 按逻辑整理，使结论清晰可读"
-        )
-
     def flow_complete_info(self) -> dict:
         """本 flow 的完成信息（含子 flow 递归），供上层汇总成整体 JSON 树。
 
-        自拼 ident/title/responsibility/question/goal/answer 与子 flow 的 flow_complete_info；
-        title/responsibility 由角色层（AERole）持有，goal 由 AEFlowInput 持有，此处安全取值。
+        自拼 ident/title/responsibility/question/goal/answer 与子 flow 的 flow_complete_info；此处安全取值。
         """
         info = {
             "ident": self.ident,
@@ -168,4 +139,4 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             info["answer"] = self.output.outResult or ""
         return info
 
-    # ==================== AEFlowDelegate 实现 ====================
+    # ==================== Delegate 实现 ====================

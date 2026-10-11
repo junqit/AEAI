@@ -27,12 +27,6 @@ for _name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2", "asyncio
     logging.getLogger(_name).setLevel(logging.WARNING)
 
 # 导入路由模块
-import routes.post_root as post_root_module
-import routes.websocket_chat as websocket_chat_module
-import routes.ae_context_create as ae_context_create_module
-import routes.ae_context_history as ae_context_history_module
-import routes.ae_context_delete as ae_context_delete_module
-import routes.ae_contexts_stats as ae_contexts_stats_module
 
 logger = logging.getLogger(__name__)
 

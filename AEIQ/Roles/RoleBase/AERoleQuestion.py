@@ -1,8 +1,7 @@
 """
 AERoleQuestion - 问题优化能力 mixin。
 
-提供 requestOptimizeInput / receiveOptimizeInput：将问题优化相关的 LLM 请求方法从 AEFlow
-抽出至本 mixin，由 AERoleBase 继承获得（与 AERoleInformation / AESubRoleChoice 等能力 mixin 同级，位于 Roles 包内）。
+提供 requestOptimizeInput / receiveOptimizeInput：将问题优化相关的 LLM 请求方法抽出至本 mixin。
 
 requestOptimizeInput 以 role_brief 作为系统提示、以 rolePrompt 作为「针对用户问题的优化指令」，
 让 LLM 生成一段「问题优化提示」；receiveOptimizeInput 接收回包并存入 self.input.goal
@@ -13,20 +12,20 @@ import logging
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.Role.AERoleType import AEConentRole, AE_ROLE
-from Roles.Role.AERole import AERole
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
 class AERoleQuestionFunction(AEFunctional):
-    """AERoleBase 问题优化回包功能性方法名（继承 AEFunctional 基类）。"""
+    """问题优化回包功能性方法名。"""
     receiveOptimizeInput = "receiveOptimizeInput"  # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
 
 
 class AERoleQuestion(AERole):
     """问题优化能力 mixin：问题优化相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。
-    goal（优化后的问题）由 AEFlowInput 持有（self.input.goal）。"""
+    goal（优化后的问题）由 input 持有（self.input.goal）。"""
 
     def requestOptimizeInput(self) -> None:
         """组装并发送 LLM 请求：对用户问题做二次解释与补全缺失，输出「优化后的问题」本身，

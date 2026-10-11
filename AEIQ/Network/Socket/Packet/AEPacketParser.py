@@ -28,7 +28,7 @@ class AEPacketParser:
     1. 接收原始字节数据
     2. 缓存到接收缓冲区
     3. 在独立线程中解析完整数据包
-    4. 根据类型解析为 AENetReq 或 AENetRsp
+    4. 根据类型解析为请求或响应
     5. 通过回调通知业务层
     """
 
@@ -49,7 +49,7 @@ class AEPacketParser:
         self._on_response_callback = on_response_callback
         self._on_error_callback = on_error_callback
 
-        # 分片重组：unique_id -> AEPacketPool；解析线程单线程访问，无需加锁
+        # 分片重组：unique_id -> 分片池；解析线程单线程访问，无需加锁
         self._packet_pools: Dict[int, AEPacketPool] = {}
 
 
@@ -183,7 +183,7 @@ class AEPacketParser:
             self._notify_error(e)
 
     def _dispatch_data(self, data: bytes) -> None:
-        """对标 Swift dispatch：DATA 载荷按 header.type(Int) 区分请求/响应。"""
+        """DATA 载荷按 header.type(Int) 区分请求/响应。"""
         try:
             obj = json.loads(data.decode("utf-8"))
         except Exception as e:

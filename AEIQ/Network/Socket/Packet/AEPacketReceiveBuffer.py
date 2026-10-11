@@ -3,7 +3,7 @@ AEPacket 接收缓冲区
 
 职责：
 1. receive() 收到数据即入队通知解析线程，socket 立即接收下一条
-2. 解析线程串行：data → AEPacket → AEDataType 对应消息体 → 回调上层
+2. 解析线程串行：data → packet → 数据类型对应消息体 → 回调上层
 """
 
 import json
@@ -38,7 +38,7 @@ class AEPacketReceiveBuffer:
     AEPacket UDP 接收缓冲区
 
     - receive(): 入队 + 通知，立即返回
-    - 解析线程: 串行 data → AEPacket → AEDataType 消息体 → 回调上层
+    - 解析线程: 串行 data → packet → 数据类型消息体 → 回调上层
     """
 
     def __init__(self,
@@ -51,7 +51,7 @@ class AEPacketReceiveBuffer:
         self._running = False
         self._parse_thread: Optional[threading.Thread] = None
 
-        # 分片重组：unique_id -> AEPacketPool；解析线程单线程访问，无需加锁
+        # 分片重组：unique_id -> 分片池；解析线程单线程访问，无需加锁
         self._packet_pools: Dict[int, AEPacketPool] = {}
 
     def start(self) -> None:
@@ -129,7 +129,7 @@ class AEPacketReceiveBuffer:
     # ==================== 异步分发 ====================
 
     def _dispatch_packet(self, packet: AEPacket, client_addr: tuple) -> None:
-        """AEPacket →（分片重组）→ AEDataType 对应消息体 → 回调上层"""
+        """packet →（分片重组）→ 数据类型对应消息体 → 回调上层"""
         unique_id = packet.header.unique_id
 
         # 非分片单包：直接按类型分发
@@ -175,7 +175,7 @@ class AEPacketReceiveBuffer:
             return
 
     def _dispatch_data(self, data: bytes, client_addr: tuple) -> None:
-        """对标 Swift dispatch：DATA 载荷按 header.type(Int) 区分请求/响应并回调上层。"""
+        """DATA 载荷按 header.type(Int) 区分请求/响应并回调上层。"""
         try:
             obj = json.loads(data.decode("utf-8"))
         except Exception as e:

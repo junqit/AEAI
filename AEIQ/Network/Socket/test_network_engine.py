@@ -13,7 +13,6 @@ import unittest
 import socket
 import threading
 import asyncio
-import time
 from typing import Optional
 
 from AEIQ.Network.AENetworkEngine import AENetworkEngine

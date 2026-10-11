@@ -1,18 +1,16 @@
 """
-AERefiner - 问题精炼 Flow，继承 AERoleExcutor。
+AERefiner - 问题精炼 Flow。
 
 将用户输入的问题改写为更清晰、更完整、更易于 AI 理解的问题，再经 receiveOptimizeInput → requestRoleSelect
 让 LLM 选择解决角色（role=None → 全部角色）：选人员角色则派发对应角色 flow；选 llm 则直接作答。
-本类仅覆写 receive_flow_input（→ requestOptimizeInput 精炼，跳过 AERoleExcutor 的 requestRoleInformation）
-与 outResult_summary；receiveOptimizeInput 沿用 AERoleExcutor（→ requestRoleSelect）。
+本类仅覆写 receive_flow_input（→ requestOptimizeInput 精炼，跳过 requestRoleInformation）
+与 outResult_summary；receiveOptimizeInput 沿用基类（→ requestRoleSelect）。
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
-from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent, AEFlowDelegateImpl
-from Roles.Role.AERoleType import AEFlowRole, ROLE_PARAMS
 from Roles.AERoleExcutor import AERoleExcutor
 
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ class AERefiner(AERoleExcutor):
             "6. 输出应该直接作为后续 AI 的输入。\n"
             "如果问题已经清晰，则仅做轻微优化。"
         )
-        # 入口 refiner 无静态角色，requestRoleSelect 据此选全部角色（覆写 AERoleExcutor 的 self.role=_role()=task）
+        # 入口 refiner 无静态角色，requestRoleSelect 据此选全部角色（覆写 self.role=_role()=task）
         self.role = None
 
     def outResult_summary(self) -> str:
@@ -66,7 +64,7 @@ class AERefiner(AERoleExcutor):
         return True
 
     def on_flow_start(self, flowInput) -> bool:
-        """启动：跳过 AERoleExcutor.on_flow_start（其会 requestRoleInformation），直接走 requestOptimizeInput。"""
+        """启动：跳过基类 on_flow_start（其会 requestRoleInformation），直接走 requestOptimizeInput。"""
         if not AEFlowDelegateImpl.on_flow_start(self, flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
             return False

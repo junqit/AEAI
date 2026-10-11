@@ -8,7 +8,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """WebSocket 连接端点 - 支持双向通信"""
     from websocket_manager import ws_manager
     from app import context_manager
-    from llms.AEAiLevel import AEAiLevel
 
     # 接受连接
     await ws_manager.connect(websocket, session_id)

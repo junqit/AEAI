@@ -65,7 +65,7 @@ class AEReceiveBuffer:
     def _skip_to_next_magic_code(self) -> None:
         from .AEPacket import MAGIC_CODE
 
-        # 魔数 0x1EAE 为 2 字节；搜索 2 字节序列以重新同步（对标 Swift findNextMagicCode）
+        # 魔数 0x1EAE 为 2 字节；搜索 2 字节序列以重新同步
         magic_bytes = MAGIC_CODE.to_bytes(2, byteorder='big')
 
         for i in range(1, len(self._buffer) - 1):

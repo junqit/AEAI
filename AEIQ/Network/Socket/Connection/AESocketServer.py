@@ -2,7 +2,6 @@
 Socket 服务器
 
 提供 UDP Socket 服务
-数据流: AEPacketReceiveBuffer → AESocketServer → AESocketManager → AESocketListener → 上层业务
 """
 
 import socket
@@ -11,10 +10,9 @@ import logging
 from typing import Optional
 
 from ..Packet.AEPacketReceiveBuffer import AEPacketReceiveBuffer, ParsedPacketResult
-from ..Packet.AEPacket import AEPacket, AEDataType
 from ...Core import AENetReq, AENetRsp
 from .AESocketManager import AESocketManager
-from .AESocketListener import AESocketListener, AESocketInterface
+from .AESocketListener import AESocketListener
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +22,11 @@ class AESocketServer:
     UDP Socket 服务器
 
     功能：
-    1. 监听 UDP 端口，接收数据交给 AEPacketReceiveBuffer
-    2. AEPacketReceiveBuffer 解析完成后回调本类
-    3. 本类转发给 AESocketManager 处理
-    4. AESocketManager 通过 AESocketListener 通知上层业务
-    5. 发送能力委托给 AESocketManager
+    1. 监听 UDP 端口，接收数据交给接收缓冲区
+    2. 接收缓冲区解析完成后回调本类
+    3. 本类转发给连接管理器处理
+    4. 连接管理器通过监听器通知上层业务
+    5. 发送能力委托给连接管理器
     """
 
     def __init__(self, host: str = '0.0.0.0', port: int = 8888):
@@ -114,15 +112,15 @@ class AESocketServer:
 
 
     def _on_packet_received(self, result: ParsedPacketResult) -> None:
-        """AEPacketReceiveBuffer 解析完成后的回调，转给 AESocketManager"""
+        """接收缓冲区解析完成后的回调，转给连接管理器"""
         self._socket_manager.on_packet_received(result)
 
     def send_request(self, request: AENetReq) -> bool:
-        """AESocketInterface: 委托给 AESocketManager"""
+        """委托给连接管理器"""
         return self._socket_manager.send_request(request)
 
     def send_response(self, response: AENetRsp) -> bool:
-        """AESocketInterface: 委托给 AESocketManager"""
+        """委托给连接管理器"""
         return self._socket_manager.send_response(response)
 
     @property

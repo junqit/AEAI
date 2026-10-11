@@ -8,8 +8,8 @@ import logging
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.Role.AERoleType import AEConentRole, AE_ROLE
-from Roles.Role.AERole import AERole
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,9 @@ class AERoleWorkflow(AERole):
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
-                "任务拆解规则：\n"
-                "- 据上述角色能力范围，将当前问题拆解为若干可独立完成的任务，合起来须完整解决该问题。\n"
+                f"任务拆解规则：\n"
+                f"按当前角色能力进行拆解：{self.role.workflow_rule}\n"
+                "- 将当前问题拆解为若干可独立完成的任务，合起来须完整解决该问题。\n"
                 "- 每个任务必须包含：goal（该任务的目标）与 expected_output（该任务需要输出的内容）。\n"
                 "- 每个任务的 goal 与 expected_output 须落在当前角色能力范围内，可独立完成。\n"
                 "- 任务数量尽可能少，避免过度拆解；不得编造、不得拒绝。"

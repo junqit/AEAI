@@ -9,13 +9,11 @@
 
 总包头长度: 10 bytes
 - Magic Code (2 bytes)：魔数 0x1EAE
-- DataType   (1 byte) ：低 4 位数据类型（AEDataType），高 4 位标志位（AEFlag）
+- DataType   (1 byte) ：低 4 位数据类型，高 4 位标志位
 - UniqueID   (2 bytes)：唯一标识，同一消息的多个分片共用；0 (UNIQUE_ID_SENTINEL) 表示非分片单包
 - PacketSeq  (1 byte) ：包次（分片序号）；分片从 (LAST_PACKET_SEQ-total+1) 递增至 LAST_PACKET_SEQ(255)，末包恒为 255
 - Length     (2 bytes)：本包数据长度（分片后单个包的 Data 长度）
 - Checksum   (2 bytes)：本包 Data 的 CRC16 校验和
-
-对标 Client/CocoaPods/AENetworkEngine 的 AEPacket 协议。
 """
 
 from enum import Enum
@@ -46,15 +44,15 @@ DATA_TYPE_MASK = 0x0F
 
 
 class AEDataType(Enum):
-    """数据类型（DataType 字节低 4 位）。对标 Swift AEDataType。"""
-    DATA = 0x00          # 业务数据（AENetReq / AENetRsp，按 JSON req.headers.type 区分）
+    """数据类型（DataType 字节低 4 位）。"""
+    DATA = 0x00          # 业务数据（按 JSON header.type 区分）
     HEARTBEAT = 0x01     # 心跳包
     PING = 0x02          # Ping
     PONG = 0x03          # Pong
 
 
 class AEFlag:
-    """标志位（DataType 字节高 4 位）。对标 Swift AEFlag；多个标志位可按位或。"""
+    """标志位（DataType 字节高 4 位）；多个标志位可按位或。"""
     COMPRESSED = 0x20   # 压缩
     ENCRYPTED = 0x40      # 加密
     RESERVED = 0x80       # 保留
@@ -112,7 +110,7 @@ class AEPacketHeader(BaseModel):
 
     @property
     def is_last_fragment(self) -> bool:
-        """末包：packetSeq == LAST_PACKET_SEQ(255)。对标 Swift isLastFragment。"""
+        """末包：packetSeq == LAST_PACKET_SEQ(255)。"""
         return self.packet_seq == LAST_PACKET_SEQ
 
     @property
@@ -152,7 +150,7 @@ class AEPacket(BaseModel):
 
     @classmethod
     def packets_from_data(cls, data_type: AEDataType, data: bytes) -> list:
-        """由 data 构造 packet 列表（单包或分片），对标 Swift AEPackageData.makePackets。
+        """由 data 构造 packet 列表（单包或分片）。
 
         - data <= MAX_PACKET_DATA_LENGTH：单包，UniqueID 用哨兵值（接收侧直接分发，不进分片池）
         - data >  MAX_PACKET_DATA_LENGTH：分片，共用一个非哨兵 UniqueID，packetSeq 从

@@ -7,9 +7,7 @@
 3. UDP 心跳保活定时（start_heartbeat）
 4. 连接状态机 + on_state_changed 回调
 
-不含任何协议解析：收到的原始字节通过 on_data 回调上交，由上层
-AEPacketParser（TCP 流）/ AEPacketReceiveBuffer（UDP 数据报）解析。
-对标 Swift AENetworkEngine/NetCore/Socket/io 下 TCP/UDP SocketClient 的传输职责。
+不含任何协议解析：收到的原始字节通过 on_data 回调上交，由上层解析。
 """
 
 import socket
@@ -36,7 +34,7 @@ class AESocketState(Enum):
 
 
 class AESocketError(Exception):
-    """Socket 错误（对标 Swift AESocketError）"""
+    """Socket 错误"""
 
     INVALID_ADDRESS = "invalidAddress"
     CONNECTION_FAILED = "connectionFailed"

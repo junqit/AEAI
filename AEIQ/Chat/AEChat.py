@@ -1,10 +1,10 @@
 """
-AEChat - 聊天 Flow，继承 AEFlow。
+AEChat - 聊天 Flow。
 
-接收 AENetQues 网络消息并处理（构建 LLM 请求、驱动子 flow 等）。
+接收网络消息并处理（构建 LLM 请求、驱动子 flow 等）。
 
 【整体流程设计目标】
-当前实现仅含 AERefiner（问题精炼）→ AERoleExcutor（角色拆解/执行）两个子 flow，
+当前实现仅含问题精炼 → 角色拆解/执行两个子 flow，
 属于过渡方案，无法从根本上保证问题被完整解决。完整流程应按以下 7 个阶段串联，
 每阶段有明确的输入、方法与产物，逐阶段收敛，最终产出可验证的结论并沉淀知识：
 
@@ -42,9 +42,8 @@ AEChat - 聊天 Flow，继承 AEFlow。
 import logging
 from typing import Optional
 
-from WorkFlows.AEIQFlow import AEIQFlow
+from WorkFlows.FlowWork.AEFlow import AEFlow
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Network.Core.AENetReq import AENetReqInfo
@@ -53,10 +52,10 @@ from Roles.Defs.AERefiner import AERefiner
 logger = logging.getLogger(__name__)
 
 
-class AEChat(AEIQFlow):
+class AEChat(AEFlow):
     """聊天 Flow：由 context 构建 input 后交 receive_flow_input 启动。
 
-    TODO：当前仅 AERefiner → AERoleExcutor 两个子 flow（过渡实现），后续应重构为
+    TODO：当前仅问题精炼 → 角色拆解/执行两个子 flow（过渡实现），后续应重构为
     上述 7 阶段流水线（上下文确认 → 问题定义 → 拆解 → 方案 → 执行 → 验证 → 沉淀），
     以根本性保证问题被完整解决并形成可验证闭环。
     """
@@ -68,7 +67,7 @@ class AEChat(AEIQFlow):
         # 触发本 chat 的请求信息（回响应时回填 req，供客户端按 path 路由）
         self.req: Optional[AENetReqInfo] = None
         # 添加首个子 flow：问题精炼（delegate 设为当前 chat，LLM 请求经 chat 向上转发）
-        # refiner 的 output.ident 填本 chat.ident，使其完成时路由回本 chat 的 receive_flow_result
+        # output.ident 填本 chat.ident，使其完成时路由回本 chat
         from Context.Context.AELLMPayload import llm_generate
         refiner_output = AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("精炼后的问题")})
         refiner = AERefiner(flowOutput=refiner_output)
@@ -76,8 +75,6 @@ class AEChat(AEIQFlow):
 
    #  def summarize_prompt(self) -> str:
    #      """覆写：面向用户的最终回答用自然、人性化的口吻，不暴露内部拆解过程。
-
-   #      summarize_to_llm 由 AERoleBase 实现，AEChat 仅覆写本指令定制口吻。
    #      """
    #      return (
    #          "请结合以上信息，以自然、人性化的口吻直接回答用户的问题，像在与人对话一样："
@@ -97,7 +94,7 @@ class AEChat(AEIQFlow):
             logger.warning("[%s][d=%s] on_flow_start 失败：无 default 状态子 flow 可启动", self.title, self.deepth)
             self.flow_complete({AE_IDENT: self.ident, AE_CONTENT: "会话启动失败：无可执行的子任务"}, AEFlowCompletEvent.error)
             return False
-        from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AE_CONTENT
+        from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
         child_input = AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident)
         next_flow.receive_flow_input(child_input)
         return True

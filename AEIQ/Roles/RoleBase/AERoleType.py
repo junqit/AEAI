@@ -25,7 +25,7 @@ class AEFlowRole(Enum):
                └─ employee（员工）× N（执行多环节流水线）
                     └─ task / llm / script（叶子：原子任务 / LLM 直接作答 / 脚本执行）
 
-    角色之间通过 FlowInput / FlowOutput 传递上下文与结果，专家负责整体规划与收口，
+    角色之间通过输入输出传递上下文与结果，专家负责整体规划与收口，
     工作组与员工负责分解与执行，task/llm/script 为叶子执行单元。
     """
 
@@ -68,18 +68,19 @@ def roles_below(role: AEFlowRole) -> List[AEFlowRole]:
 class AERoleParamInfo:
     """单个 Flow 角色的参数信息（仅定义角色能力）。
 
-    title / responsibility 直接对应 AEFlow / AEFlowInfo 的同名字段，由 role_brief
+    title / responsibility 直接对应同名字段，由 role_brief
     组装为「你的身份是：X；你的能力范围是：Y」供 LLM 明确角色定位。
 
     Attributes:
         role: 所属 AEFlowRole。
-        title: 职称 / 身份定位，写入 Flow.title。
-        responsibility: 能力范围，写入 Flow.responsibility。
+        title: 职称 / 身份定位。
+        responsibility: 能力范围。
     """
 
     role: AEFlowRole
     title: str
     responsibility: str
+    workflow_rule: str = ""  # 拆解工作内容的规则，空表示不需拆解
 
     def to_map(self) -> dict:
         """返回参数信息的 map 形态（枚举转为字符串，便于日志 / 序列化）。"""
@@ -87,6 +88,7 @@ class AERoleParamInfo:
             "role": self.role.value,
             AE_TITLE: self.title,
             AE_RESPONSIBILITY: self.responsibility,
+            "workflow_rule": self.workflow_rule,
         }
 
 
@@ -101,6 +103,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
             "可做：把用户目标分解为若干独立维度并分配下去；所有维度结论到齐后整合为最终交付。"
             "不可做：不直接执行任何维度/流水线或任务；不直接产出中间结果。"
         ),
+        workflow_rule="将用户目标分解为若干独立维度，每个维度可由下层角色独立完成；所有维度完成后整合为最终交付。",
     ),
     AEFlowRole.workgroup: AERoleParamInfo(
         role=AEFlowRole.workgroup,
@@ -110,6 +113,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
             "可做：承接上层分配的某一个维度目标，拆解为若干可独立执行的子任务，整合本维度结论交回上层。"
             "不可做：不做整体规划与收口；不跨维度；不直接执行任务。"
         ),
+        workflow_rule="将本维度目标拆解为若干可独立执行的子任务，每个子任务可由下层角色独立完成。",
     ),
     AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
@@ -119,6 +123,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
             "可做：完成一条含多环节（检索/分析/生成/转换等）的流水线，调用模型或工具逐环节推进，产出本流水线结果。"
             "不可做：不做单一不可再分的任务；不跨流水线/维度；不拆解整体目标；不调度其他流水线。"
         ),
+        workflow_rule="将任务拆解为多环节流水线步骤（检索/分析/生成/转换等），逐环节调用模型或工具推进。",
     ),
     AEFlowRole.task: AERoleParamInfo(
         role=AEFlowRole.task,
@@ -155,7 +160,7 @@ def get_role_param(role: AEFlowRole) -> AERoleParamInfo:
     return ROLE_PARAMS[role]
 
 
-# ==================== 角色铁律（随 role_brief 拼接，替代 AEContextCenter 的 blanket 注入）====================
+# ==================== 角色铁律（随 role_brief 拼接）====================
 # 直接使用工具的角色（employee/task/script）：须自行通过工具拉取网络实时信息
 AE_ROLE_IRON_LAW = (
     "【铁律】仔细阅读用户问题，不得给出简单、敷衍或弱智回答。"

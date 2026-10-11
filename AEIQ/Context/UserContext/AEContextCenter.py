@@ -1,12 +1,10 @@
 """
 AEContextCenter - 单用户内的 Context 管理中心。
 
-负责该用户下 AEContext 的命中与创建/存储/查找，以及 LLM 回复的解析与按 ident 路由回对应 Context。
-由 AEUserContext 持有：AEUserContext 负责用户隔离、事件循环、网络与 LLM 请求发送，
-本类只依赖 AEContextDelegate（即 AEUserContext）——Context 的回调与所需 user 信息均经 delegate 获取。
+负责该用户下 Context 的命中与创建/存储/查找，以及 LLM 回复的解析与按 ident 路由回对应 Context。
+Context 的回调与所需 user 信息均经 delegate 获取。
 """
 import os
-import json
 import asyncio
 import platform
 import logging
@@ -31,34 +29,33 @@ logger = logging.getLogger(__name__)
 class AEContextCenter(AEContextDelegate):
     """单用户内 Context 的命中/创建/存储/查找 + LLM 回复分发。
 
-    实现 AEContextDelegate：作为各子 Context 的直接 delegate，
-    将 NetReq / NetRsp / LLM 请求转发给上层 delegate（AEUserContext）。
+    作为各子 Context 的直接 delegate，将网络请求、网络回复与 LLM 请求转发给上层 delegate。
     """
 
     _SINGLETON_TYPES = {AEContextType.directory, AEContextType.permission}
 
     def __init__(self, delegate: AEContextDelegate):
-        # delegate（AEUserContext）：作为子 Context 的委托（网络/LLM 回调），并提供 user 信息
+        # delegate：作为子 Context 的委托（网络/LLM 回调），并提供 user 信息
         self._delegate = delegate
-        # context_ident -> AEBaseContext
+        # context_ident -> context
         self._contexts: Dict[str, AEBaseContext] = {}
 
-    # ==================== AEContextDelegate 实现（转发给上层 AEUserContext） ====================
+    # ==================== 委托实现（转发给上层 delegate） ====================
 
     def send_request(self, request: AENetReq) -> None:
-        """转发 NetReq 给上层 delegate。"""
+        """转发网络请求给上层 delegate。"""
         self._delegate.send_request(request)
 
     def send_response(self, response: AENetRsp) -> None:
-        """转发 NetRsp 给上层 delegate。"""
+        """转发网络回复给上层 delegate。"""
         self._delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:
-        """转发 LLM 请求给上层 delegate；注入 DirectoryContext 环境参数 prompt。
+        """转发 LLM 请求给上层 delegate；注入目录级 Context 环境参数 prompt。
 
-        铁律已下沉到各角色 role_brief（get_role_iron_law，按角色能力适配），不再在此 blanket 注入。
+        铁律已下沉到各角色 role_brief，按角色能力适配，不再在此 blanket 注入。
         """
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
         directory = self.find_by_type(AEContextType.directory)
         if directory is not None:
@@ -124,7 +121,7 @@ class AEContextCenter(AEContextDelegate):
             AEContextType.workspace: AEWorkSpaceContext,
         }
 
-        # Context 回调设给本 AEContextCenter（由其转发给上层 AEUserContext）
+        # Context 回调设给本 AEContextCenter（由其转发给上层 delegate）
         context = context_map[context_type](space=space)
         context.set_delegate(self)
 
@@ -161,8 +158,8 @@ class AEContextCenter(AEContextDelegate):
         self._delegate.send_response(response)
 
     def handle_chat(self, cont: AENetCont, req: AENetReqInfo) -> None:
-        """处理 chat：交 workspace 接收（receive_chat 内部异步流转，不等回）；
-        回复由 Chat 处理完成后 Context 内部自行处理，不在此处回复。"""
+        """处理 chat：交 workspace 接收（内部异步流转，不等回）；
+        回复由 chat 处理完成后 Context 内部自行处理，不在此处回复。"""
         context = self.resolve_context(cont)
         if context is None:
             logger.warning("[AEContextCenter] handle_chat: resolve_context 返回 None, 无法处理")
@@ -237,7 +234,7 @@ class AEContextCenter(AEContextDelegate):
     def dispatch_llm_response(self, data: dict) -> None:
         """路由回填好的信封 dict（含可信 ident）到对应 Context。
 
-        data 由 AELLMClient 回填完成：ident 等路由字段由框架逐字保留，LLM 仅生成最内层内容。
+        ident 等路由字段由框架逐字保留，LLM 仅生成最内层内容。
         """
         if not isinstance(data, dict):
             logger.error("[AEContextCenter] LLM 回填信封非 map，丢弃: %r", data)

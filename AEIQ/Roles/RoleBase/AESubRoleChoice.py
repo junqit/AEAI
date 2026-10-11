@@ -2,19 +2,19 @@
 AESubRoleChoice - 当前 ROLE 的子工作角色选择 mixin。
 
 提供 requestRoleSelect / receiveRoleSelect（据问题与各角色能力返回一个或多个任务，按 role 派发对应角色 flow；
-空则以错误完成闭环），
-由 AERoleExcutor 继承获得。入口（AERefiner, role=None）选全部角色，深层（role 已配置）选 roles_below。
-task 由 AETaskRole 经 requestRoleSelect → requestScripts 直接处理，不经 requestRoleSelect。
+空则以错误完成闭环）。
+入口（role=None）选全部角色，深层（role 已配置）选 roles_below。
+task 覆写 requestRoleSelect → requestScripts 直接处理，不经常规角色选择。
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlow import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT, AE_TITLE
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.Role.AERoleType import (
+from Roles.RoleBase.AERoleType import (
     AEFlowRole, ROLE_PARAMS, roles_below,
     AEConentRole, AE_ROLE,
 )
@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 
 
 class AERoleFunction(AEFunctional):
-    """AERoleBase 角色选择回包功能性方法名（继承 AEFunctional 基类）。"""
+    """角色选择回包功能性方法名。"""
     receiveRoleSelect = "receiveRoleSelect"  # 接收 LLM 选定的角色，传入 map
 
 
 class AESubRoleChoice:
-    """当前 ROLE 的子工作角色选择 mixin：按问题选择子角色并派发（AERoleExcutor 或 AELLMRole）。"""
+    """当前 ROLE 的子工作角色选择 mixin：按问题选择子角色并派发。"""
 
     def requestRoleSelect(self) -> None:
         """请求 LLM 据问题与各角色能力返回一个或多个执行任务（每项含 role），或空数组（llm 直接作答）。
@@ -108,8 +108,7 @@ class AESubRoleChoice:
     def _instantiate_role_flow(self, role_enum: AEFlowRole, ident: str):
         """按 role 映射实例化对应角色 flow（懒导入避免循环）。
 
-        注册表覆盖 ROLE_PARAMS 全部角色：expert/workgroup/employee→对应子类，
-        task→AETaskRole，llm→AELLMRole，script→AEScript；未注册的 role 抛 KeyError。
+        注册表覆盖 ROLE_PARAMS 全部角色；未注册的 role 抛 KeyError。
         """
         from Roles.Defs.AELLMRole import AELLMRole
         from Roles.Defs.AEExpertRole import AEExpertRole

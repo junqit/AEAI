@@ -1,7 +1,7 @@
 """
-AELLMRole - LLM 直接作答角色 Flow，继承 AERoleExcutor。
+AELLMRole - LLM 直接作答角色 Flow。
 
-已是选定角色（无需再选角色）：共用 AERoleExcutor 前置链路（角色信息 → rolePrompt → 问题优化），
+已是选定角色（无需再选角色）：共用前置链路（角色信息 → rolePrompt → 问题优化），
 在 receiveOptimizeInput 之后（input.goal 就绪）决策「是否需要多个 LLM 进行分析」：
   - choice=True（入口）：覆写 requestRoleSelect 发起 requestMultiLLMDecision 决策请求
     （仅决策，不在此发起多 LLM 查询）。回包 receiveMultiLLMDecision：
@@ -13,7 +13,7 @@ _role()=llm；requestRoleSelect 覆写为决策入口（替代默认的角色选
 import logging
 
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
-from Roles.Role.AERoleType import AEConentRole, AE_ROLE, AEFlowRole
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEFlowRole
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class AELLMRoleFunction(AEFunctional):
-    """AELLMRole 专属回包功能性方法名（继承 AEFunctional 基类）。"""
+    """AELLMRole 专属回包功能性方法名。"""
     receiveMultiLLMDecision = "receiveMultiLLMDecision"  # 接收 LLM 对「是否需要多个 LLM 查询」的决策
 
 
@@ -45,7 +45,7 @@ class AELLMRole(AERoleExcutor):
         return f"{self.title}：{self.responsibility}"
 
     def requestRoleSelect(self) -> None:
-        """覆写 AERoleExcutor.receiveOptimizeInput 之后的 hook：input.goal 就绪后决策。
+        """覆写 receiveOptimizeInput 之后的 hook：input.goal 就绪后决策。
         choice=False 直接作答；choice=True 发起「是否多 LLM 查询」决策请求。
         """
         if not self.choice:
@@ -55,7 +55,7 @@ class AELLMRole(AERoleExcutor):
 
     def requestMultiLLMDecision(self) -> None:
         """请求 LLM 判断是否需要拆分为多个独立子问题分别查询。回包经 receiveMultiLLMDecision 处理。"""
-        # input.goal 已由 receiveOptimizeInput 设置（AERoleExcutor 在为空时已错误完成）
+        # input.goal 已由 receiveOptimizeInput 设置（为空时已错误完成）
         if not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_complete(

@@ -1,5 +1,5 @@
 """
-AEPacketPool - 单条消息的分片收集与拼装。对标 Swift AEPacketPool。
+AEPacketPool - 单条消息的分片收集与拼装。
 
 同一 UniqueID 的多个分片归入同一个 AEPacketPool：
 - add(packet) 追加一个分片；末包（packetSeq == LAST_PACKET_SEQ）已到且

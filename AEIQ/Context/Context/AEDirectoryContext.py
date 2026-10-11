@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import platform
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
@@ -233,5 +233,5 @@ class AEDirectoryContext(AEBaseContext):
         """组装完整的 role prompt，返回 {role: content} 结构"""
         system_info = self.build_system_prompt()
         prompt = f"[Role]\n{self.ROLE}\n\n{system_info}"
-        from Roles.Role.AERoleType import AEConentRole, AE_ROLE
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         return {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt}

@@ -4,7 +4,6 @@
 
 import socket
 import time
-import threading
 from AEIQ.Network.Socket import AESocketWrapper, AESocketListener
 from AEIQ.Network.Core import AENetReq, AENetReqAction, AENetReqData, AENetRsp, AENetRspData
 
