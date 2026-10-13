@@ -80,7 +80,7 @@ class AERoleParamInfo:
     role: AEFlowRole
     title: str
     responsibility: str
-    workflow_rule: str = ""  # 拆解工作内容的规则，空表示不需拆解
+    workflow_rule: str = ""  # 是否需要拆解（空=不拆解，非空=通用拆解规则）
 
     def to_map(self) -> dict:
         """返回参数信息的 map 形态（枚举转为字符串，便于日志 / 序列化）。"""
@@ -97,47 +97,47 @@ class AERoleParamInfo:
 ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     AEFlowRole.expert: AERoleParamInfo(
         role=AEFlowRole.expert,
-        title="统筹专家",
+        title="统筹规划专家",
         responsibility=(
             "统筹整体规划与最终收口，不直接执行。"
             "可做：把用户目标分解为若干独立维度并分配下去；所有维度结论到齐后整合为最终交付。"
             "不可做：不直接执行任何维度/流水线或任务；不直接产出中间结果。"
         ),
-        workflow_rule="将用户目标分解为若干独立维度，每个维度可由下层角色独立完成；所有维度完成后整合为最终交付。",
+        workflow_rule="规划并拆解目标为可独立完成的部分，分配给下层角色执行，全部完成后整合为最终交付。",
     ),
     AEFlowRole.workgroup: AERoleParamInfo(
         role=AEFlowRole.workgroup,
-        title="维度协调",
+        title="维度协调员",
         responsibility=(
             "负责单一维度的拆解与整合，不直接执行。"
             "可做：承接上层分配的某一个维度目标，拆解为若干可独立执行的子任务，整合本维度结论交回上层。"
             "不可做：不做整体规划与收口；不跨维度；不直接执行任务。"
         ),
-        workflow_rule="将本维度目标拆解为若干可独立执行的子任务，每个子任务可由下层角色独立完成。",
+        workflow_rule="拆解目标为可独立完成的工作项，分配给下层角色执行后整合结论。",
     ),
     AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
-        title="流水线执行",
+        title="流水线执行员",
         responsibility=(
             "执行一条多环节流水线。"
             "可做：完成一条含多环节（检索/分析/生成/转换等）的流水线，调用模型或工具逐环节推进，产出本流水线结果。"
             "不可做：不做单一不可再分的任务；不跨流水线/维度；不拆解整体目标；不调度其他流水线。"
         ),
-        workflow_rule="将任务拆解为多环节流水线步骤（检索/分析/生成/转换等），逐环节调用模型或工具推进。",
+        workflow_rule="将任务拆解为按序执行的多环节步骤，逐步推进产出结果。",
     ),
     AEFlowRole.task: AERoleParamInfo(
         role=AEFlowRole.task,
-        title="任务执行",
+        title="任务执行员",
         responsibility=(
             "执行一个完整的任务，可拆解为多个步骤。"
             "可做：完成一个完整目标，将其拆解为若干步骤逐步执行，由模型判断各步骤用'直接作答'还是'跑脚本'完成，产出最终结果。"
             "不可做：不做多维度规划与收口；不跨任务；不调度其他任务。"
         ),
-        workflow_rule="将任务拆解为若干可独立完成的步骤，逐步执行产出最终结果。",
+        workflow_rule="将任务拆解为若干步骤，逐步执行产出结果。",
     ),
     AEFlowRole.llm: AERoleParamInfo(
         role=AEFlowRole.llm,
-        title="LLM 作答",
+        title="LLM 作答员",
         responsibility=(
             "仅凭训练数据直接作答，不用工具。"
             "可做：仅凭训练好的历史数据回答简单知识性问题，给出准确、完整的结论。"
@@ -146,7 +146,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     ),
     AEFlowRole.script: AERoleParamInfo(
         role=AEFlowRole.script,
-        title="脚本工具",
+        title="脚本执行员",
         responsibility=(
             "运行脚本完成程序化操作，不做模型推理。"
             "可做：生成并运行 python/shell/ruby 脚本完成：检索（网络爬虫、API 调用、本地文件读取）、计算（数值运算、统计、日期时间）、分析（数据解析、日志分析、正则匹配）、转换（格式转换 JSON/CSV/文本、编码、数据清洗）、生成（按规则产出文本/代码/结构化数据）、系统（系统与环境信息），产出 stdout 结果。"
