@@ -31,6 +31,7 @@ class AEChatGPTProvider(AEBaseProvider):
         result = self._gpt.generate(
             messages=question.messages,
             level=question.level,
+            temperature=question.temperature,
             think_process=think_process,
             delta_process=delta_process,
         )

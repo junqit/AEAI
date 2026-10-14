@@ -8,9 +8,16 @@ class AEQuestion:
     messages: List[Dict[str, Any]]
     llm_type: AELLMType
     level: AEAiLevel = AEAiLevel.default
+    # 采样温度，范围 0.0 - 1.0（默认 0.7；供 provider 读取，按问题指定生成温度）
+    temperature: float = 0.7
     # 流式生成过程中累计拼接的内容
     think_content: str = ""   # 思考内容（thinking_delta 累计拼接）
     delta_content: str = ""   # 回答内容（text_delta 累计拼接，即最终结果）
+
+    def __post_init__(self) -> None:
+        """校验 temperature 落在 0.0 - 1.0。"""
+        if not (0.0 <= self.temperature <= 1.0):
+            raise ValueError(f"temperature 必须在 0.0 - 1.0 之间，当前值: {self.temperature}")
 
     def append_think(self, text: str) -> None:
         """拼接思考内容片段（thinking_delta 增量）。"""

@@ -63,6 +63,7 @@ class AEGPTModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        temperature: float = 0.7,
         think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
         delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
@@ -92,6 +93,7 @@ class AEGPTModel:
                 "model": model,
                 "messages": messages,
                 "max_tokens": max_tokens,
+                "temperature": temperature,
             }
             if system_text:
                 payload["system"] = system_text

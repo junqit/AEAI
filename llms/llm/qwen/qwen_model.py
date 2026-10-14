@@ -21,7 +21,7 @@ class AEQwenModel:
     MODEL_PATH = "/Users/worker/Downloads/Qwen3.5-122B-A10B-4bit"
     DEFAULT_BASE_URL = "http://10.192.186.141:10000/v1/chat/completions"
     DEFAULT_API_KEY = "asdf"
-    DEFAULT_MAX_TOKENS = 262144
+    DEFAULT_MAX_TOKENS = 32768
     REQUEST_TIMEOUT = 600  # 请求超时时间（秒，10 分钟）
     # (connect, read)：连接 10s 超时（"No route to host" 实际瞬时失败），读 600s 等模型生成
     REQUEST_TIMEOUTS = (10, REQUEST_TIMEOUT)
@@ -113,6 +113,7 @@ class AEQwenModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel = None,
+        temperature: float = 0.7,
         think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
         delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
         max_tokens: int = None,
@@ -150,8 +151,9 @@ class AEQwenModel:
 
             payload = {
                 "model": self.model_path,
-                "messages": messages
-                # "max_tokens": effective_max_tokens
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": effective_max_tokens,
             }
 
             logger.info(f"🚀 发送请求到 Qwen API: {url}")

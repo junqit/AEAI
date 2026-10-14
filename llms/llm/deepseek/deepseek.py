@@ -235,6 +235,7 @@ class AEDeepSeekModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        temperature: float = 0.7,
         stream: bool = True,
         think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
         delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
@@ -265,7 +266,8 @@ class AEDeepSeekModel:
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": chat_messages
+            "messages": chat_messages,
+            "temperature": temperature,
         }
         if system_text:
             payload["system"] = system_text

@@ -83,6 +83,7 @@ class AEGeminiModel:
         self,
         messages: List[Dict[str, str]],
         level: AEAiLevel,
+        temperature: float = 0.7,
         think_process: Optional[Callable[[Dict[str, Any]], None]] = None,
         delta_process: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> str:
@@ -105,9 +106,8 @@ class AEGeminiModel:
             logger.warning("⚠️ Gemini 模型未加载，正在加载...")
             self.load()
 
-        # max_tokens 与 temperature 由模型内部设置
+        # max_tokens 由模型内部设置；temperature 由调用方传入（question.temperature）
         max_tokens = self.MAX_TOKENS
-        temperature = self.TEMPERATURE
 
         # 将 system/context 角色消息合并为一条 system 消息（mlx chat template 认 system 角色）
         system_text, chat_messages = split_system_messages(messages)
@@ -134,7 +134,8 @@ class AEGeminiModel:
                 self.model,
                 self.tokenizer,
                 prompt=prompt,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                sampler=make_sampler(temp=temperature),
             )
 
             # 响应内容由 AEBaseProvider.generate 统一打印，模型层不再输出

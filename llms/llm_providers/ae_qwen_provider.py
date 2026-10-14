@@ -68,6 +68,7 @@ class AEQwenProvider(AEBaseProvider):
             result = self.qwen_model.generate(
                 messages=messages,
                 level=question.level,
+                temperature=question.temperature,
                 think_process=think_process,
                 delta_process=delta_process,
             )

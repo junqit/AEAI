@@ -29,6 +29,7 @@ class AEQuestionRequest(BaseModel):
     messages: List[Dict[str, Any]]  # 已组装好的消息列表（包含 user、assistant 等）
     llm_type: Optional[str] = "claude"  # LLM 类型
     level: Optional[str] = "default"  # AI 级别
+    temperature: float = 0.7  # 采样温度（0.0-1.0，默认 0.7）
     system: Optional[str] = None  # 系统提示词
     tools: Optional[List[Dict[str, Any]]] = None  # 工具列表
     context: Optional[Dict[str, Any]] = None  # 上下文信息
@@ -128,7 +129,8 @@ async def process_question(request: AEQuestionRequest):
         question = AEQuestion(
             messages=request.messages,
             llm_type=llm_type,
-            level=level
+            level=level,
+            temperature=request.temperature,
         )
 
         # 获取 AELlmManager 实例并调用
