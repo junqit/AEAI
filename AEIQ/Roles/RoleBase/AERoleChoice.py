@@ -70,7 +70,7 @@ class AERoleChoice(AERole):
             AE_ROLE: llm_generate(f"角色，从可选角色中选一个：{' / '.join(allowed)}"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveRoleChoice(self, data: dict) -> bool:
         """接收选中的角色，设为当前角色能力（self.role）。成功返回 True；无效返回 False（不闭环）。"""

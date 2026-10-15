@@ -2,7 +2,7 @@
 AEFlow - Flow 基类。
 
 方法分区：
-  - set_delegate / flow_receive_default|processing|complete / nextFlow / send_llm_payload
+  - set_delegate / flow_receive_default|processing|complete / nextFlow
   - flow_send_llm_request / add_flow / receive_flow_input
 
 本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）。
@@ -16,9 +16,8 @@ from .AEFlowInfo import AEFlowInfo, AE_IDENT
 from .AEFlowDelegate import AEFlowDelegateImpl
 from .AEFlowInterface import AEFlowInterfaceImpl
 from .AEFlowInput import AEFlowStatus, AEFlowInput
-from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
+from .AEFlowOutput import AEFlowOutput
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Context.Context.AELLMPayload import AELLMPayload
 from Tools.Excutor import AERuntimeExcutor
 
 
@@ -88,27 +87,6 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
             if flow.status == AEFlowStatus.default:
                 return flow
         return None
-
-    def send_llm_payload(self, payload: "AELLMPayload") -> None:
-        """
-        通过 delegate 发送 AELLMPayload（无返回值）。
-
-        校验 delegate 后，用 ident 包装 payload.out_schema 向上转发
-        （回程按 ident 路由回本 flow）。
-
-        Args:
-            payload: AELLMPayload 结构体
-
-        Raises:
-            RuntimeError: delegate 未设置时
-        """
-        if self.delegate is None:
-            raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        payload.out_schema = {
-            AE_IDENT: self.ident,
-            AE_LLM_OUT: payload.out_schema,
-        }
-        self.delegate.flow_send_llm_request(payload)
 
     # ==================== 描述信息 hook（子类覆写提供更丰富描述）====================
 

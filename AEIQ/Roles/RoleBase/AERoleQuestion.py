@@ -1,10 +1,10 @@
 """
-AERoleQuestion - 问题优化能力 mixin。
+AERoleQuestion - 任务生成能力 mixin。
 
-提供 requestOptimizeInput / receiveOptimizeInput：将问题优化相关的 LLM 请求方法抽出至本 mixin。
+提供 requestOptimizeInput / receiveOptimizeInput：将任务生成相关的 LLM 请求方法抽出至本 mixin。
 
-requestOptimizeInput 以 role_brief 作为系统提示、以 rolePrompt 作为「针对用户问题的优化指令」，
-让 LLM 生成一段「问题优化提示」；receiveOptimizeInput 接收回包并存入 self.input.goal
+requestOptimizeInput 以 role_brief 作为系统提示、以任务生成指令让 LLM 对原始问题或目标生成
+一个明确的任务（不可改变原有意思与目标）；receiveOptimizeInput 接收回包并存入 self.input.goal
 （不完成 flow）。
 """
 import logging
@@ -19,57 +19,53 @@ logger = logging.getLogger(__name__)
 
 
 class AERoleQuestionFunction(AEFunctional):
-    """问题优化回包功能性方法名。"""
-    receiveOptimizeInput = "receiveOptimizeInput"  # 接收 LLM 基于 title+能力 生成的问题优化提示，传入 map
+    """任务生成回包功能性方法名。"""
+    receiveOptimizeInput = "receiveOptimizeInput"  # 接收 LLM 生成的明确任务，传入 map
 
 
 class AERoleQuestion(AERole):
-    """问题优化能力 mixin：问题优化相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。
-    goal（优化后的问题）由 input 持有（self.input.goal）。"""
+    """任务生成能力 mixin：任务生成相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。
+    goal（明确的任务）由 input 持有（self.input.goal）。"""
 
     def requestOptimizeInput(self) -> None:
-        """组装并发送 LLM 请求：对用户问题做二次解释与补全缺失，输出「优化后的问题」本身，
-        不得直接回答该问题。
+        """组装并发送 LLM 请求：对原始问题或目标生成一个明确的任务，不可改变原有意思与目标。
 
-        - messages: system(role_brief，含身份与能力) / system(问题优化指令) / user(用户问题；无问题时退化为 user 指令)
-        - out_schema: {AE_CONTENT: 优化后的问题 占位}，由 LLM 填充
+        - messages: system(role_brief，含身份与能力) / system(任务生成指令) / user(原始问题或目标；无时退化为 user 指令)
+        - out_schema: {AE_CONTENT: 明确的任务 占位}，由 LLM 填充
         - 走 receiveOptimizeInput：回包后赋值 input.goal（不完成 flow）
 
-        注：本步骤只做问题优化（二次解释 + 补全缺失），不直接回答；rolePrompt 是作答步骤
-        （requestLLMAnswer）的指令，此处不用，避免把「转化为可执行目标/作答」倾向带入问题优化。
+        注：本步骤只生成明确任务、不回答；rolePrompt 是作答步骤（requestLLMAnswer）的指令，此处不用。
         """
         messages = []
-        # 问题优化指令：本步骤只优化问题、不回答（role_brief 的「必须能给出答案」铁律属作答步，此处不用，避免冲突）。
+        # 任务生成指令：本步骤只生成明确任务、不回答（role_brief 的「必须能给出答案」铁律属作答步，此处不用，避免冲突）。
         instruction = (
-            "【问题优化任务】对用户问题做优化：在保持原意的前提下，二次解释与补全缺失，"
-            "重述并补全其中隐含或缺失的信息，使其更清晰、更完整、更易于理解。\n"
+            "【任务生成】对原始问题或目标生成一个明确的任务，不可改变原有意思与目标："
+            "在保持原意与目标不变的前提下，将原始问题或目标转化为清晰、明确、可执行的任务描述。\n"
             "要求：\n"
-            "- 输出且仅输出【一个优化后的问题】（问题形式，不是回答）；\n"
+            "- 输出且仅输出【一个明确的任务】（任务形式，不是回答）；\n"
             "- 严禁回答用户问题、严禁寒暄或任何对话性回复（如「你好，有什么可以帮你的」是回答，禁止）；\n"
-            "- 不得扩展原意、不得改变问题意图。"
+            "- 不可改变原有意思与目标。"
         )
         user_question = self.input.get_content() if self.input is not None else ""
-        # 指令 + 用户问题拼接为一条 user 消息
+        # 指令 + 原始问题或目标拼接为一条 user 消息
         if len(user_question) > 0:
             messages.append({
                 AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: instruction + "\n\n用户问题：\n" + user_question,
+                AE_CONTENT: instruction + "\n\n原始问题或目标：\n" + user_question,
             })
         else:
-            # 无待优化问题：指令作为 user 消息，确保存在 user 轮次
+            # 无原始问题或目标：指令作为 user 消息，确保存在 user 轮次
             messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: instruction})
         flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
-        flow_out.set_llm_out({AE_CONTENT: llm_generate("优化后的问题")})
+        flow_out.set_llm_out({AE_CONTENT: llm_generate("明确的任务")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收 LLM 生成的问题优化提示（不完成 flow，仅存储供后续使用）。
-
-        成功时打印一次完整摘要（title / responsibility / 原始问题 / 优化后的问题 / rolePrompt）。
+        """接收 LLM 生成的明确任务，存入 input.goal（不完成 flow、不打印——由 print_info 统一打印）。
 
         Args:
-            data: 回包内层 llm_out，形如 {AE_CONTENT: <生成的问题优化提示>}
+            data: 回包内层 llm_out，形如 {AE_CONTENT: <生成的明确任务>}
 
         Returns:
             bool: 当前数据处理是否完成（True=已处理）
@@ -79,13 +75,4 @@ class AERoleQuestion(AERole):
             prompt = data
         if self.input is not None:
             self.input.set_goal(prompt or "")
-        logger.info(
-            "[%s][d=%s] 优化完成:\n"
-            "========================================\n"
-            "  role: %s\n  deepth: %s\n  title: %s\n  优化后的问题: %s\n"
-            "========================================",
-            self.title, self.deepth,
-            self.role, self.deepth, self.title,
-            (self.input.get_goal() if self.input is not None else ""),
-        )
         return True

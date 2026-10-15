@@ -44,5 +44,5 @@ class AERoleExcuteLLM:
         })
         flow_out = self.generateFlowOutput(AEFunctional.receive_summarize_result)
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
         return True

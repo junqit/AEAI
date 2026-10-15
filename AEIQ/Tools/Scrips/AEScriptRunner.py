@@ -13,7 +13,7 @@ import platform
 import subprocess
 from typing import Dict, Type, Optional
 
-from Roles.Defs.AEScript import AEScript, AEScriptType
+from Roles.Excutor.AERoleExcuterScript import AEScriptType
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +104,6 @@ class AEScriptRunner:
         stdout = result.stdout if isinstance(result.stdout, str) else str(result.stdout or "")
         logger.info("[%s] 脚本执行结果: 成功", self.interpreter)
         return stdout
-
-    def run_script(self, script: AEScript, timeout: Optional[float] = None) -> str:
-        """按脚本对象执行其脚本内容。"""
-        return self.run(script.script, timeout=timeout)
 
 
 class AEPythonRunner(AEScriptRunner):

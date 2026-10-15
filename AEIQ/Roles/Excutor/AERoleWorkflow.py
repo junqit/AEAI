@@ -63,7 +63,7 @@ class AERoleWorkflow(AERole):
             }]
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveWorkflow(self, data: dict) -> bool:
         """接收拆解出的任务列表：解析+打印+派发（经 _dispatch_workflow_tasks hook）；

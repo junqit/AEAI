@@ -3,7 +3,7 @@ import re
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from common.aellm_enums import AELLMType, AEAiLevel
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -47,6 +47,8 @@ class AELLMPayload:
     out_schema: Dict[str, Any]
     llm_type: AELLMType = AELLMType.QWEN
     level: AEAiLevel = AEAiLevel.default
+    # 任务层级（None=未设置，用发送 flow 的 deepth；设置时标明本目标为下一级（+1）的总任务目标）
+    deepth: Optional[int] = None
     # 采样温度，范围 0.0 - 1.0
     temperature: float = 0.7
     # 环境参数配置（私有，默认包含 system，表示默认携带系统信息）；外部经 add/remove_env_param 管理

@@ -105,7 +105,7 @@ class AERoleExcuterScript:
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 选择脚本类型", self.title, self.deepth)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveScriptType(self, data: dict) -> bool:
         """接收 LLM 选择的脚本类型，置 self.type 后请求生成脚本内容。"""
@@ -153,7 +153,7 @@ class AERoleExcuterScript:
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 生成 %s 脚本内容", self.title, self.deepth, self.type)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveScriptGenerate(self, data: dict) -> bool:
         """接收 LLM 生成的脚本内容（type 已由 receiveScriptType 选定），创建 attempt 后执行。
@@ -266,7 +266,7 @@ class AERoleExcuterScript:
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 验证脚本执行结果", self.title, self.deepth)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveScriptVerify(self, data: dict) -> bool:
         """接收 LLM 验证评分：≥PASS_SCORE 完成本 flow；否则带历次执行记录请求 LLM 修正（不含评分）。
@@ -369,7 +369,7 @@ class AERoleExcuterScript:
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 修正脚本%s",
                     self.title, self.deepth, "（含历次执行记录）" if include_history else "")
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def receiveScriptFix(self, data: dict) -> bool:
         """接收 LLM 修正后的脚本，创建新 attempt 并重新执行。

@@ -23,22 +23,24 @@ class AERole:
         self.rolePrompt: str = ""        # 角色 prompt
 
     def print_info(self) -> None:
-        """打印基础信息：角色描述、title/responsibility、问题（content）、goal。"""
+        """打印基础信息：角色描述、deepth、title/responsibility、问题（content）、明确的任务（goal）。"""
         role_desc = ""
         if self.role is not None:
             role_desc = f"{self.role.role.value}（{self.role.title}：{self.role.responsibility}）"
         inp = getattr(self, "input", None)
         question = inp.get_content() if inp is not None else ""
         goal = inp.get_goal() if inp is not None else ""
+        deepth = getattr(self, "deepth", 0)
         logger.info(
             "[%s][d=%s] 基础信息:\n"
             "========================================\n"
             "  角色描述: %s\n"
+            "  deepth: %s\n"
             "  title: %s\n"
             "  responsibility: %s\n"
             "  问题: %s\n"
-            "  goal: %s\n"
+            "  明确的任务: %s\n"
             "========================================",
-            getattr(self, "title", ""), getattr(self, "deepth", 0),
-            role_desc, self.title, self.responsibility, question, goal,
+            getattr(self, "title", ""), deepth,
+            role_desc, deepth, self.title, self.responsibility, question, goal,
         )

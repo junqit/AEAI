@@ -197,13 +197,27 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
         """
-        发送 AELLMPayload 调用 LLM（无返回值）。
+        发送 AELLMPayload 调用 LLM（无返回值）。本方法兼发起方与各层上级中继：
 
+        - payload.deepth 未设置（发起方）：当前目标上下文为第 N 级（N=本 flow deepth），请仅回答本级任务；
+          置 payload.deepth=N 触发上级逐层追加（串联任务链）。
+        - payload.deepth 已设置（上级中继）：第 M 级目标：goal，此目标不作为问题，只是对第 M+1 级目标上下文的约束。
         用当前 flow 的 ident 包装 payload.out_schema，再向上转发（回程按 ident 路由回本 flow）。
 
         Raises:
             RuntimeError: delegate 未设置时
         """
+        if self.delegate is None:
+            raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
+        goal = (self.input.get_goal() if self.input is not None else "")
+        if payload.deepth is None:
+            # 发起方：当前目标上下文为第 N 级，请仅回答本级任务；置 deepth=N 触发上级逐层追加（串联任务链）
+            content = f"当前目标上下文为第 {self.deepth} 级，请仅回答本级任务"
+            payload.deepth = self.deepth
+        else:
+            # 上级中继：本层目标不作为问题，只是对下一级（deepth+1）目标上下文的约束
+            content = f"第 {self.deepth} 级目标：{goal}，此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"
+        payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: content})
         payload.out_schema = {
             AE_IDENT: self.ident,
             AE_LLM_OUT: payload.out_schema,
@@ -243,7 +257,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         })
 
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
-        self.send_llm_payload(payload)
+        self.flow_send_llm_request(payload)
 
     def summarize_extend_messages(self) -> list:
         """汇总扩展 message（hook）：返回需追加到汇总 messages 头部的额外消息列表。默认空。"""
