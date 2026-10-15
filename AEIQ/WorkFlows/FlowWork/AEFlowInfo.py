@@ -6,7 +6,7 @@ AEFlowInfo - Flow 元信息基类，持有 ident / input / output / status。
 ident 可传入（默认空字符串，为空时内部生成 uuid），以便与 flowOutput.out_schema.ident 对齐；
 output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构为
 {"ident": <回程路由目标 ident>, "reply": <llm 占位>}：子 flow 填父 flow.ident（路由回父 flow），
-根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 receive_flow_input 设置。
+根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 on_flow_start 设置。
 """
 import uuid
 from typing import Optional
@@ -48,7 +48,7 @@ class AEFlowInfo:
                    flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
                         子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
             flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，
-                        未传时仍由 receive_flow_input 设置。命名沿用 receive_flow_input 的 flowInput 约定。
+                        未传时仍由 on_flow_start 设置。命名沿用 on_flow_start 的 flowInput 约定。
         """
         if not ident:
             ident = uuid.uuid4().hex

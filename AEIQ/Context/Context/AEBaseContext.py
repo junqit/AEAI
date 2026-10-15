@@ -71,7 +71,7 @@ class AEBaseContext:
         self._chat_map[chat.ident] = chat
         logger.info("[Context] receive_chat: %s", question.content or "")
         flow_input = AEFlowInput(content=question.content or "", ident=chat_ident)
-        self._executor.submit(chat.receive_flow_input, flow_input)
+        self._executor.submit(chat.on_flow_start, flow_input)
 
     # ==================== 协议实现 ====================
 

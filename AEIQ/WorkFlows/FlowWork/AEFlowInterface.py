@@ -40,6 +40,10 @@ class AEFlowInterface(Protocol):
         """完成本 flow：置 complete、赋值 output.outResult、通知父 flow。"""
         ...
 
+    def update_flow_input(self, flowInput) -> bool:
+        """更新 flow 输入（不启动、不改状态）。"""
+        ...
+
 
 class AEFlowInterfaceImpl(AEFlowInterface):
     """AEFlowInterfaceImpl 协议方法实现（mixin）。
@@ -128,4 +132,9 @@ class AEFlowInterfaceImpl(AEFlowInterface):
         self.output.outResult = answer
         if self.delegate is not None:
             self.delegate.receive_flow_complete(self.output)
+        return True
+
+    def update_flow_input(self, flowInput) -> bool:
+        """更新本 flow 的 input（不启动、不改状态）。"""
+        self.input = flowInput
         return True

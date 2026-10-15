@@ -3,7 +3,7 @@ AEFlow - Flow 基类。
 
 方法分区：
   - set_delegate / flow_receive_default|processing|complete / nextFlow
-  - flow_send_llm_request / add_flow / receive_flow_input
+  - flow_send_llm_request / add_flow / on_flow_start
 
 本类只管工作流流转（路由 / 转发 / 完成判定 / 子 flow 编排）。
 """

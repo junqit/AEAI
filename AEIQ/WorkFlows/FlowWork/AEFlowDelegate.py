@@ -3,7 +3,7 @@ AEFlowDelegate - Flow 内部信息向外流转的委托协议 + AEFlowCompletEve
 
 Flow 在执行过程中通过该 Delegate 与外部交互：
   1. flow_send_llm_request                发送 AELLMPayload 调用 LLM
-  2. receive_flow_input           接收输入（含完成通知）
+  2. on_flow_start              启动 flow（置 input、切 processing）
   3. add_flow      添加下一个待执行的子 flow
 
 任何类只要实现以下方法即视为符合协议，无需继承。
@@ -42,22 +42,6 @@ class AEFlowCompletEvent(str, Enum):
 class AEFlowDelegate(Protocol):
     """Flow 委托协议：Flow 内部信息向外流转的出口"""
 
-    def receive_flow_input(self, flowInput: 'AEFlowInput') -> bool:
-        """
-        接收输入：根据 input.state 分发不同处理。
-
-        - start：启动 flow（置 input、切到 processing），返回 True
-        - processing：暂不处理，返回 False
-        - complete：收到完成消息，按 input.ident 路由——命中自身则完成，命中子 flow 则转发
-
-        Args:
-            flowInput: flow 输入数据（含 content / state / ident）
-
-        Returns:
-            bool: True 表示已处理
-        """
-        ...
-
     def add_flow(self, flow: 'AEFlowInterface') -> None:
         """
         添加子 flow。
@@ -85,44 +69,10 @@ class AEFlowDelegate(Protocol):
 class AEFlowDelegateImpl(AEFlowDelegate):
     """AEFlowDelegate 协议方法的实例实现（mixin）。
 
-    提供 flow_send_llm_request / add_flow / receive_flow_input 的实例实现。
+    提供 flow_send_llm_request / add_flow / on_flow_start 的实例实现。
     """
 
-    # ==================== 接口方法实现（receive_flow_input / add_flow）====================
-
-    def receive_flow_input(self, flowInput) -> bool:
-        """接收输入：ident 匹配自身则处理，匹配子 flow 则转发，其他不处理。
-
-        - ident == self.ident：检查状态顺序，晚于才按状态分发（start/processing）
-        - ident 命中 _flows 子 flow：转发给子 flow
-        - 其他：打印错误，不处理
-        """
-        if flowInput.ident == self.ident:
-            # 检查状态顺序（int Enum 直接比较），self.status 必须早于 input.state 才可接收
-            if self.status.value > flowInput.get_state().value:
-                logger.warning(
-                    "[d=%s] receive_flow_input 状态不允许：self=%s input=%s，忽略",
-                    self.deepth, self.status, flowInput.get_state(),
-                )
-                return False
-
-            if flowInput.get_state() == AEFlowStatus.start:
-                return self.on_flow_start(flowInput)
-
-            if flowInput.get_state() == AEFlowStatus.processing:
-                return self.on_flow_processing(flowInput)
-
-            return False
-
-        sub = self._flows.get(flowInput.ident) if flowInput.ident else None
-        if sub is not None:
-            return sub.receive_flow_input(flowInput)
-
-        logger.error(
-            "[d=%s] receive_flow_input ident=%s 既非自身也未命中子 flow，忽略",
-            self.deepth, flowInput.ident,
-        )
-        return False
+    # ==================== 接口方法实现（add_flow）====================
 
     def on_flow_start(self, flowInput) -> bool:
         """启动 flow：置 input、切到 processing。子类覆写以追加业务逻辑（覆写时调 super().on_flow_start 完成基础置位）。"""
@@ -148,7 +98,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             next_flow = self.nextFlow()
             if next_flow is not None:
                 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-                next_flow.receive_flow_input(AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident))
+                next_flow.on_flow_start(AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident))
         return True
 
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
@@ -166,7 +116,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                 next_flow = self.nextFlow()
                 if next_flow is not None:
                     from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-                    next_flow.receive_flow_input(AEFlowInput(content=flowOutput.outResult or "", ident=next_flow.ident))
+                    next_flow.on_flow_start(AEFlowInput(content=flowOutput.outResult or "", ident=next_flow.ident))
             return True
 
         sub = self._flows.get(flowOutput.ident) if flowOutput.ident else None

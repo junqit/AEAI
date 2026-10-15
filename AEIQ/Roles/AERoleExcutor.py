@@ -1,7 +1,7 @@
 """AERoleExcutor - 角色执行 Flow。
 
 执行链：
-  receive_flow_input → requestRoleInformation → receiveRoleInfomation
+  on_flow_start → requestRoleInformation → receiveRoleInfomation
   → requestOptimizeInput → receiveOptimizeInput → requestRoleChoice → receiveRoleChoice
   → requestWorkflow → receiveWorkflow → receive_summarize_result
 
