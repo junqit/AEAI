@@ -1,14 +1,12 @@
-"""
-AERoleExcuterScript - 脚本执行角色 Flow（直继 AERoleBase，不经 AERoleExcutor 编排层）。
+"""AERoleExcuterScript - 脚本执行能力 mixin。
 
-本类覆写 on_flow_start 跳过角色信息/优化/选择链路——脚本是叶子执行单元，无下层角色可选。
+流程：start_flow → _request_script_type（LLM 按 ruby/python/shell 能力与已装工具包选型）→
+receiveScriptType → _request_script_generate（LLM 生成脚本内容）→ receiveScriptGenerate →
+_run_script（执行）→ _verify（LLM 验证评分，≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。
+执行失败亦经 _request_script_fix 重试，循环至通过。
 
-流程：start_flow → LLM 按当前 ruby/python/shell 能力与已装工具包选脚本类型 → LLM 生成脚本内容
-→ 执行 → LLM 验证评分。目标（expected_output）由上层经公共接口 receive_flow_input 写入 self.input.goal；
-脚本必须经 LLM 验证评分 ≥PASS_SCORE 才完成。执行失败或验证不达标均请求 LLM 修正/重生成脚本后
-重试，循环直至验证通过。
-执行记账（历次执行/验证记录）由实例直接持有（self.attempts），
-不污染入站 input / 出站 output 契约；outResult 由历次 attempt 组装（每次执行结果，不论 verify 是否通过）。
+目标取 input.goal；脚本内容由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）；
+执行记账 self.attempts 由 start_flow 初始化；outResult 由历次 attempt 组装。
 """
 import logging
 import re
@@ -16,10 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
-from Roles.RoleBase.AERoleBase import AERoleBase
-from Roles.RoleBase.AERoleType import AEFlowRole
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 
@@ -58,61 +53,29 @@ class AEScriptAttempt:
     reason: str = ""
 
 
-class AERoleExcuterScript(AERoleBase):
-    """脚本 Flow：目标（expected_output）= self.input.goal（上层经公共接口 receive_flow_input 注入）；
-    type 由本 flow 经 LLM 选型后贯穿执行；脚本内容由 LLM 生成并存于每次 attempt
-    （AEScriptAttempt.script），不在实例上冗余留存，当前 attempt = self.attempts[-1]。
+class AERoleExcuterScript:
+    """脚本执行能力 mixin：仅脚本执行循环（选型→生成→执行→验证→修正）；前置链路与编排由宿主
+    （AERoleExcutor）承担。目标 = 宿主 input.goal；type 由本 mixin 经 LLM 选型后贯穿执行；脚本内容
+    由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）。回包方法落在宿主实例上。
 
-    流程：on_flow_start（置 self.input + 执行记账）→ start_flow → _request_script_type（LLM 选型）→
-    receiveScriptType → _request_script_generate（LLM 生成内容）→ receiveScriptGenerate →
-    _run_script（执行结果回填到当前 attempt）→ _verify（≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。
-    执行失败亦经 _request_script_fix 重试。循环直至验证通过。outResult 由历次 attempt 组装（每次结果，不论对错）。
+    流程：start_flow → _request_script_type（LLM 选型）→ receiveScriptType → _request_script_generate
+    （LLM 生成内容）→ receiveScriptGenerate → _run_script（执行结果回填到当前 attempt）→
+    _verify（≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。执行失败亦经 _request_script_fix
+    重试，循环至通过。outResult 由历次 attempt 组装（每次结果，不论对错）。
 
-    实例执行记账：self.attempts（历次 AEScriptAttempt，含脚本/结果/评分）为信息源。
+    实例执行记账：self.attempts（历次 AEScriptAttempt，含脚本/结果/评分）为信息源；由 start_flow 初始化。
     """
-
-    @classmethod
-    def _role(cls):
-        return AEFlowRole.script
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
     PASS_SCORE = 80
 
     type: str = ""
 
-    def outResult_summary(self) -> str:
-        """组装执行结果为总结内容，供父 flow 汇总。列出每次结果（不论对错）+ 验证分。"""
-        results = self.output.outResult
-        if not results:
-            return "我的回答：（无结果）"
-        if isinstance(results, list):
-            body = "\n".join(f"第{i+1}次：{r}" for i, r in enumerate(results))
-        else:
-            body = str(results)
-        base = f"我的回答：\n{body}"
-        score = self.attempts[-1].score if self.attempts else None
-        if score is not None:
-            base += f"\n（LLM 验证通过 score={score}/100）"
-        return base
-
-    def on_flow_start(self, flowInput) -> bool:
-        """启动：置 self.input（入站契约）+ 执行记账（历次执行），交 start_flow（选型→生成→执行→验证循环）。"""
-        self.input = flowInput
-        self.status = AEFlowStatus.processing
-        self.attempts = []
-        self.start_flow()
-        return True
-
     def start_flow(self) -> None:
-        """流程入口：LLM 按当前 ruby/python/shell 能力与已安装工具包选脚本类型，选定后再
-        LLM 生成脚本内容并执行（错误/不达标自动重试，循环至通过）。"""
+        """流程入口：初始化执行记账（attempts）后，LLM 选脚本类型、生成内容并执行
+        （错误/不达标自动重试，循环至通过）。"""
+        self.attempts = []
         self._request_script_type()
-
-    def _goal(self) -> str:
-        """目标/期望输出：优先 self.input.goal；经 _create_role_flows 直接派发时仅有 content，回退取 content。"""
-        if self.input is None:
-            return ""
-        return self.input.get_goal() or self.input.get_content() or ""
 
     def _request_script_type(self) -> None:
         """请求 LLM 按当前 ruby/python/shell 能力与已安装的工具包，选择最适合实现目标的脚本类型。"""
@@ -121,7 +84,7 @@ class AERoleExcuterScript(AERoleBase):
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
-                AE_CONTENT: f"目标/期望输出:\n{self._goal()}\n",
+                AE_CONTENT: f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n",
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
@@ -164,7 +127,7 @@ class AERoleExcuterScript(AERoleBase):
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self._goal()}\n"
+                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                     f"脚本类型: {self.type}\n"
                 ),
             },
@@ -281,7 +244,7 @@ class AERoleExcuterScript(AERoleBase):
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self._goal()}\n"
+                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                     f"脚本内容:\n{self.attempts[-1].script}\n"
                     f"程序输出:\n{stdout}\n"
                 ),
@@ -368,7 +331,7 @@ class AERoleExcuterScript(AERoleBase):
                     history_lines.append(f"程序输出:\n{att.stdout}")
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self._goal()}\n"
+                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                 f"历次执行记录（脚本内容 + 执行结果，不含评分）:\n"
                 + "\n".join(history_lines) + "\n"
                 f"问题说明:\n{problem}\n"
@@ -377,7 +340,7 @@ class AERoleExcuterScript(AERoleBase):
         else:
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self._goal()}\n"
+                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                 f"当前脚本内容:\n{self.attempts[-1].script}\n"
                 f"问题说明:\n{problem}\n"
                 "请依据问题说明修正脚本，使其产出目标/期望输出。"

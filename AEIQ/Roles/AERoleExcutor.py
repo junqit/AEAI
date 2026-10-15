@@ -5,30 +5,25 @@
   → requestOptimizeInput → receiveOptimizeInput → requestRoleChoice → receiveRoleChoice
   → requestWorkflow → receiveWorkflow → receive_summarize_result
 
-role 在 roleChoice 后确认（init 时 self.role=None）。
+role 在 roleChoice 后确认（初始为 None）。
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from Roles.Excutor.AERoleExcuteLLM import AERoleExcuteLLM
+from Roles.Excutor.AERoleExcuterScript import AERoleExcuterScript
 from Roles.RoleBase.AERoleBase import AERoleBase
-from Roles.RoleBase.AESubRoleChoice import AESubRoleChoice
+from Roles.RoleBase.AERoleType import AE_LEAF_ROLES, AEFlowRole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleExcutor(AERoleBase, AESubRoleChoice):
-    """角色执行 Flow：由 self.role 决定当前层级行为。
-
-    - expert/workgroup/employee：有下层 → requestRoleSelect 派发下层角色
-    - task：覆写 requestRoleSelect → requestScripts（脚本执行）
+class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
+    """角色执行 Flow：自带前置链路（角色信息/问题优化/角色选择/任务拆解），并经继承获得 llm/script
+    执行能力（AERoleExcuteLLM / AERoleExcuterScript）。叶子角色（llm/script）自身执行；协调角色按规则拆解。
+    叶子自执行、任务拆解由基类 AERoleWorkflow._dispatch_workflow_tasks 直接派发子 AERoleExcutor。
     """
-
-    def __init__(self, flowOutput: AEFlowOutput, ident: str = ""):
-        super().__init__(flowOutput=flowOutput, ident=ident)
-        self._questionType: str = ""
-        self.role = None
 
     def on_flow_start(self, flowInput) -> bool:
         """启动：基类置 input；未启动则错误完成，避免父 flow 等待卡死。"""
@@ -59,7 +54,8 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
         return result
 
     def receiveRoleChoice(self, data: dict) -> bool:
-        """接收角色选择：基类设 self.role；有拆解规则则推进 requestWorkflow，无则直接完成。"""
+        """接收角色选择：基类设 self.role；叶子角色（llm/script）自身执行（不经子 flow）；
+        协调角色有拆解规则则推进 requestWorkflow，无则直接完成。"""
         result = super().receiveRoleChoice(data)
         if not result or self.role is None:
             logger.warning("[%s][d=%s] 角色选择失败，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -70,6 +66,10 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
             )
             return False
         self.print_info()
+        role_enum = self.role.role
+        if role_enum in AE_LEAF_ROLES:
+            # 叶子角色（llm/script）：自身执行（llm→requestLLMAnswer，script→start_flow），不再派发子 flow
+            return self._execute_leaf(role_enum)
         if self.role.workflow_rule:
             self.requestWorkflow()
         else:
@@ -78,6 +78,26 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
                  AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
             )
         return result
+
+    def _execute_leaf(self, role_enum: AEFlowRole) -> bool:
+        """叶子角色（llm/script）自身执行：llm→requestLLMAnswer（AERoleExcuteLLM），
+        script→start_flow（AERoleExcuterScript）。前置链路已就绪 title/goal，直接执行不再派发子 flow。
+        回包经基类 receive_summarize_result（llm）或脚本循环各 receive* 回包（script）完成本 flow。"""
+        if role_enum == AEFlowRole.llm:
+            logger.info("[%s][d=%s] 叶子角色 llm 自身作答", self.title, self.deepth)
+            return self.requestLLMAnswer()
+        if role_enum == AEFlowRole.script:
+            logger.info("[%s][d=%s] 叶子角色 script 自身执行脚本循环", self.title, self.deepth)
+            self.start_flow()
+            return True
+        logger.warning("[%s][d=%s] 未登记的叶子角色 %s，以错误完成本 flow 避免卡死",
+                       self.title, self.deepth, role_enum.value)
+        self.flow_complete(
+            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+             AE_CONTENT: "未登记的叶子角色"},
+            AEFlowCompletEvent.error,
+        )
+        return False
 
     def receiveOptimizeInput(self, data: dict) -> bool:
         """接收角色目标：基类存储后 input.goal 为空则错误完成；否则调 requestRoleChoice 推进（角色选择）。"""
@@ -91,21 +111,4 @@ class AERoleExcutor(AERoleBase, AESubRoleChoice):
             )
             return False
         self.requestRoleChoice()
-        return result
-
-    def receiveWorkflow(self, data: dict) -> bool:
-        """接收任务拆解：基类解析+打印任务列表，空则以错误完成闭环；非空则完成本 flow。"""
-        result = super().receiveWorkflow(data)
-        if not result:
-            logger.warning("[%s][d=%s] 任务拆解为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
-            self.flow_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-                 AE_CONTENT: "任务拆解为空"},
-                AEFlowCompletEvent.error,
-            )
-            return False
-        self.flow_complete(
-            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-             AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
-        )
         return result

@@ -5,7 +5,10 @@
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
+from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -63,7 +66,8 @@ class AERoleWorkflow(AERole):
         self.send_llm_payload(payload)
 
     def receiveWorkflow(self, data: dict) -> bool:
-        """接收拆解出的任务列表并打印。成功（非空）返回 True；空返回 False（不闭环）。"""
+        """接收拆解出的任务列表：解析+打印+派发（经 _dispatch_workflow_tasks hook）；
+        空或无可派发则以错误完成闭环。成功派发返回 True，否则 False。"""
         tasks = data.get("tasks") if isinstance(data, dict) else None
         if tasks is None and isinstance(data, str):
             tasks = [data] if data.strip() else []
@@ -78,4 +82,37 @@ class AERoleWorkflow(AERole):
                 )
             else:
                 logger.info("  任务 %d：%s", i + 1, t)
-        return len(tasks) > 0
+        subtask_count = self._dispatch_workflow_tasks(tasks)
+        if not subtask_count:
+            logger.warning("[%s][d=%s] 任务拆解为空或无可派发任务（子任务 %d 个），以错误完成本 flow 避免卡死",
+                           self.title, self.deepth, subtask_count)
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "任务拆解为空或无可派发任务"},
+                AEFlowCompletEvent.error,
+            )
+            return False
+        return True
+
+    def _dispatch_workflow_tasks(self, tasks: list) -> int:
+        """任务派发：为每个任务创建子 AERoleExcutor（自行选角色执行），把 goal 作为 content 传入。
+        子 flow 的 flowOutput.ident 取当前 self.ident（子 flow 为本 flow 的子任务，完成回程路由回本 flow）。
+        返回派发的子任务数量（0 表示无可派发，由 receiveWorkflow 据此错误完成闭环）。"""
+        from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环（AERoleExcutor → AERoleBase → 本模块）
+        dispatched = 0
+        for t in tasks:
+            if isinstance(t, dict):
+                goal = t.get("goal") or t.get("expected_output") or ""
+            else:
+                goal = t
+            goal = str(goal or "").strip()
+            if not goal:
+                continue
+            child = AERoleExcutor(
+                flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
+            )
+            self.add_flow(child)
+            child.receive_flow_input(AEFlowInput(content=goal, ident=child.ident))
+            dispatched += 1
+        logger.info("[%s][d=%s] 创建 %d 个子任务 AERoleExcutor，等待完成后汇总", self.title, self.deepth, dispatched)
+        return dispatched

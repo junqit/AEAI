@@ -13,7 +13,7 @@ from Roles.RoleBase.AERoleType import AERoleParamInfo, ROLE_PARAMS, AEConentRole
 from Roles.RoleBase.AERoleInformation import AERoleInformation
 from Roles.RoleBase.AERoleQuestion import AERoleQuestion
 from Roles.RoleBase.AERoleChoice import AERoleChoice
-from Roles.RoleBase.AERoleWorkflow import AERoleWorkflow
+from Roles.Excutor.AERoleWorkflow import AERoleWorkflow
 
 logger = logging.getLogger(__name__)
 
