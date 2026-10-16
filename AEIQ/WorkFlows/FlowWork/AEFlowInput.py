@@ -5,7 +5,10 @@ content / ident 必传（构造后只读）；goal 经 set/get 方法维护；st
 内部参数（_parameter / _state / _ident / _goal）外部不可直接修改，统一经 get/set 方法访问。
 """
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Roles.RoleBase.AERoleType import AEFlowRole
 
 
 class AEFlowStatus(Enum):
@@ -27,13 +30,14 @@ class AEFlowInput:
     内部参数（_parameter / _state / _ident / _goal）外部不可直接修改，统一经 get/set 方法访问。
     """
 
-    def __init__(self, content: str, ident: str):
+    def __init__(self, content: str, ident: str, role: Optional["AEFlowRole"] = None):
         self._parameter: Dict[str, Any] = {}
         if content:
             self._parameter[AE_CONTENT] = content
         self._state: AEFlowStatus = AEFlowStatus.start
         self._ident: str = ident
         self._goal: str = ""
+        self._role: Optional["AEFlowRole"] = role
 
     def get_content(self) -> str:
         """返回 parameter 内的 content（用户原始问题文本）；无则返回空串。"""
@@ -59,3 +63,11 @@ class AEFlowInput:
     def set_state(self, state: AEFlowStatus) -> None:
         """设置输入生命周期状态（框架内部使用，如子流完成时置 complete）。"""
         self._state = state
+
+    def get_role(self) -> Optional["AEFlowRole"]:
+        """返回创建时指定的角色（flowInput.role），供 requestRoleChoice 据此选下一级角色。"""
+        return self._role
+
+    def set_role(self, role) -> None:
+        """设置角色。"""
+        self._role = role

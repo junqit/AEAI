@@ -112,7 +112,7 @@ class AERoleWorkflow(AERole):
                 flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
             )
             self.add_flow(child)
-            child.on_flow_start(AEFlowInput(content=goal, ident=child.ident))
+            child.on_flow_start(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
             dispatched += 1
         logger.info("[%s][d=%s] 创建 %d 个子任务 AERoleExcutor，等待完成后汇总", self.title, self.deepth, dispatched)
         return dispatched

@@ -9,7 +9,7 @@ from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import (
-    AEFlowRole, ROLE_PARAMS,
+    AEFlowRole, ROLE_PARAMS, roles_below,
     AEConentRole, AE_ROLE,
 )
 from Roles.RoleBase.AERole import AERole
@@ -31,7 +31,8 @@ class AERoleChoice(AERole):
         角色名称（title）与解决问题的能力（responsibility）已生成；据此从可选角色中
         选一个其基本能力匹配该问题的角色。LLM 返回角色枚举之一。不得拒绝或推诿。
         """
-        candidates = list(ROLE_PARAMS.keys())
+        input_role = self.input.get_role() if self.input is not None else None
+        candidates = roles_below(input_role) if input_role is not None else list(ROLE_PARAMS.keys())
         question = ((self.input.get_goal() or self.input.get_content()) if self.input is not None else "")
         messages = []
         role_brief = self.role_brief()
