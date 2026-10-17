@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
@@ -199,12 +199,13 @@ class AERoleExcuterScript:
         logger.info("[%s][d=%s] 脚本执行成功(type=%s)", self.title, self.deepth, self.type)
         self._verify(stdout)
 
-    def _build_results(self) -> List[str]:
-        """由历次 attempt 组装出站结果：每次执行结果（成功记 stdout，失败记 [失败] 错误），不论对错。"""
+    def _build_results(self) -> str:
+        """由历次 attempt 组装出站结果：仅验证通过（score≥PASS_SCORE）的成功结果，失败的不返回。"""
         out = []
         for att in self.attempts:
-            out.append(f"[失败] {att.error}" if att.error else att.stdout)
-        return out
+            if att.score is not None and att.score >= self.PASS_SCORE:
+                out.append(att.stdout)
+        return "\n".join(out)
 
     def _complete(self) -> None:
         """以执行结果完成本 flow，回传父 flow。outResult 由历次 attempt 组装（每次结果，不论对错）。"""
@@ -245,16 +246,15 @@ class AERoleExcuterScript:
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
                     f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
-                    f"脚本内容:\n{self.attempts[-1].script}\n"
                     f"程序输出:\n{stdout}\n"
                 ),
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
                 AE_CONTENT: (
-                    "请根据目标/期望输出与脚本内容，评判上述执行结果是否符合目标/期望输出，"
+                    "请根据目标/期望输出，评判上述程序输出是否符合目标/期望输出，"
                     "给出 0 到 100 的整数分值（100 为完全符合），并给出简短评分理由。"
-                    "只依据执行结果是否达成目标/期望输出打分，不评判代码风格。"
+                    "只依据程序输出是否达成目标/期望输出打分，不评判代码风格。"
                 ),
             },
         ]

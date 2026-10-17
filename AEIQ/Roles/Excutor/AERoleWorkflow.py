@@ -41,24 +41,24 @@ class AERoleWorkflow(AERole):
             AE_CONTENT: (
                 f"任务拆解规则：\n"
                 f"按当前角色能力进行拆解：{self.role.workflow_rule}\n"
-                "- 将当前问题拆解为若干可独立完成的任务，合起来须完整解决该问题。\n"
+                "- 将当前问题拆解为最小颗粒度的任务（不可再分的原子任务），按串行顺序排列，合起来须完整解决该问题。\n"
                 "- 每个任务必须包含：goal（该任务的目标）与 expected_output（该任务需要输出的内容）。\n"
-                "- 每个任务的 goal 与 expected_output 须落在当前角色能力范围内，可独立完成。\n"
-                "- 任务数量尽可能少，避免过度拆解；不得编造、不得拒绝。"
+                "- 每个任务的 goal 与 expected_output 须落在当前角色能力范围内，是最小颗粒度（不可再拆解）。\n"
+                "- 任务按串行顺序执行（前一任务完成后才执行下一任务），任务数量尽可能少，避免过度拆解；不得编造、不得拒绝。"
             ),
         })
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 f"问题/目标：{question}\n\n"
-                f"请将上述问题拆解为多个任务，输出 JSON 数组填入 tasks 字段，"
-                f"每项含 goal 与 expected_output。"
+                f"请将上述问题拆解为最小颗粒度的串行任务，输出 JSON 数组填入 tasks 字段，"
+                f"每项含 goal 与 expected_output，按串行顺序排列。"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleWorkflowFunction.receiveWorkflow)
         flow_out.set_llm_out({
             "tasks": [{
-                "goal": llm_generate("该任务的目标，可独立完成"),
+                "goal": llm_generate("该最小颗粒度任务的目标"),
                 "expected_output": llm_generate("该任务需要输出的内容"),
             }]
         })
@@ -100,6 +100,7 @@ class AERoleWorkflow(AERole):
         返回派发的子任务数量（0 表示无可派发，由 receiveWorkflow 据此错误完成闭环）。"""
         from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环（AERoleExcutor → AERoleBase → 本模块）
         dispatched = 0
+        first_child = None
         for t in tasks:
             if isinstance(t, dict):
                 goal = t.get("goal") or t.get("expected_output") or ""
@@ -112,7 +113,12 @@ class AERoleWorkflow(AERole):
                 flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
             )
             self.add_flow(child)
-            child.on_flow_start(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
+            child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
+            if first_child is None:
+                first_child = child
             dispatched += 1
-        logger.info("[%s][d=%s] 创建 %d 个子任务 AERoleExcutor，等待完成后汇总", self.title, self.deepth, dispatched)
+        # 全部添加完成后，再启动首个任务（串行；余者由 receive_flow_complete 的 nextFlow 逐个推进）
+        if first_child is not None:
+            first_child.on_flow_start()
+        logger.info("[%s][d=%s] 创建 %d 个串行子任务 AERoleExcutor（首个已启动），等待完成后汇总", self.title, self.deepth, dispatched)
         return dispatched

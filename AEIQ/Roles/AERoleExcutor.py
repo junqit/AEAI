@@ -25,7 +25,7 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
     叶子自执行、任务拆解由基类 AERoleWorkflow._dispatch_workflow_tasks 直接派发子 AERoleExcutor。
     """
 
-    def on_flow_start(self, flowInput) -> bool:
+    def on_flow_start(self, flowInput=None) -> bool:
         """启动：基类置 input；未启动则错误完成，避免父 flow 等待卡死。"""
         if not super().on_flow_start(flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)

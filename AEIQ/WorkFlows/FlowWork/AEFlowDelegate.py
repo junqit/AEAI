@@ -74,32 +74,16 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 接口方法实现（add_flow）====================
 
-    def on_flow_start(self, flowInput) -> bool:
-        """启动 flow：置 input、切到 processing。子类覆写以追加业务逻辑（覆写时调 super().on_flow_start 完成基础置位）。"""
-        self.input = flowInput
+    def on_flow_start(self, flowInput=None) -> bool:
+        """启动 flow：切到 processing；flowInput 非空时置 input（为空则不覆盖已有 input）。"""
         self.status = AEFlowStatus.processing
+        if flowInput is not None:
+            self.input = flowInput
         return True
 
     def on_flow_processing(self, flowInput) -> bool:
         """processing 阶段：默认暂不处理。子类覆写以处理中间消息。"""
         return False
-
-    def sub_flow_complete(self, flowInput) -> bool:
-        """子 flow 完成：所有子 flow 均完成则汇总，否则启动下一个 default 子 flow。"""
-        if not self._flows:
-            return True
-        if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
-            self.summarize_to_llm()
-        else:
-            logger.info("[%s][d=%s] 子 flow 未全部完成: %d/%d",
-                        self.title, self.deepth,
-                        sum(1 for f in self._flows.values() if f.status == AEFlowStatus.complete),
-                        len(self._flows))
-            next_flow = self.nextFlow()
-            if next_flow is not None:
-                from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-                next_flow.on_flow_start(AEFlowInput(content=flowInput.get_content(), ident=next_flow.ident))
-        return True
 
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
         """接收 flow 完成通知：按 ident 路由——命中自身则检查全部子流完成→汇总；命中子 flow 则转发。"""
@@ -115,8 +99,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                             len(self._flows))
                 next_flow = self.nextFlow()
                 if next_flow is not None:
-                    from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
-                    next_flow.on_flow_start(AEFlowInput(content=flowOutput.outResult or "", ident=next_flow.ident))
+                    next_flow.on_flow_start()
             return True
 
         sub = self._flows.get(flowOutput.ident) if flowOutput.ident else None
@@ -180,7 +163,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论。
 
         汇总编排：summarize_extend_messages（hook）+ 各子 flow outResult_summary（hook）+
-        summarize_prompt（hook）。由 sub_flow_complete 在所有子 flow 完成时调用。
+        summarize_prompt（hook）。由 receive_flow_complete 在所有子 flow 完成时调用。
         """
         logger.info(
             "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
