@@ -39,12 +39,11 @@ class AERoleQuestion(AERole):
         messages = []
         # 任务生成指令：本步骤只生成明确任务、不回答（role_brief 的「必须能给出答案」铁律属作答步，此处不用，避免冲突）。
         instruction = (
-            "【任务生成】对原始问题或目标生成一个明确的任务，不可改变原有意思与目标："
-            "在保持原意与目标不变的前提下，将原始问题或目标转化为清晰、明确、可执行的任务描述。\n"
+            "【任务生成】将原始问题或目标转化为一个明确、可执行的任务，不可改变原有意思与目标。\n"
             "要求：\n"
-            "- 输出且仅输出【一个明确的任务】（任务形式，不是回答）；\n"
-            "- 严禁回答用户问题、严禁寒暄或任何对话性回复（如「你好，有什么可以帮你的」是回答，禁止）；\n"
-            "- 不可改变原有意思与目标。"
+            "- 仅输出一个明确的任务（任务形式，不是回答）；\n"
+            "- 明确范围：需要做什么、不需要做什么、不包含什么；\n"
+            "- 严禁回答问题或寒暄；不可改变原意与目标。"
         )
         user_question = self.input.get_content() if self.input is not None else ""
         # 指令 + 原始问题或目标拼接为一条 user 消息
@@ -57,7 +56,7 @@ class AERoleQuestion(AERole):
             # 无原始问题或目标：指令作为 user 消息，确保存在 user 轮次
             messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: instruction})
         flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
-        flow_out.set_llm_out({AE_CONTENT: llm_generate("明确的任务")})
+        flow_out.set_llm_out({AE_CONTENT: llm_generate("任务或目标")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 

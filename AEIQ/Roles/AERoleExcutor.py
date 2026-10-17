@@ -3,7 +3,7 @@
 执行链：
   on_flow_start → requestRoleInformation → receiveRoleInfomation
   → requestOptimizeInput → receiveOptimizeInput → requestRoleChoice → receiveRoleChoice
-  → requestWorkflow → receiveWorkflow → receive_summarize_result
+  → _execute_leaf（llm/script 自身执行）| requestWorkflow → receiveWorkflow → receive_summarize_result
 
 role 在 roleChoice 后确认（初始为 None）。
 """
@@ -13,13 +13,14 @@ from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Roles.Excutor.AERoleExcuteLLM import AERoleExcuteLLM
 from Roles.Excutor.AERoleExcuterScript import AERoleExcuterScript
+from Roles.Excutor.AERoleExcuteContext import AERoleExcuteContext
 from Roles.RoleBase.AERoleBase import AERoleBase
 from Roles.RoleBase.AERoleType import AE_LEAF_ROLES, AEFlowRole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
+class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, AERoleBase):
     """角色执行 Flow：自带前置链路（角色信息/问题优化/角色选择/任务拆解），并经继承获得 llm/script
     执行能力（AERoleExcuteLLM / AERoleExcuterScript）。叶子角色（llm/script）自身执行；协调角色按规则拆解。
     叶子自执行、任务拆解由基类 AERoleWorkflow._dispatch_workflow_tasks 直接派发子 AERoleExcutor。
@@ -54,8 +55,7 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         return result
 
     def receiveRoleChoice(self, data: dict) -> bool:
-        """接收角色选择：基类设 self.role；叶子角色（llm/script）自身执行（不经子 flow）；
-        协调角色有拆解规则则推进 requestWorkflow，无则直接完成。"""
+        """接收角色选择：基类设 self.role；叶子角色自身执行，协调角色按规则拆解。"""
         result = super().receiveRoleChoice(data)
         if not result or self.role is None:
             logger.warning("[%s][d=%s] 角色选择失败，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -66,11 +66,12 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             )
             return False
         self.print_info()
-        role_enum = self.role.role
+        role_enum = self.role.role if self.role is not None else None
         if role_enum in AE_LEAF_ROLES:
             # 叶子角色（llm/script）：自身执行（llm→requestLLMAnswer，script→start_flow），不再派发子 flow
-            return self._execute_leaf(role_enum)
-        if self.role.workflow_rule:
+            self._execute_leaf(role_enum)
+            return result
+        if self.role is not None and self.role.workflow_rule:
             self.requestWorkflow()
         else:
             self.flow_complete(

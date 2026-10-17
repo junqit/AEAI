@@ -38,6 +38,7 @@ class AEFlowInput:
         self._ident: str = ident
         self._goal: str = ""
         self._role: Optional["AEFlowRole"] = role
+        self._context: Dict[str, Any] = {}
 
     def get_content(self) -> str:
         """返回 parameter 内的 content（用户原始问题文本）；无则返回空串。"""
@@ -71,3 +72,13 @@ class AEFlowInput:
     def set_role(self, role) -> None:
         """设置角色。"""
         self._role = role
+
+    def add_context(self, key: str, value: Any) -> None:
+        """添加问题背景或必要参数信息（key-value）。"""
+        self._context[key] = value
+
+    def get_context(self, key: str = None) -> Any:
+        """获取问题背景或必要参数：指定 key 取单项；不指定取全部 dict（副本）。"""
+        if key is not None:
+            return self._context.get(key)
+        return dict(self._context)

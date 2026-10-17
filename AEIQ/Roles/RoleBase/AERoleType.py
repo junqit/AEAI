@@ -117,7 +117,7 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
     ),
     AEFlowRole.employee: AERoleParamInfo(
         role=AEFlowRole.employee,
-        title="流水线执行员",
+        title="流水线员工",
         responsibility=(
             "执行一条多环节流水线。"
             "可做：完成一条含多环节（检索/分析/生成/转换等）的流水线，调用模型或工具逐环节推进，产出本流水线结果。"
