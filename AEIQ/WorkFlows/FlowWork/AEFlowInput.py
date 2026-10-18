@@ -40,45 +40,45 @@ class AEFlowInput:
         self._role: Optional["AEFlowRole"] = role
         self._context: Dict[str, Any] = {}
 
+    # 返回 content，无则空串
     def get_content(self) -> str:
-        """返回 parameter 内的 content（用户原始问题文本）；无则返回空串。"""
         return self._parameter.get(AE_CONTENT, "")
 
+    # 创建者 ident（只读）
     @property
     def ident(self) -> str:
-        """创建者 ident（只读，构造时确定）。"""
         return self._ident
 
+    # 返回任务目标
     def get_goal(self) -> str:
-        """返回角色/任务目标（优化后的问题）。"""
         return self._goal
 
+    # 设置任务目标
     def set_goal(self, goal: str) -> None:
-        """设置角色/任务目标。"""
         self._goal = goal
 
+    # 返回生命周期状态
     def get_state(self) -> AEFlowStatus:
-        """返回输入生命周期状态（start / complete）。"""
         return self._state
 
+    # 设置生命周期状态
     def set_state(self, state: AEFlowStatus) -> None:
-        """设置输入生命周期状态（框架内部使用，如子流完成时置 complete）。"""
         self._state = state
 
+    # 返回创建时指定的角色
     def get_role(self) -> Optional["AEFlowRole"]:
-        """返回创建时指定的角色（flowInput.role），供 requestRoleChoice 据此选下一级角色。"""
         return self._role
 
+    # 设置角色
     def set_role(self, role) -> None:
-        """设置角色。"""
         self._role = role
 
+    # 添加背景参数 key-value
     def add_context(self, key: str, value: Any) -> None:
-        """添加问题背景或必要参数信息（key-value）。"""
         self._context[key] = value
 
+    # 指定 key 取单项，不指定取全部 dict（副本）
     def get_context(self, key: str = None) -> Any:
-        """获取问题背景或必要参数：指定 key 取单项；不指定取全部 dict（副本）。"""
         if key is not None:
             return self._context.get(key)
         return dict(self._context)

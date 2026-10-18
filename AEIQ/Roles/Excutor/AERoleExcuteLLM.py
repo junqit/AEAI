@@ -19,12 +19,8 @@ logger = logging.getLogger(__name__)
 class AERoleExcuteLLM:
     """LLM 作答能力 mixin：仅 requestLLMAnswer。前置链路与编排由宿主（AERoleExcutor）承担。"""
 
+    # 请求 LLM 作答；无可作答问题则错误完成闭环。
     def requestLLMAnswer(self) -> bool:
-        """直接请求 LLM 作答（不拆解、不执行脚本）。回包经 receive_summarize_result 完成本 flow。
-
-        使用宿主的 role_brief / input.goal 组合作答请求；无可作答问题则以错误完成闭环。
-        成功发出请求返回 True；无可作答问题以错误完成并返回 False。
-        """
         if not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_complete(

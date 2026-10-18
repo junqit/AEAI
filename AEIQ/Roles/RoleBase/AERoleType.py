@@ -48,13 +48,8 @@ AE_ROLE_HIERARCHY: List[AEFlowRole] = [
 AE_LEAF_ROLES: set = {AEFlowRole.llm, AEFlowRole.script}
 
 
+# 返回严格低于 role 的所有角色（按层级从上到下）
 def roles_below(role: AEFlowRole) -> List[AEFlowRole]:
-    """返回严格低于 role 的所有角色（按层级从上到下）。
-
-    expert → [workgroup, employee, task, llm, script]；workgroup → [employee, task, llm, script]；
-    employee → [task, llm, script]；task → [llm, script]；
-    llm/script → []（叶子，不可再分解）。
-    """
     if role in AE_LEAF_ROLES:
         return []
     try:
@@ -82,8 +77,8 @@ class AERoleParamInfo:
     responsibility: str
     workflow_rule: str = ""  # 是否需要拆解（空=不拆解，非空=通用拆解规则）
 
+    # 返回参数信息的 map 形态（枚举转字符串）
     def to_map(self) -> dict:
-        """返回参数信息的 map 形态（枚举转为字符串，便于日志 / 序列化）。"""
         return {
             "role": self.role.value,
             AE_TITLE: self.title,
@@ -156,8 +151,8 @@ ROLE_PARAMS: Dict[AEFlowRole, AERoleParamInfo] = {
 }
 
 
+# 按 AEFlowRole 取其默认参数信息；未注册抛 KeyError
 def get_role_param(role: AEFlowRole) -> AERoleParamInfo:
-    """按 AEFlowRole 取其默认参数信息；未注册时抛出 KeyError。"""
     return ROLE_PARAMS[role]
 
 
@@ -181,13 +176,8 @@ AE_ROLE_IRON_LAW_NO_TOOL = (
 _IRON_LAW_TOOL_ROLES: set = {AEFlowRole.employee, AEFlowRole.task, AEFlowRole.script}
 
 
+# 按角色能力返回适配的铁律文本（工具角色/协调角色不同版）
 def get_role_iron_law(role) -> str:
-    """按角色能力返回适配的铁律文本，供 role_brief 拼接。
-
-    直接用工具的角色（employee/task/script）用「必须通过工具拉取」版；
-    协调或无工具角色（expert/workgroup/llm 及入口 refiner role=None）用「交由其他角色处理」版，
-    与各角色既有能力一致，避免「llm 不获取网络」与「必须工具拉取」的矛盾。
-    """
     if role in _IRON_LAW_TOOL_ROLES:
         return AE_ROLE_IRON_LAW
     return AE_ROLE_IRON_LAW_NO_TOOL

@@ -22,8 +22,8 @@ class AERole:
         self.responsibility: str = ""    # 职责要求
         self.rolePrompt: str = ""        # 角色 prompt
 
+    # 打印基础信息：角色描述、deepth、title/responsibility、问题与任务
     def print_info(self) -> None:
-        """打印基础信息：角色描述、deepth、title/responsibility、问题（content）、明确的任务（goal）。"""
         role_desc = ""
         if self.role is not None:
             role_desc = f"{self.role.role.value}（{self.role.title}：{self.role.responsibility}）"

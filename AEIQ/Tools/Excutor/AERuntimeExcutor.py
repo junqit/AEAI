@@ -50,83 +50,49 @@ class AERuntimeExcutor:
 
     # ==================== 注册 ====================
 
+    # 默认方式注册：持久映射，不会被 exec 自动清除
     def add_default(self, funcident: str, script: str, target) -> None:
-        """默认方式注册：持久映射，不会被 exec 自动清除。
-
-        Args:
-            funcident: 方法标识（字符串键）
-            script: 功能性方法名（字符串），内部经 method_call 拼成脚本
-            target: 方法的 self，执行时作为 AE_SELF 注入 namespace
-        """
         self._default[funcident] = _Entry(self.method_call(script), target)
 
+    # 临时方式注册：优先于 default，exec 执行后自动清除
     def add_temporary(self, funcident: str, method: str, target) -> None:
-        """临时方式注册：优先于 default，exec 执行后自动清除。
-
-        Args:
-            funcident: 方法标识（字符串键）
-            method: 功能性方法名（字符串），内部经 method_call 拼成脚本
-            target: 方法的 self，执行时作为 AE_SELF 注入 namespace
-        """
         self._temporary[funcident] = _Entry(self.method_call(method), target)
 
+    # 移除默认注册
     def remove_default(self, funcident: str) -> None:
-        """移除默认注册。"""
         self._default.pop(funcident, None)
 
+    # 移除临时注册（未执行也会清除）
     def remove_temporary(self, funcident: str) -> None:
-        """移除临时注册（未执行也会清除）。"""
         self._temporary.pop(funcident, None)
 
+    # 清空全部临时注册
     def clear_temporary(self) -> None:
-        """清空全部临时注册。"""
         self._temporary.clear()
 
     # ==================== 查询 ====================
 
+    # 取注册项：temporary 优先，其次 default；未注册时 (None, False)
     def get(self, funcident: str) -> Tuple[Optional[_Entry], bool]:
-        """取注册项：temporary 优先，其次 default。
-
-        Returns:
-            (entry, is_temporary)：未注册时 (None, False)
-        """
         if funcident in self._temporary:
             return self._temporary[funcident], True
         if funcident in self._default:
             return self._default[funcident], False
         return None, False
 
+    # 是否已注册（default 或 temporary）
     def contains(self, funcident: str) -> bool:
-        """是否已注册（default 或 temporary）。"""
         return funcident in self._temporary or funcident in self._default
 
     # ==================== 执行 ====================
 
+    # 拼接方法调用脚本：AE_RESULT = AE_SELF.method(AE_INNER)
     @staticmethod
     def method_call(method: str) -> str:
-        """拼接默认方法调用脚本：__ae_result__ = self.<method>(inner)。
-
-        将方法返回值赋给 AE_RESULT，供 exec 读取后判断/打印。
-        用 AE_SELF / AE_INNER / AE_RESULT 常量拼接，避免脚本与 namespace 键名漂移。
-        """
         return f"{AE_RESULT} = {AE_SELF}.{method}({AE_INNER})"
 
+    # 按 funcident 查找注册项并 exec 执行；temporary 执行后自动清除；未注册抛 KeyError
     def exec(self, funcident: str, inner):
-        """按 funcident 查找注册项并 exec 执行，获取方法返回结果并判断/打印。
-
-        注册时绑定的 target 作为 AE_SELF 注入，inner 作为 AE_INNER 直接注入 namespace；
-        方法返回值经 AE_RESULT 取回，按 bool 判断执行状态并打印日志；temporary 注册执行后自动清除。
-
-        Args:
-            funcident: 方法标识
-            inner: 传入数据，注入 namespace 的 AE_INNER
-
-        Returns:
-            方法的执行结果（通常为 bool：True=当前数据处理完成，False/其他=未完成或异常）
-
-        Raises:
-            KeyError: funcident 未注册
-        """
         entry, is_temporary = self.get(funcident)
         if entry is None:
             raise KeyError(f"未注册的 funcident: {funcident!r}")

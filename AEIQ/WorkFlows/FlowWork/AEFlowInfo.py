@@ -9,7 +9,6 @@ output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构�
 根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 on_flow_start 设置。
 """
 import uuid
-from enum import Enum
 from typing import Optional
 
 from .AEFlowInput import AEFlowInput, AEFlowStatus
@@ -36,31 +35,18 @@ AE_CONFIRM = "confirm"
 AE_funcationkey = "excutor"
 
 
-class AEFlowType(Enum):
-    """Flow 类型：标注 flow 在子 flow 树中的角色。
-
-    - intermediate: 中间过程——只执行自身任务，完成后直接返回结果，不汇总子 flow。
-    - final: 最后过程——等待所有子 flow 完成后汇总（summarize_to_llm）。
-    """
-    intermediate = 1  # 中间过程：只执行
-    final = 2         # 最后过程：汇总所有子 flow
-
-
 class AEFlowInfo:
     """Flow 元信息：标识、输入/输出数据与执行状态。"""
 
+    # Flow 元信息初始化。
+    # flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
+    #   generateFlowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
+    # ident: flow 标识；默认空字符串，为空时内部生成短 ident。外部可显式传入以便与
+    #   flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
+    #   子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
+    # flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，
+    #   未传时仍由 on_flow_start 设置。命名沿用 on_flow_start 的 flowInput 约定。
     def __init__(self, flowOutput: AEFlowOutput, ident: str = "", flowInput: Optional[AEFlowInput] = None):
-        """Flow 元信息初始化。
-
-        Args:
-            flowOutput: 本 flow 输出结构（AEFlowOutput），创建时必传；其 out_schema 经
-                        generateFlowOutput(complete) 作为 llm_out 交 LLM 填充，回程按其中的 ident 路由。
-            ident: flow 标识；默认空字符串，为空时内部生成短 ident。外部可显式传入以便与
-                   flowOutput.out_schema.ident 对齐（如根 flow 需 complete 回程路由到自身）。
-                        子 flow 应显式填父 flow.ident 以便 complete 结果路由回父 flow。
-            flowInput: flow 输入数据（AEFlowInput），默认可不传（None）；传入则作为 self.input 初始值，
-                        未传时仍由 on_flow_start 设置。命名沿用 on_flow_start 的 flowInput 约定。
-        """
         if not ident:
             ident = uuid.uuid4().hex
         super().__init__()
@@ -73,23 +59,18 @@ class AEFlowInfo:
         self.status: AEFlowStatus = AEFlowStatus.default
 
         self.deepth: int = 1
-        self.flow_type: AEFlowType = AEFlowType.intermediate
+        self.group_ident: str = ""
 
     @property
     def ident(self) -> str:
-        """flow 标识（只读）"""
+        # flow 标识（只读）
         return self._ident
 
+    # 返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
+    # functional: 功能性方法名，直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey 路由到对应方法。
+    # llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；
+    #   其余阶段用默认占位 {AE_CONTENT: llm_generate("生成的答案")}。
     def generateFlowOutput(self, functional: AEFunctional) -> AEFlowOutput:
-        """返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
-
-        Args:
-            functional: 功能性方法名，直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey
-                        路由到对应方法。
-
-        llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；
-        其余阶段用默认占位 {AE_CONTENT: llm_generate("生成的答案")}。
-        """
         from Context.Context.AELLMPayload import llm_generate
 
         if functional == AEFunctional.receive_summarize_result and self.output is not None:

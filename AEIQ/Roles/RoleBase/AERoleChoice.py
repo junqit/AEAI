@@ -25,12 +25,8 @@ class AERoleChoiceFunction(AEFunctional):
 class AERoleChoice(AERole):
     """角色选择能力 mixin：据已生成的角色名称与解决问题的能力，从可选角色中选一个匹配角色。"""
 
+    # 据角色名称与能力，从可选角色中选一个匹配的
     def requestRoleChoice(self) -> None:
-        """据已生成的角色名称与解决问题的能力，从全部角色中选一个匹配的来处理当前问题。
-
-        角色名称（title）与解决问题的能力（responsibility）已生成；据此从可选角色中
-        选一个其基本能力匹配该问题的角色。LLM 返回角色枚举之一。不得拒绝或推诿。
-        """
         input_role = self.input.get_role() if self.input is not None else None
         candidates = roles_below(input_role) if input_role is not None else list(ROLE_PARAMS.keys())
         question = ((self.input.get_goal() or self.input.get_content()) if self.input is not None else "")
@@ -73,8 +69,8 @@ class AERoleChoice(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 接收选中的角色设为 self.role；成功 True，无效 False
     def receiveRoleChoice(self, data: dict) -> bool:
-        """接收选中的角色，设为当前角色能力（self.role）。成功返回 True；无效返回 False（不闭环）。"""
         if not isinstance(data, dict):
             data = {}
         role_str = (data.get(AE_ROLE) or "").strip()

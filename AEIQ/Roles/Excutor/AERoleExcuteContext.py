@@ -29,13 +29,8 @@ class AERoleExcuteContext:
     汇总结果并推进到执行/拆解（_proceed_after_context）；无缺失则直接推进。
     """
 
+    # 请求 LLM 识别所需背景信息与参数；无目标则直接推进。
     def requestContext(self) -> None:
-        """请求 LLM 识别并准备解决当前问题所需的背景信息与必要参数。
-
-        根据当前目标（goal）与角色能力（role_brief），让 LLM 分析解决该问题需要哪些
-        背景信息与必要参数，并尽可能从已知上下文中补全。回包经 receiveContext 处理。
-        无目标时跳过 LLM 请求，直接推进。
-        """
         goal = (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""
         if not goal:
             logger.warning("[%s][d=%s] 无目标，跳过背景信息准备", self.title, self.deepth)
@@ -64,12 +59,8 @@ class AERoleExcuteContext:
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 接收参数存入 input.context；有缺失则创建子 flow 解决，否则直接推进。
     def receiveContext(self, data: dict) -> bool:
-        """接收准备好的必要信息与参数，存入 self.input（context）。
-
-        仅存储必要参数（params，key-value），不含 background 等问题相关信息。
-        若有缺失信息（missing），创建子 flow 逐个解决后再推进；无缺失则直接推进到执行/拆解。
-        """
         if isinstance(data, dict):
             params = data.get("params", {})
             missing = data.get("missing", [])
@@ -89,8 +80,8 @@ class AERoleExcuteContext:
             self._proceed_after_context()
         return True
 
+    # 为每个缺失信息创建子 flow 串行解决，完成后汇总推进。
     def _dispatch_missing(self, missing: list) -> None:
-        """为每个缺失信息创建子 AERoleExcutor 解决（串行），全部完成后由 receive_summarize_result 汇总推进。"""
         from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环
         first_child = None
         for item in missing:
@@ -113,8 +104,8 @@ class AERoleExcuteContext:
             self._resolving_missing = False
             self._proceed_after_context()
 
+    # 若正在解决缺失信息，将结果纳入 context 后推进；否则正常完成。
     def receive_summarize_result(self, data: dict) -> bool:
-        """覆写汇总回包：若正在解决缺失信息，将解决结果纳入 self.input（context） 后推进到执行/拆解；否则正常完成。"""
         if getattr(self, "_resolving_missing", False):
             self._resolving_missing = False
             answer = data.get(AE_CONTENT, "") if isinstance(data, dict) else str(data)
@@ -125,6 +116,6 @@ class AERoleExcuteContext:
             return True
         return super().receive_summarize_result(data)
 
+    # 背景信息准备完成后推进到执行或拆解；子类覆写以定制。
     def _proceed_after_context(self) -> None:
-        """背景信息准备完成后，推进到执行（叶子）或拆解（协调角色）。子类覆写以定制。"""
         pass

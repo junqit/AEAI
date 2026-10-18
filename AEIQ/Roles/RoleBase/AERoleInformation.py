@@ -21,8 +21,8 @@ class AERoleInformation(AERole):
     """角色信息能力 mixin：提供 title / responsibility / rolePrompt 生成请求。
     角色信息属性由基类经 cooperative __init__ 持有。"""
 
+    # 请求 LLM 生成 title / responsibility，回包经 receiveRoleInfomation 写入
     def requestRoleInformation(self) -> None:
-        """请求 LLM 生成 title / responsibility：据当前问题生成「工作名称」与「职责范围」。回包经 receiveRoleInfomation 写入。"""
         messages = []
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
@@ -46,9 +46,8 @@ class AERoleInformation(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 写入 title / responsibility；均非空返回 True，否则 False（不闭环）
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """写入 title / responsibility（不串联、不闭环；由覆写层判断并推进）。
-        成功（均非空）返回 True；任一为空返回 False（不在此闭环，由覆写层错误完成）。"""
         if not isinstance(data, dict):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
@@ -57,8 +56,8 @@ class AERoleInformation(AERole):
             return False
         return True
 
+    # 基于 title + responsibility 生成 rolePrompt，回包经 receiveRolePrompt 写入
     def requestRolePrompt(self) -> None:
-        """基于 title + responsibility 生成角色专用 rolePrompt（与具体问题无关）。回包经 receiveRolePrompt 写入。"""
         messages = []
         role_brief = self.role_brief()
         if len(role_brief) > 0:
@@ -78,9 +77,8 @@ class AERoleInformation(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 存入 self.rolePrompt；非空返回 True，否则 False（不闭环）
     def receiveRolePrompt(self, data: dict) -> bool:
-        """存入 self.rolePrompt（不串联、不闭环；由覆写层判断并推进）。
-        成功（非空 map）返回 True；非 map 或 rolePrompt 为空返回 False（不在此闭环）。"""
         if not isinstance(data, dict):
             data = {}
         prompt = data.get("rolePrompt") or ""

@@ -42,26 +42,16 @@ class AEFlowCompletEvent(str, Enum):
 class AEFlowDelegate(Protocol):
     """Flow 委托协议：Flow 内部信息向外流转的出口"""
 
+    # 添加子 flow
     def add_flow(self, flow: 'AEFlowInterface') -> None:
-        """
-        添加子 flow。
-
-        Args:
-            flow: 待添加的子 flow
-        """
         ...
 
+    # 发送 AELLMPayload 调用 LLM（无返回值）
     def flow_send_llm_request(self, payload: 'AELLMPayload') -> None:
-        """
-        发送 AELLMPayload 结构体调用 LLM（无返回值）。
-
-        Args:
-            payload: AELLMPayload 结构体
-        """
         ...
 
+    # 接收 flow 完成结果
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
-        """接收 flow 完成结果（AEFlowOutput）。"""
         ...
 
 
@@ -74,19 +64,19 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 接口方法实现（add_flow）====================
 
+    # 启动 flow：切到 processing；flowInput 非空时置 input
     def on_flow_start(self, flowInput=None) -> bool:
-        """启动 flow：切到 processing；flowInput 非空时置 input（为空则不覆盖已有 input）。"""
         self.status = AEFlowStatus.processing
         if flowInput is not None:
             self.input = flowInput
         return True
 
+    # processing 阶段默认暂不处理，子类覆写
     def on_flow_processing(self, flowInput) -> bool:
-        """processing 阶段：默认暂不处理。子类覆写以处理中间消息。"""
         return False
 
+    # 接收 flow 完成通知，按 ident 路由
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
-        """接收 flow 完成通知：按 ident 路由——命中自身则检查全部子流完成→汇总；命中子 flow 则转发。"""
         if flowOutput.ident == self.ident:
             if not self._flows:
                 return True
@@ -110,12 +100,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                      self.title, self.deepth, flowOutput.ident)
         return False
 
+    # 添加子 flow：设 delegate、存入 _flows、设 deepth
     def add_flow(self, sub_flow) -> None:
-        """添加子 flow。
-
-        添加前把 sub_flow.delegate 设置为当前 flow（弱引用）；以 sub_flow.ident 为 key 存入有序 map。
-        子 flow 的 deepth 设为当前 flow.deepth + 1。
-        """
         sub_flow.set_delegate(self)
         sub_flow.deepth = self.deepth + 1
 
@@ -128,18 +114,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 协议方法实现（AEFlowDelegate）====================
 
+    # 发送 AELLMPayload 调用 LLM；发起方置 deepth 触发上级串联，用 ident 包装 out_schema 向上转发
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
-        """
-        发送 AELLMPayload 调用 LLM（无返回值）。本方法兼发起方与各层上级中继：
-
-        - payload.deepth 未设置（发起方）：当前目标上下文为第 N 级（N=本 flow deepth），请仅回答本级任务；
-          置 payload.deepth=N 触发上级逐层追加（串联任务链）。
-        - payload.deepth 已设置（上级中继）：第 M 级目标：goal，此目标不作为问题，只是对第 M+1 级目标上下文的约束。
-        用当前 flow 的 ident 包装 payload.out_schema，再向上转发（回程按 ident 路由回本 flow）。
-
-        Raises:
-            RuntimeError: delegate 未设置时
-        """
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
         goal = (self.input.get_goal() if self.input is not None else "")
@@ -159,12 +135,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 结果汇总编排 ====================
 
+    # 收集所有子 flow 的 outResult 交 LLM 总结，所有子 flow 完成时调用
     def summarize_to_llm(self) -> None:
-        """收集所有子 flow 的 outResult 放入 messages，交 LLM 总结形成最终结论。
-
-        汇总编排：summarize_extend_messages（hook）+ 各子 flow outResult_summary（hook）+
-        summarize_prompt（hook）。由 receive_flow_complete 在所有子 flow 完成时调用。
-        """
         logger.info(
             "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
             type(self).__name__, self.deepth, len(self._flows), len(self._flows),
@@ -192,12 +164,12 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 汇总扩展 message hook，默认空
     def summarize_extend_messages(self) -> list:
-        """汇总扩展 message（hook）：返回需追加到汇总 messages 头部的额外消息列表。默认空。"""
         return []
 
+    # 汇总 user 指令 hook，子类可覆写
     def summarize_prompt(self) -> str:
-        """汇总 user 指令（hook）：子类可覆写以定制口吻。"""
         goal = (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""
         prompt = "以上是各子任务的执行结果与结论。请综合全部子任务的结果，输出一份完整的最终结论。"
         if goal:
@@ -211,6 +183,6 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         )
         return prompt
 
+    # 接收汇总结果，调 flow_complete 完成本 flow
     def receive_summarize_result(self, data: dict) -> bool:
-        """接收 summarize_to_llm 的返回结果，调 flow_complete 完成本 flow。"""
         return self.flow_complete(data)

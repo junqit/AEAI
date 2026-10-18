@@ -51,12 +51,12 @@ class AEBaseContext:
     def context_config(self) -> Dict[str, str]:
         return {AE_IDENT: self.ident, "space": self.space, "type": self.context_type.value}
 
+    # 接收 LLM 回复数据
     def receive_llm_response(self, data: dict) -> None:
-        """接收 LLM 回复数据。"""
         pass
 
+    # 创建执行器并提交到并行队列执行
     def receive_chat(self, question: AENetQues, req: AENetReqInfo) -> None:
-        """创建执行器并提交到并行队列执行。"""
         if question is None:
             logger.error("[Context] 收到的 AENetQues 为空，忽略")
             return
@@ -75,8 +75,8 @@ class AEBaseContext:
 
     # ==================== 协议实现 ====================
 
+    # 收到完成的 flow 输出后转为 reply 发送响应
     def receive_flow_complete(self, flowOutput: AEFlowOutput) -> bool:
-        """收到完成的 flow 输出后直接 response——outResult 转为 reply 发送响应。"""
         chat = self._chat_map.get(flowOutput.ident)
         if chat is None:
             logger.warning("[Context] complete 但 _chat_map 未找到 chat(ident=%s)", flowOutput.ident)
@@ -93,12 +93,12 @@ class AEBaseContext:
         self.send_response(rsp)
         return True
 
+    # 添加子 flow
     def add_flow(self, flow) -> None:
-        """添加子 flow。"""
         pass
 
+    # 转发 LLM 请求，用 context.ident 包装 out_schema
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
-        """转发 LLM 请求，用 context.ident 包装 out_schema。"""
         payload.out_schema = {AE_IDENT: self.ident, "type": self.context_type.value, AE_LLM_OUT: payload.out_schema}
         self.send_llm_request(payload)
 

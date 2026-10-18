@@ -17,16 +17,16 @@ class AEFlowOutput:
         self.out_schema: dict = out_schema or {}
         self.outResult: str = outResult
 
+    # 向 out_schema 首层添加参数
     def add_param(self, key: str, value: Any) -> None:
-        """向 out_schema 首层直接添加一个参数：key -> value。"""
         self.out_schema[key] = value
 
+    # 向 llm_out 添加占位参数
     def add_llm_out(self, key: str, description: str) -> None:
-        """向 llm_out 直接添加一个占位参数：key -> llm_generate(description)。"""
         from Context.Context.AELLMPayload import llm_generate
         llm_out = self.out_schema.setdefault(AE_LLM_OUT, {})
         llm_out[key] = llm_generate(description)
 
+    # 替换 out_schema 内的 llm_out 字段
     def set_llm_out(self, llm_out: dict) -> None:
-        """直接替换 out_schema 内的 llm_out 字段（整体覆盖）。"""
         self.out_schema[AE_LLM_OUT] = llm_out

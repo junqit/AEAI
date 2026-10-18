@@ -39,50 +39,28 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
 
     # ==================== 接口实现 ====================
 
+    # 注入 delegate（弱引用）
     def set_delegate(self, delegate: "AEFlowDelegate") -> None:
-        """注入 delegate（弱引用持有，避免与子 flow 形成循环引用）"""
         self.delegate = weakref.proxy(delegate) if delegate is not None else None
 
+    # 注册临时功能性方法，返回随机 funcident
     def registerFunctional(self, method: AEFunctional) -> str:
-        """注册临时功能性方法。funcident 为随机字符串键，method 为方法名字符串。
-
-        Args:
-            method: 方法名字符串（如 flow_receive_*），executor 内部经 method_call 拼 script
-
-        Returns:
-            随机生成的 funcident，供写入 out_schema 的 AE_funcationkey 字段
-        """
         funcident = uuid.uuid4().hex
         self.excutor.add_temporary(funcident, method, self)
         return funcident
 
+    # 收到结果置 default 状态，子类可覆写
     def flow_receive_default(self, out_schema: "Optional[dict]") -> bool:
-        """
-        status=default：收到结果数据，置本 flow 状态为 default。子类可覆写做业务处理。
-
-        Returns:
-            bool: 当前数据处理是否完成（True=已处理）
-        """
         self.status = AEFlowStatus.default
         return True
 
+    # 收到结果置 processing 状态，子类可覆写
     def flow_receive_processing(self, out_schema: "Optional[dict]") -> bool:
-        """
-        status=processing：收到结果数据，置本 flow 状态为 processing。子类可覆写做业务处理。
-
-        Returns:
-            bool: 当前数据处理是否完成（True=已处理）
-        """
         self.status = AEFlowStatus.processing
         return True
 
+    # 返回首个 default 状态的子 flow，无则 None
     def nextFlow(self) -> "Optional[AEFlowInterface]":
-        """
-        获取下一个待执行的子 flow：按 add_flow 顺序首个状态为 default 的子 flow。
-
-        Returns:
-            AEFlowInterface: 首个 default 状态的子 flow；均非 default 时返回 None
-        """
         for flow in self._flows.values():
             if flow.status == AEFlowStatus.default:
                 return flow
@@ -90,15 +68,12 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
 
     # ==================== 描述信息 hook（子类覆写提供更丰富描述）====================
 
+    # flow 描述信息 hook，子类可覆写
     def flow_description(self) -> str:
-        """flow 描述信息（hook）：返回 [d=deepth]，子类覆写可追加 role / title。"""
         return f"[d={self.deepth}]"
 
+    # 返回本 flow 完成信息（含子 flow 递归）
     def flow_complete_info(self) -> dict:
-        """本 flow 的完成信息（含子 flow 递归），供上层汇总成整体 JSON 树。
-
-        自拼 ident/title/responsibility/question/goal/answer 与子 flow 的 flow_complete_info；此处安全取值。
-        """
         info = {
             "ident": self.ident,
             "title": getattr(self, "title", "") or "",

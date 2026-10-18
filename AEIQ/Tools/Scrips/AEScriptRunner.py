@@ -39,8 +39,8 @@ class AEScriptRunner:
     interpreter: str = ""
     flag: str = ""
 
+    # 构建执行命令；macOS 下用 sandbox-exec 包裹强制全只读
     def _build_command(self, script_content: str) -> list:
-        """构建执行命令；macOS 下用 sandbox-exec 包裹强制全只读，否则原样执行。"""
         cmd = [self.interpreter, self.flag, script_content]
         if platform.system() == "Darwin":
             return ["sandbox-exec", "-p", _READ_ONLY_SANDBOX_PROFILE, *cmd]
@@ -54,19 +54,8 @@ class AEScriptRunner:
             _sandbox_unavailable_warned = True
         return cmd
 
+    # 执行脚本内容返回 stdout；超时默认 30s，None 不限制；退出码非 0 或未配置抛 RuntimeError
     def run(self, script_content: str, timeout: Optional[float] = 30) -> str:
-        """执行脚本内容，返回 stdout。
-
-        Args:
-            script_content: 脚本文本。
-            timeout: 超时秒数；默认 30 秒，None 表示不限制。
-
-        Returns:
-            脚本 stdout。
-
-        Raises:
-            RuntimeError: 脚本退出码非 0 或解释器未配置。
-        """
         if not self.interpreter or not self.flag:
             raise RuntimeError(f"{type(self).__name__} 未配置 interpreter/flag")
         command = self._build_command(script_content)
@@ -135,8 +124,8 @@ RUNNER_MAP: Dict[AEScriptType, Type[AEScriptRunner]] = {
 }
 
 
+# 按脚本类型取执行器实例；未知类型抛 ValueError
 def get_runner(script_type: str) -> AEScriptRunner:
-    """按脚本类型取执行器实例；未知类型抛 ValueError。"""
     cls = RUNNER_MAP.get(script_type)
     if cls is None:
         raise ValueError(f"未知脚本类型: {script_type!r}，应为 {tuple(RUNNER_MAP.keys())} 之一")

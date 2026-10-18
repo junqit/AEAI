@@ -25,12 +25,8 @@ class AERoleWorkflowFunction(AEFunctional):
 class AERoleWorkflow(AERole):
     """任务拆解 mixin：据已优化问题与当前角色能力范围，拆成多个任务。"""
 
+    # 据问题与角色能力拆解为最小颗粒度串行任务。
     def requestWorkflow(self) -> None:
-        """据已优化的问题（goal）与当前角色能力范围（role_brief），拆解成多个任务。
-
-        每项任务含 goal（任务目标）与 expected_output（任务需输出内容）。
-        须确保拆解出的任务合起来能完整解决用户问题，且每项落在当前角色能力范围内。
-        """
         question = ((self.input.get_goal() or self.input.get_content()) if self.input is not None else "")
         messages = []
         role_brief = self.role_brief()
@@ -65,9 +61,8 @@ class AERoleWorkflow(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
+    # 接收任务列表并派发；空则错误完成闭环。
     def receiveWorkflow(self, data: dict) -> bool:
-        """接收拆解出的任务列表：解析+打印+派发（经 _dispatch_workflow_tasks hook）；
-        空或无可派发则以错误完成闭环。成功派发返回 True，否则 False。"""
         tasks = data.get("tasks") if isinstance(data, dict) else None
         if tasks is None and isinstance(data, str):
             tasks = [data] if data.strip() else []
@@ -94,10 +89,8 @@ class AERoleWorkflow(AERole):
             return False
         return True
 
+    # 为每个任务创建子 flow 串行派发；返回派发数量。
     def _dispatch_workflow_tasks(self, tasks: list) -> int:
-        """任务派发：为每个任务创建子 AERoleExcutor（自行选角色执行），把 goal 作为 content 传入。
-        子 flow 的 flowOutput.ident 取当前 self.ident（子 flow 为本 flow 的子任务，完成回程路由回本 flow）。
-        返回派发的子任务数量（0 表示无可派发，由 receiveWorkflow 据此错误完成闭环）。"""
         from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环（AERoleExcutor → AERoleBase → 本模块）
         dispatched = 0
         first_child = None

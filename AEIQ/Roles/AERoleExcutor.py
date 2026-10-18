@@ -26,8 +26,8 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, A
     叶子自执行、任务拆解由基类 AERoleWorkflow._dispatch_workflow_tasks 直接派发子 AERoleExcutor。
     """
 
+    # 启动 flow；基类未启动则错误完成避免卡死。
     def on_flow_start(self, flowInput=None) -> bool:
-        """启动：基类置 input；未启动则错误完成，避免父 flow 等待卡死。"""
         if not super().on_flow_start(flowInput):
             logger.warning("[%s][d=%s] on_flow_start 失败：基类未启动", self.title, self.deepth)
             self.flow_complete(
@@ -38,10 +38,8 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, A
         self.requestRoleInformation()
         return True
 
+    # 接收角色信息；成功推进问题优化，失败则错误完成闭环。
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """接收角色信息：判断基类处理结果决定下一步（闭环 / 推进）。
-        基类写入 title/responsibility，成功返回 True；失败（任一为空）返回 False（基类不闭环）。
-        成功则推进 requestOptimizeInput（问题优化）；失败则以错误完成本 flow 闭环避免卡死，并返回 False 如实反映失败。"""
         result = super().receiveRoleInfomation(data)
         if not result or not self.title or not self.responsibility:
             logger.warning("[%s][d=%s] title 或 responsibility 为空，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -54,8 +52,8 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, A
         self.requestOptimizeInput()
         return result
 
+    # 接收角色选择；叶子角色自身执行，协调角色按规则拆解。
     def receiveRoleChoice(self, data: dict) -> bool:
-        """接收角色选择：基类设 self.role；叶子角色自身执行，协调角色按规则拆解。"""
         result = super().receiveRoleChoice(data)
         if not result or self.role is None:
             logger.warning("[%s][d=%s] 角色选择失败，以错误完成本 flow 避免卡死", self.title, self.deepth)
@@ -80,10 +78,8 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, A
             )
         return result
 
+    # 叶子角色自身执行：llm→requestLLMAnswer，script→start_flow。
     def _execute_leaf(self, role_enum: AEFlowRole) -> bool:
-        """叶子角色（llm/script）自身执行：llm→requestLLMAnswer（AERoleExcuteLLM），
-        script→start_flow（AERoleExcuterScript）。前置链路已就绪 title/goal，直接执行不再派发子 flow。
-        回包经基类 receive_summarize_result（llm）或脚本循环各 receive* 回包（script）完成本 flow。"""
         if role_enum == AEFlowRole.llm:
             logger.info("[%s][d=%s] 叶子角色 llm 自身作答", self.title, self.deepth)
             return self.requestLLMAnswer()
@@ -100,8 +96,8 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, A
         )
         return False
 
+    # 接收优化后目标；为空则错误完成，否则推进角色选择。
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """接收角色目标：基类存储后 input.goal 为空则错误完成；否则调 requestRoleChoice 推进（角色选择）。"""
         result = super().receiveOptimizeInput(data)  # 存储 input.goal
         if not result or not (self.input.get_goal() if self.input is not None else ""):
             logger.warning("[%s][d=%s] input.goal 为空，以错误完成本 flow 避免卡死",

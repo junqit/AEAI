@@ -21,12 +21,8 @@ class AEEnvParamType(Enum):
     system = "system"
 
 
+# LLM 生成占位符：<|描述|>；发送时作模板占位，回包由 LLM 替换
 def llm_generate(description: str = "描述信息") -> str:
-    """LLM 生成占位符：<|描述|>。
-
-    <||> 之间的 description 用来说明该位置应填充什么内容，
-    发送时作为模板占位，回包由 LLM 根据 description 生成实际内容替换。
-    """
     return f"<|{description}|>"
 
 
@@ -34,8 +30,8 @@ def llm_generate(description: str = "描述信息") -> str:
 LLM_PLACEHOLDER_RE = re.compile(r"^<\|(.+)\|>$")
 
 
+# 判断 value 是否为 LLM 占位符（<|描述|> 形式）
 def is_llm_placeholder(value: Any) -> bool:
-    """判断 value 是否为 LLM 占位符（<|描述|> 形式）。"""
     return isinstance(value, str) and bool(LLM_PLACEHOLDER_RE.match(value))
 
 
@@ -62,30 +58,23 @@ class AELLMPayload:
 
     # ==================== env_params 管理（私有字段，外部仅经以下方法访问） ====================
 
+    # 添加环境参数；已存在则跳过
     def add_env_param(self, param: AEEnvParamType) -> None:
-        """添加环境参数；已存在则跳过。"""
         if param not in self._env_params:
             self._env_params.append(param)
 
+    # 移除环境参数；不存在则跳过
     def remove_env_param(self, param: AEEnvParamType) -> None:
-        """移除环境参数；不存在则跳过。"""
         if param in self._env_params:
             self._env_params.remove(param)
 
+    # 返回当前携带的环境参数列表（副本）
     @property
     def env_params(self) -> List[AEEnvParamType]:
-        """返回当前携带的环境参数列表（副本）。"""
         return list(self._env_params)
 
+    # 取出 out_schema 最内层 llm_out 内容，按 AE_CONTENT 收敛，隐去 ident
     def _extract_content_template(self):
-        """取出 out_schema 最内层 llm_out（内容），并按 AE_CONTENT 收敛，确保 LLM 不接触 ident：
-
-        - 沿 llm_out 下钻到最内层内容（占位符所在层）。
-        - 若内容为含 AE_CONTENT 的 dict（如 complete 阶段 {ident, reply: <|..|>}），
-          只取 {AE_CONTENT: <模板>}，隐去 ident 等路由字段——LLM 只填 AE_CONTENT。
-        - 否则（内容无 AE_CONTENT，如 {"result": <|..|>} 或任务数组）取整个内容；
-          这些内容本身不含 ident，可直接发给 LLM。
-        """
         node = self.out_schema
         content = node
         while isinstance(node, dict) and AE_LLM_OUT in node:
@@ -123,12 +112,8 @@ class AELLMPayload:
             "temperature": self.temperature,
         }
 
+    # 两步流程·第二步：把 LLM 生成内容回填到信封，含 ident 逐字保留
     def fill_content(self, filled_content) -> dict:
-        """两步流程·第二步：把 LLM 生成的内容回填到信封，返回完整信封（含可信 ident，逐字保留）。
-
-        - 若最内层内容为含 AE_CONTENT 的 dict：仅回填 AE_CONTENT，ident 等路由字段保持不变。
-        - 否则：用 LLM 生成的内容整体替换最内层 llm_out（此类内容不含 ident）。
-        """
         import copy
         envelope = copy.deepcopy(self.out_schema)
         node = envelope

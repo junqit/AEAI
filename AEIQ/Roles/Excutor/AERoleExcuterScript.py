@@ -71,14 +71,13 @@ class AERoleExcuterScript:
 
     type: str = ""
 
+    # 流程入口：初始化 attempts 后选型→生成→执行→验证循环。
     def start_flow(self) -> None:
-        """流程入口：初始化执行记账（attempts）后，LLM 选脚本类型、生成内容并执行
-        （错误/不达标自动重试，循环至通过）。"""
         self.attempts = []
         self._request_script_type()
 
+    # 请求 LLM 按能力与已装工具包选脚本类型。
     def _request_script_type(self) -> None:
-        """请求 LLM 按当前 ruby/python/shell 能力与已安装的工具包，选择最适合实现目标的脚本类型。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
@@ -107,8 +106,8 @@ class AERoleExcuterScript:
         logger.info("[%s][d=%s] 请求 LLM 选择脚本类型", self.title, self.deepth)
         self.flow_send_llm_request(payload)
 
+    # 接收脚本类型，置 self.type 后请求生成内容。
     def receiveScriptType(self, data: dict) -> bool:
-        """接收 LLM 选择的脚本类型，置 self.type 后请求生成脚本内容。"""
         type_value = data.get("type") if isinstance(data, dict) else ""
         type_value = type_value.value if isinstance(type_value, AEScriptType) else type_value
         if type_value not in self.VALID_TYPES:
@@ -119,8 +118,8 @@ class AERoleExcuterScript:
         self._request_script_generate()
         return True
 
+    # 类型已选定，请求 LLM 生成脚本内容。
     def _request_script_generate(self) -> None:
-        """类型已选定，请求 LLM 生成该类型脚本内容以产出目标/期望输出。"""
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
@@ -155,11 +154,8 @@ class AERoleExcuterScript:
         logger.info("[%s][d=%s] 请求 LLM 生成 %s 脚本内容", self.title, self.deepth, self.type)
         self.flow_send_llm_request(payload)
 
+    # 接收脚本内容，创建 attempt 后执行；空脚本以错误完成。
     def receiveScriptGenerate(self, data: dict) -> bool:
-        """接收 LLM 生成的脚本内容（type 已由 receiveScriptType 选定），创建 attempt 后执行。
-
-        每次收到新脚本即创建 AEScriptAttempt（脚本内容唯一存 attempt），执行结果/验证评分均回填到
-        该 attempt；AERoleExcuterScript 不持有脚本内容，当前 attempt = self.attempts[-1]。空脚本以错误完成。"""
         script = data.get("script") if isinstance(data, dict) else None
         if script is None and isinstance(data, str):
             script = data
@@ -176,13 +172,8 @@ class AERoleExcuterScript:
         self._run_script()
         return True
 
+    # 执行当前 attempt 脚本；成功→验证，失败→修正重试。
     def _run_script(self) -> None:
-        """执行当前 attempt（self.attempts[-1]）的脚本；成功回填 stdout 并交 LLM 验证，
-        失败回填 error 并请求 LLM 修正后重试（不限次数）。
-
-        attempt 在收到脚本时已创建（receiveScriptGenerate/receiveScriptFix），此处只回填执行结果；
-        验证评分由 receiveScriptVerify 回填到同一 attempt。循环直至验证通过。
-        """
         from Tools.Scrips.AEScriptRunner import get_runner
         att = self.attempts[-1]
         try:
@@ -199,25 +190,21 @@ class AERoleExcuterScript:
         logger.info("[%s][d=%s] 脚本执行成功(type=%s)", self.title, self.deepth, self.type)
         self._verify(stdout)
 
+    # 组装出站结果：仅验证通过的成功结果。
     def _build_results(self) -> str:
-        """由历次 attempt 组装出站结果：仅验证通过（score≥PASS_SCORE）的成功结果，失败的不返回。"""
         out = []
         for att in self.attempts:
             if att.score is not None and att.score >= self.PASS_SCORE:
                 out.append(att.stdout)
         return "\n".join(out)
 
+    # 以执行结果完成本 flow。
     def _complete(self) -> None:
-        """以执行结果完成本 flow，回传父 flow。outResult 由历次 attempt 组装（每次结果，不论对错）。"""
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
         self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._build_results()})
 
+    # 携带脚本能力与工具包信息；选型前带全部，选型后仅带选定类型。
     def _apply_script_env(self, payload) -> None:
-        """脚本相关 LLM 请求携带脚本能力与已装工具包信息（去掉默认 system 环境）。
-
-        选型前（self.type 未定）携带 python/ruby/shell 全部能力，供 LLM 比较后选型；
-        选型后（self.type 已定）仅携带选定类型对应能力，聚焦上下文、减少无关噪声。
-        """
         from Context.Context.AELLMPayload import AEEnvParamType
         payload.remove_env_param(AEEnvParamType.system)
         type_env = {
@@ -234,11 +221,8 @@ class AERoleExcuterScript:
         else:
             payload.add_env_param(env)
 
+    # 请求 LLM 评判结果（0-100）；≥PASS_SCORE 完成，否则重生成。
     def _verify(self, stdout: str) -> None:
-        """执行成功后请求 LLM 评判结果是否符合目标/期望输出（0-100）。
-
-        ≥PASS_SCORE 才完成；<PASS_SCORE 由 receiveScriptVerify 触发重生成。
-        """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
@@ -268,13 +252,8 @@ class AERoleExcuterScript:
         logger.info("[%s][d=%s] 请求 LLM 验证脚本执行结果", self.title, self.deepth)
         self.flow_send_llm_request(payload)
 
+    # 接收验证评分；≥PASS_SCORE 完成，否则带历次记录请求修正（不含评分）。
     def receiveScriptVerify(self, data: dict) -> bool:
-        """接收 LLM 验证评分：≥PASS_SCORE 完成本 flow；否则带历次执行记录请求 LLM 修正（不含评分）。
-
-        评分与理由回填到最近一次 attempt（记账留存），但不随修正请求交给 LLM——修正请求只带
-        历次脚本内容与执行结果，供 LLM 对照目标定位差距。verify_count / pending_stdout 等
-        均由历次 attempt 派生，不另存字段。
-        """
         score = self._parse_score(data.get("score")) if isinstance(data, dict) else 0
         reason = data.get("reason", "") if isinstance(data, dict) else ""
         if self.attempts:
@@ -297,9 +276,9 @@ class AERoleExcuterScript:
         )
         return True
 
+    # 容错解析 0-100 整数分值；失败返回 0。
     @staticmethod
     def _parse_score(value) -> int:
-        """容错解析 0-100 整数分值：int/float 取整；str 取首个整数；越界夹到 [0,100]；解析失败返回 0。"""
         if isinstance(value, bool):
             return 0
         if isinstance(value, (int, float)):
@@ -311,13 +290,8 @@ class AERoleExcuterScript:
             n = 0
         return max(0, min(100, n))
 
+    # 请求 LLM 修正脚本；include_history=True 带历次记录，否则仅带当前脚本与错误。
     def _request_script_fix(self, problem: str, include_history: bool = False) -> None:
-        """请求 LLM 修正脚本，使其产出目标/期望输出。
-
-        include_history=True（验证不达标触发）：把历次执行的脚本内容与执行结果（不含评分）
-        全部交给 LLM，供其对照目标定位差距后修正；problem 不含分数/理由。
-        include_history=False（执行失败触发）：仅给当前脚本与错误（problem）。
-        """
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         if include_history and self.attempts:
@@ -371,10 +345,8 @@ class AERoleExcuterScript:
                     self.title, self.deepth, "（含历次执行记录）" if include_history else "")
         self.flow_send_llm_request(payload)
 
+    # 接收修正脚本，创建新 attempt 后重新执行。
     def receiveScriptFix(self, data: dict) -> bool:
-        """接收 LLM 修正后的脚本，创建新 attempt 并重新执行。
-
-        修正脚本视为新脚本，创建新 AEScriptAttempt（脚本内容存 attempt），交 _run_script 回填执行结果。"""
         fixed = data.get("script") if isinstance(data, dict) else None
         if fixed is None and isinstance(data, str):
             fixed = data

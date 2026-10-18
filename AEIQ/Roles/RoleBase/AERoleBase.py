@@ -23,11 +23,8 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow
 
     roleParamInfo: Optional[AERoleParamInfo] = None
 
+    # 拼接全部角色的花名册（type/职称/职责），供角色选择等场景使用
     def roleDescription(self) -> str:
-        """角色描述：拼接 ROLE_PARAMS 全部角色的花名册（type / 职称 / 职责），供角色选择等场景使用。
-
-        子类可覆写为仅返回自身角色的描述。
-        """
         lines = []
         for role, info in ROLE_PARAMS.items():
             lines.append(f"- type: {role.value}；职称：{info.title}；职责：{info.responsibility}")
@@ -35,8 +32,8 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow
 
     # ==================== 角色上下文 hook（供 summarize_to_llm 调用）====================
 
+    # 覆写：在基类基础上前置 [role][title]，不存在项不输出
     def flow_description(self) -> str:
-        """覆写：在基类 [d=deepth] 基础上前置 [role][title]，不存在的项不输出。"""
         parts = []
         if self.title:
             parts.append(f"[{self.title}]")
@@ -45,22 +42,15 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow
         parts.append(super().flow_description())
         return "".join(parts)
 
+    # 把 role_brief 作为 system 消息追加到汇总 messages 头部
     def summarize_extend_messages(self) -> list:
-        """覆写汇总扩展消息：把角色身份与能力范围（role_brief）作为 system 消息追加到汇总 messages 头部。
-
-        flow 基类默认返回空列表、不体现 role 信息；角色上下文由此处提供。
-        """
         role_brief = self.role_brief()
         if len(role_brief) > 0:
             return [{AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief}]
         return []
 
+    # 组装身份与能力范围描述，末尾追加角色铁律
     def role_brief(self) -> str:
-        """组装身份与能力范围信息，供 LLM 明确本 flow 的角色定位。
-
-        返回形如「你的身份是：X；你的能力范围是：Y」的描述；对应字段为空时省略对应分句。
-        末尾追加按角色能力适配的铁律（get_role_iron_law）。
-        """
         parts = []
         if len(self.title) > 0:
             parts.append(f"你的身份是：{self.title}")
@@ -73,14 +63,8 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow
             return ""
         return "".join(parts)
 
+    # 组装问题、身份、结果为三段式总结，供父 flow 汇总
     def outResult_summary(self) -> str:
-        """组装上下文与 outResult（回答）为总结内容，供父 flow 汇总。
-
-        三段式（条件出现、换行分隔），体现实为「以某问题、以某身份、给出结果」的条理：
-        - 问题段（有 input.goal 时）：直接以 input.goal 作为问题段
-        - 身份段（有 title 时）：「以「{title}」身份」
-        - 结果段（必有）：「给出结果：{answer}」
-        """
         answer = self.output.outResult or ""
         question = (self.input.get_goal() if self.input is not None else "")
         parts = []
@@ -91,16 +75,8 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow
         parts.append(f"给出结果：{answer}")
         return "\n".join(parts)
 
+    # 在基类 info 上补 role/deepth/delegate 信息，供树形呈现
     def flow_complete_info(self) -> dict:
-        """覆写：在基类 info 上补角色（role 枚举）、深度（deepth）与 delegate（父 flow）信息，
-        供 chat 完成时树形 JSON 呈现角色、层级与归属链。
-
-        基类已有 ident/title/responsibility/question/goal/answer/children；此处补：
-        - role：本 flow 所属角色枚举值（角色层才有，为 None 时省略）；
-        - deepth：本 flow 在树中的层级深度（根=1，子=父+1）；
-        - dep：delegate（父 flow，弱引用）的 {ident, title}；delegate 为 None
-          （根 flow）或 weakref 已失效（ReferenceError）时 dep=None。
-        """
         info = super().flow_complete_info()
         role = getattr(self, "role", None)
         if role is not None:
