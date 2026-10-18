@@ -9,6 +9,7 @@ output（AEFlowOutput，本 flow 输出结构）创建时必传，规范结构�
 根 flow 留空则内部回填为自身 ident。input（AEFlowInput）可在创建时传入（默认 None），未传时由 on_flow_start 设置。
 """
 import uuid
+from enum import Enum
 from typing import Optional
 
 from .AEFlowInput import AEFlowInput, AEFlowStatus
@@ -33,6 +34,16 @@ AE_CONFIRM = "confirm"
 
 # out_schema 内功能性调用唯一标识字段名（每次 generateFlowOutput 随机生成）
 AE_funcationkey = "excutor"
+
+
+class AEFlowType(Enum):
+    """Flow 类型：标注 flow 在子 flow 树中的角色。
+
+    - intermediate: 中间过程——只执行自身任务，完成后直接返回结果，不汇总子 flow。
+    - final: 最后过程——等待所有子 flow 完成后汇总（summarize_to_llm）。
+    """
+    intermediate = 1  # 中间过程：只执行
+    final = 2         # 最后过程：汇总所有子 flow
 
 
 class AEFlowInfo:
@@ -62,6 +73,7 @@ class AEFlowInfo:
         self.status: AEFlowStatus = AEFlowStatus.default
 
         self.deepth: int = 1
+        self.flow_type: AEFlowType = AEFlowType.intermediate
 
     @property
     def ident(self) -> str:
