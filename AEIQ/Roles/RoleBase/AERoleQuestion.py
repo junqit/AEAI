@@ -20,44 +20,79 @@ logger = logging.getLogger(__name__)
 
 class AERoleQuestionFunction(AEFunctional):
     """任务生成回包功能性方法名。"""
-    receiveOptimizeInput = "receiveOptimizeInput"  # 接收 LLM 生成的明确任务，传入 map
+    receiveOptimizeInput = "receiveOptimizeInput"      # 接收转义后的问题（明确任务），存入 input.goal
+    receivePromptTemplate = "receivePromptTemplate"    # 接收角色 prompt 模板，存 rolePrompt 并触发转义
 
 
 class AERoleQuestion(AERole):
     """任务生成能力 mixin：任务生成相关 LLM 请求方法（requestOptimizeInput / receiveOptimizeInput）。
     goal（明确的任务）由 input 持有（self.input.goal）。"""
 
-    # 组装并发送 LLM 请求：对原始问题或目标生成明确任务，不改原意
+    # 第一步：基于工作名称与工作能力生成通用角色 prompt（不含用户问题）
     def requestOptimizeInput(self) -> None:
         messages = []
-        # 任务生成指令：本步骤只生成明确任务、不回答（role_brief 的「必须能给出答案」铁律属作答步，此处不用，避免冲突）。
-        instruction = (
-            "【任务生成】将原始问题或目标转化为一个明确、可执行的任务，不可改变原有意思与目标。\n"
-            "要求：\n"
-            "- 仅输出一个明确的任务（任务形式，不是回答）；\n"
-            "- 明确范围：需要做什么、不需要做什么、不包含什么；\n"
-            "- 严禁回答问题或寒暄；不可改变原意与目标。"
-        )
-        user_question = self.input.get_content() if self.input is not None else ""
-        # 指令 + 原始问题或目标拼接为一条 user 消息
-        if len(user_question) > 0:
-            messages.append({
-                AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: instruction + "\n\n原始问题或目标：\n" + user_question,
-            })
-        else:
-            # 无原始问题或目标：指令作为 user 消息，确保存在 user 轮次
-            messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: instruction})
-        flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
-        flow_out.set_llm_out({AE_CONTENT: llm_generate("任务或目标")})
+        role_brief = self.role_brief()
+        if len(role_brief) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: (
+                "基于当前工作名称与工作能力，生成一个通用的角色 prompt 模板。\n"
+                "该 prompt 模板将用于后续对用户问题进行转义，使其更全面、完整、准确。\n"
+                "要求：\n"
+                "- 仅输出 prompt 模板本身，不含具体问题；\n"
+                "- 模板应体现角色能力范围内的上下文、约束与处理方向；\n"
+                "- 保持通用性，可适配各类问题。"
+            ),
+        })
+        flow_out = self.generateFlowOutput(AERoleQuestionFunction.receivePromptTemplate)
+        flow_out.set_llm_out({AE_CONTENT: llm_generate("角色 prompt 模板")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
-    # 接收 LLM 生成的明确任务，存入 input.goal（不完成 flow）
+    # 接收角色 prompt 模板，存入 rolePrompt 后触发问题转义（不存 goal，故不推进执行器）
+    def receivePromptTemplate(self, data: dict) -> bool:
+        template = data.get(AE_CONTENT) if isinstance(data, dict) else None
+        if template is None and isinstance(data, str):
+            template = data
+        self.rolePrompt = template or ""
+        self._requestQuestionTranslate()
+        return True
+
+    # 第二步：用角色 prompt 模板对用户问题进行转义（保持原意）
+    def _requestQuestionTranslate(self) -> None:
+        user_question = self.input.get_content() if self.input is not None else ""
+        if not user_question:
+            logger.warning("[%s][d=%s] 无用户问题，跳过转义", self.title, self.deepth)
+            if self.input is not None:
+                self.input.set_goal("")
+            return
+        messages = []
+        if len(self.rolePrompt) > 0:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: self.rolePrompt})
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: (
+                "用上述角色 prompt 模板对以下用户问题进行转义，使其更全面、完整、准确。\n"
+                "要求：\n"
+                "- 保持原意准确，不改变问题目标与意图；\n"
+                "- 仅输出转义后的问题，不回答问题。"
+            ),
+        })
+        messages.append({
+            AE_ROLE: AEConentRole.USER.value,
+            AE_CONTENT: "原始问题：\n" + user_question,
+        })
+        flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
+        flow_out.set_llm_out({AE_CONTENT: llm_generate("转义后的问题")})
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        self.flow_send_llm_request(payload)
+
+    # 接收转义后的问题（即明确任务），存入 input.goal（不完成 flow；由执行器 receiveOptimizeInput 推进角色选择）
     def receiveOptimizeInput(self, data: dict) -> bool:
-        prompt = data.get(AE_CONTENT) if isinstance(data, dict) else None
-        if prompt is None and isinstance(data, str):
-            prompt = data
+        goal = data.get(AE_CONTENT) if isinstance(data, dict) else None
+        if goal is None and isinstance(data, str):
+            goal = data
         if self.input is not None:
-            self.input.set_goal(prompt or "")
+            self.input.set_goal(goal or "")
         return True
