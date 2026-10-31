@@ -59,7 +59,7 @@ class AERoleQuestion(AERole):
         self._requestQuestionTranslate()
         return True
 
-    # 第二步：用角色 prompt 模板对用户问题进行转义（保持原意）
+    # 第二步：综合 工作名称/能力范围/prompt 模板 对用户问题转义（保持原意，更准确完整全面）
     def _requestQuestionTranslate(self) -> None:
         user_question = self.input.get_content() if self.input is not None else ""
         if not user_question:
@@ -67,22 +67,26 @@ class AERoleQuestion(AERole):
             if self.input is not None:
                 self.input.set_goal("")
             return
+        # SYSTEM 放角色身份（title+responsibility，不含铁律以避与"不回答"冲突）；prompt 模板作 USER 内数据
+        system_parts = []
+        if self.title:
+            system_parts.append(f"你的身份是：{self.title}")
+        if self.responsibility:
+            system_parts.append(f"你的能力范围是：{self.responsibility}")
         messages = []
+        if system_parts:
+            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: "".join(system_parts)})
+        user_parts = [
+            "把下方【用户问题】转义得更准确、完整、全面。",
+            "要求：\n"
+            "- 依据身份、能力范围与 prompt 模板体现的方向转义；\n"
+            "- 保持原意准确，不改变问题目标与意图；\n"
+            "- 仅输出转义后的问题，不回答、不解释。",
+        ]
         if len(self.rolePrompt) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: self.rolePrompt})
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                "用上述角色 prompt 模板对以下用户问题进行转义，使其更全面、完整、准确。\n"
-                "要求：\n"
-                "- 保持原意准确，不改变问题目标与意图；\n"
-                "- 仅输出转义后的问题，不回答问题。"
-            ),
-        })
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: "原始问题：\n" + user_question,
-        })
+            user_parts.append("【prompt 模板】\n" + self.rolePrompt)
+        user_parts.append("【用户问题】\n" + user_question)
+        messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: "\n\n".join(user_parts)})
         flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
         flow_out.set_llm_out({AE_CONTENT: llm_generate("转义后的问题")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
