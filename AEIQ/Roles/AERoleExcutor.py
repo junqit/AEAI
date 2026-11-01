@@ -13,14 +13,13 @@ from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Roles.Excutor.AERoleExcuteLLM import AERoleExcuteLLM
 from Roles.Excutor.AERoleExcuterScript import AERoleExcuterScript
-from Roles.Excutor.AERoleExcuteContext import AERoleExcuteContext
 from Roles.RoleBase.AERoleBase import AERoleBase
 from Roles.RoleBase.AERoleType import AE_LEAF_ROLES, AEFlowRole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleExcuteContext, AERoleBase):
+class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
     """角色执行 Flow：自带前置链路（角色信息/问题优化/角色选择/任务拆解），并经继承获得 llm/script
     执行能力（AERoleExcuteLLM / AERoleExcuterScript）。叶子角色（llm/script）自身执行；协调角色按规则拆解。
     叶子自执行、任务拆解由基类 AERoleWorkflow._dispatch_workflow_tasks 直接派发子 AERoleExcutor。
