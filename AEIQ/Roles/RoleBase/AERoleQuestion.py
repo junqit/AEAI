@@ -4,7 +4,7 @@ AERoleQuestion - 目标生成能力 mixin。
 提供目标生成的两步 LLM 请求方法：
   requestOptimizeInput → receivePromptTemplate：以 role_brief 作系统提示，生成角色 prompt 模板并存入 rolePrompt；
   _requestGoalFormation → receiveOptimizeInput：综合工作名称/能力范围/prompt 模板，把用户问题做成
-  可完成的目标（必须能准确、完整、全面回答用户输入），存入 self.input.goal（不完成 flow）。
+  可完成的目标（必须能准确、全面回答用户的输出），存入 self.input.goal（不完成 flow）。
 """
 import logging
 
@@ -37,7 +37,7 @@ class AERoleQuestion(AERole):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "基于当前工作名称与工作能力，生成一个通用的角色 prompt 模板。\n"
-                "该 prompt 模板将用于后续把用户问题做成可完成的目标，保证能准确、完整、全面回答用户输入。\n"
+                "该 prompt 模板将用于后续把用户问题做成可完成的目标，保证能准确、全面回答用户的输出。\n"
                 "要求：\n"
                 "- 仅输出 prompt 模板本身，不含具体问题；\n"
                 "- 模板应体现角色能力范围内的上下文、约束与处理方向；\n"
@@ -58,7 +58,7 @@ class AERoleQuestion(AERole):
         self._requestGoalFormation()
         return True
 
-    # 第二步：综合 工作名称/能力范围/prompt 模板 把用户问题做成可完成的目标（必须能准确、完整、全面回答用户输入）
+    # 第二步：综合 工作名称/能力范围/prompt 模板 把用户问题做成可完成的目标（必须能准确、全面回答用户的输出）
     def _requestGoalFormation(self) -> None:
         user_question = self.input.get_content() if self.input is not None else ""
         if not user_question:
@@ -78,7 +78,7 @@ class AERoleQuestion(AERole):
         user_parts = [
             "把下方【用户问题】做成一个可完成的目标。",
             "要求：\n"
-            "- 必须保证目标能够准确、完整、全面地回答用户输入（必须！）：完成该目标即等价于完整作答用户问题，不得遗漏、不得偏离原意；\n"
+            "- 必须保证目标能够准确、全面地回答用户的输出（必须！）：完成该目标即等价于完整作答用户问题，不得遗漏、不得偏离原意；\n"
             "- 依据身份、能力范围与 prompt 模板体现的方向形成目标，目标须可完成、可执行；\n"
             "- 仅输出目标本身，不回答问题、不解释。",
         ]
