@@ -52,6 +52,39 @@ class AEScriptAttempt:
     score: Optional[int] = None
     reason: str = ""
 
+    # 拼装本 attempt 供下次 LLM 修正请求使用的消息块（含脚本/执行结果/不达标理由）
+    def to_history_message(self, index: int) -> str:
+        lines = [f"—— 第 {index + 1} 次 ——", f"脚本内容:\n{self.script}"]
+        if self.error:
+            lines.append(f"执行结果: 执行失败 → {self.error}")
+        else:
+            lines.append(f"程序输出:\n{self.stdout}")
+        # 不达标理由一并带入，供下次 LLM 正确认识到问题
+        if self.score is not None:
+            lines.append(f"评分: {self.score}/100；不达标理由: {self.reason}")
+        return "\n".join(lines)
+
+    # 解析 LLM 打分回包（score + reason）并回填到本 attempt
+    def apply_verify_result(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            data = {}
+        self.score = self._parse_score(data.get("score"))
+        self.reason = str(data.get("reason", "") or "")
+
+    # 容错解析 0-100 整数分值；失败返回 0
+    @staticmethod
+    def _parse_score(value) -> int:
+        if isinstance(value, bool):
+            return 0
+        if isinstance(value, (int, float)):
+            n = int(value)
+        elif isinstance(value, str):
+            m = re.search(r"\d+", value)
+            n = int(m.group()) if m else 0
+        else:
+            n = 0
+        return max(0, min(100, n))
+
 
 class AERoleExcuterScript:
     """脚本执行能力 mixin：仅脚本执行循环（选型→生成→执行→验证→修正）；前置链路与编排由宿主
@@ -237,7 +270,7 @@ class AERoleExcuterScript:
                 AE_ROLE: AEConentRole.USER.value,
                 AE_CONTENT: (
                     "请根据目标/期望输出，评判上述程序输出是否符合目标/期望输出，"
-                    "给出 0 到 100 的整数分值（100 为完全符合），并给出简短评分理由。"
+                    "给出 0 到 100 的整数分值（100 为完全符合），并给出当前程序结论不达标的唯一准确原因。"
                     "只依据程序输出是否达成目标/期望输出打分，不评判代码风格。"
                 ),
             },
@@ -245,22 +278,32 @@ class AERoleExcuterScript:
         flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptVerify)
         flow_out.set_llm_out({
             "score": llm_generate("0到100的整数分值，100为完全符合预期"),
-            "reason": llm_generate("简短评分理由"),
+            "reason": llm_generate("当前程序结论不达标的唯一准确原因"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 验证脚本执行结果", self.title, self.deepth)
         self.flow_send_llm_request(payload)
 
-    # 接收验证评分；≥PASS_SCORE 完成，否则带历次记录请求修正（不含评分）。
+    # 接收验证评分；≥PASS_SCORE 完成，否则带历次记录（含不达标理由）请求修正。
     def receiveScriptVerify(self, data: dict) -> bool:
-        score = self._parse_score(data.get("score")) if isinstance(data, dict) else 0
-        reason = data.get("reason", "") if isinstance(data, dict) else ""
-        if self.attempts:
-            self.attempts[-1].score = score
-            self.attempts[-1].reason = reason
+        # 无当前 attempt 接收验证结果，属异常状态，直接以错误完成本 flow
+        if not self.attempts:
+            logger.warning("[%s][d=%s] 收到验证评分但无当前 attempt，以错误完成本 flow 避免卡死",
+                           self.title, self.deepth)
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "验证评分回包无对应 attempt"},
+                AEFlowCompletEvent.error,
+            )
+            return True
+        # 由当前 attempt 自行解析打分数据（score + reason）并回填
+        att = self.attempts[-1]
+        att.apply_verify_result(data)
+        score = att.score
+        reason = att.reason
         verify_count = sum(1 for a in self.attempts if a.score is not None)
-        pending_stdout = self.attempts[-1].stdout if self.attempts else ""
+        pending_stdout = att.stdout
         logger.info("[%s][d=%s] 收到 LLM 验证评分: score=%d/100 (通过阈值 %d), reason=%s [第%d次验证]",
                     self.title, self.deepth, score, self.PASS_SCORE, reason, verify_count)
         if score >= self.PASS_SCORE:
@@ -271,42 +314,22 @@ class AERoleExcuterScript:
         logger.warning("[%s][d=%s] 脚本验证未通过(score=%d<%d)，带历次执行记录重新生成脚本重试[第%d次]",
                        self.title, self.deepth, score, self.PASS_SCORE, verify_count)
         self._request_script_fix(
-            "历次执行结果均未符合目标/期望输出，请对照目标与历次脚本/结果修正脚本。",
+            "历次执行结果均未符合目标/期望输出，请对照目标、历次脚本/结果与不达标理由修正脚本。",
             include_history=True,
         )
         return True
-
-    # 容错解析 0-100 整数分值；失败返回 0。
-    @staticmethod
-    def _parse_score(value) -> int:
-        if isinstance(value, bool):
-            return 0
-        if isinstance(value, (int, float)):
-            n = int(value)
-        elif isinstance(value, str):
-            m = re.search(r"\d+", value)
-            n = int(m.group()) if m else 0
-        else:
-            n = 0
-        return max(0, min(100, n))
 
     # 请求 LLM 修正脚本；include_history=True 带历次记录，否则仅带当前脚本与错误。
     def _request_script_fix(self, problem: str, include_history: bool = False) -> None:
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         if include_history and self.attempts:
-            history_lines = []
-            for i, att in enumerate(self.attempts):
-                history_lines.append(f"—— 第 {i + 1} 次 ——")
-                history_lines.append(f"脚本内容:\n{att.script}")
-                if att.error:
-                    history_lines.append(f"执行结果: 执行失败 → {att.error}")
-                else:
-                    history_lines.append(f"程序输出:\n{att.stdout}")
+            # 每个 attempt 自行拼装消息块（含脚本/执行结果/不达标理由），供下次 LLM 正确认识到问题
+            history_lines = [att.to_history_message(i) for i, att in enumerate(self.attempts)]
             assistant_content = (
                 f"脚本类型: {self.type}\n"
                 f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
-                f"历次执行记录（脚本内容 + 执行结果，不含评分）:\n"
+                f"历次执行记录（脚本内容 + 执行结果 + 不达标理由）:\n"
                 + "\n".join(history_lines) + "\n"
                 f"问题说明:\n{problem}\n"
                 "请依据目标/期望输出与历次执行结果修正脚本，使其执行后在 stdout 产出目标/期望输出。"
@@ -326,15 +349,7 @@ class AERoleExcuterScript:
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
-                AE_CONTENT: (
-                    "请输出修正后的完整脚本内容（仅脚本代码本身，不要解释、不要 markdown 代码块标记）。"
-                    "修正后的脚本必须同时解决上述目标/期望输出与问题说明——不得回避问题，"
-                    "不得用占位符、伪代码或注释绕过，不得输出与原脚本实质等价或仅作无关微调的代码。"
-                    "修正后的脚本必须能正确执行，且执行后在 stdout 产出目标/期望输出——"
-                    "产出内容必须能通过执行脚本实际获取到，不得依赖文件。"
-                    "脚本在只读沙箱中执行，禁止任何文件写入（创建/修改/删除/重命名、open(... 'w'/'a')、"
-                    "> / >> 重定向等），需输出结果一律用 stdout；若原问题由写文件引起，须改为不写文件。"
-                ),
+                AE_CONTENT: "请输出修正后的完整脚本内容（仅脚本代码本身，不要解释、不要 markdown 代码块标记）。",
             },
         ]
         flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptFix)
