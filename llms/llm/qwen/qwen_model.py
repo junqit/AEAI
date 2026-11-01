@@ -22,6 +22,8 @@ class AEQwenModel:
     DEFAULT_BASE_URL = "http://10.192.186.141:10000/v1/chat/completions"
     DEFAULT_API_KEY = "asdf"
     DEFAULT_MAX_TOKENS = 32768
+    # 模型最大上下文窗口（token）：Qwen3.5-122B-A10B-original-MLX-4bit = 256K
+    MAX_CONTEXT_TOKENS = 262144
     REQUEST_TIMEOUT = 600  # 请求超时时间（秒，10 分钟）
     # (connect, read)：连接 10s 超时（"No route to host" 实际瞬时失败），读 600s 等模型生成
     REQUEST_TIMEOUTS = (10, REQUEST_TIMEOUT)
@@ -231,7 +233,8 @@ class AEQwenModel:
             "model_path": self.model_path,
             "is_loaded": self.is_loaded,
             "api_type": "qwen",
-            "max_tokens": self.max_tokens
+            "max_tokens": self.max_tokens,
+            "max_context": self.MAX_CONTEXT_TOKENS
         }
 
     def cleanup(self):
