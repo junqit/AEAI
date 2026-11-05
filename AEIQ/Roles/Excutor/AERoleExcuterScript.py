@@ -304,15 +304,13 @@ class AERoleExcuterScript:
         reason = att.reason
         verify_count = sum(1 for a in self.attempts if a.score is not None)
         pending_stdout = att.stdout
-        logger.info("[%s][d=%s] 收到 LLM 验证评分: score=%d/100 (通过阈值 %d), reason=%s [第%d次验证]",
-                    self.title, self.deepth, score, self.PASS_SCORE, reason, verify_count)
         if score >= self.PASS_SCORE:
             logger.info("[%s][d=%s] 脚本验证通过(score=%d≥%d)，记录执行结果:\n%s",
                         self.title, self.deepth, score, self.PASS_SCORE, pending_stdout)
             self._complete()
             return True
-        logger.warning("[%s][d=%s] 脚本验证未通过(score=%d<%d)，带历次执行记录重新生成脚本重试[第%d次]",
-                       self.title, self.deepth, score, self.PASS_SCORE, verify_count)
+        logger.warning("[%s][d=%s] 脚本验证未通过(score=%d<%d, 不达标理由=%s)，带历次执行记录重新生成脚本重试[第%d次]",
+                       self.title, self.deepth, score, self.PASS_SCORE, reason, verify_count)
         self._request_script_fix(
             "历次执行结果均未符合目标/期望输出，请对照目标、历次脚本/结果与不达标理由修正脚本。",
             include_history=True,
