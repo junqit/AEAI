@@ -78,6 +78,13 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     # 接收 flow 完成通知，按 ident 路由
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
         if flowOutput.ident == self.ident:
+            # 完成回调命中自身：若设了 completeIdent，优先调用其注册方法（funcident）；否则走默认汇总/推进
+            if self.completeIdent:
+                ident = self.completeIdent
+                self.completeIdent = ""  # 一次性：触发后清除，避免后续子 flow 完成重复触发
+                logger.info("[%s][d=%s] 完成回调命中自身，调用 completeIdent=%s 注册方法",
+                            self.title, self.deepth, ident)
+                return self.excutor.exec(ident, flowOutput)
             if not self._flows:
                 return True
             if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
@@ -127,6 +134,22 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             # 上级中继：本层目标不作为问题，只是对下一级（deepth+1）目标上下文的约束
             content = f"第 {self.deepth} 级目标：{goal}，此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"
         payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: content})
+        # 追加 completeIdent 非空的子 flow 的 goal 与答案作为上下文
+        ctx_msgs = []
+        for sub in self._flows.values():
+            if not getattr(sub, "completeIdent", ""):
+                continue
+            sub_input = getattr(sub, "input", None)
+            sub_output = getattr(sub, "output", None)
+            sub_goal = sub_input.get_goal() if sub_input is not None else ""
+            sub_answer = sub_output.outResult if sub_output is not None else ""
+            if sub_goal or sub_answer:
+                ctx_msgs.append({
+                    AE_ROLE: AEConentRole.ASSISTANT.value,
+                    AE_CONTENT: f"目标：{sub_goal}\n答案：{sub_answer}",
+                })
+        if ctx_msgs:
+            payload.messages[1:1] = ctx_msgs
         payload.out_schema = {
             AE_IDENT: self.ident,
             AE_LLM_OUT: payload.out_schema,

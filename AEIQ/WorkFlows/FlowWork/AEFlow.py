@@ -36,6 +36,8 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
         self.delegate: "Optional[AEFlowDelegate]" = None
         self._flows: "Dict[str, AEFlowInterface]" = {}
         self.excutor = AERuntimeExcutor()
+        # 完成回调标识：设值后 receive_flow_complete 优先调用其注册方法（funcident），未设值走默认路由
+        self.completeIdent: str = ""
 
     # ==================== 接口实现 ====================
 
