@@ -63,11 +63,19 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             )
             return False
         self.print_info()
+        # 角色选定后先做背景确认（requestContextNeeded），完成后再推进执行/拆解；被派发的背景确认子 flow 跳过自身背景确认避免递归
+        if self.skip_context_confirm:
+            self._proceed_after_context()
+        else:
+            self.requestContextNeeded()
+        return result
+
+    # 背景确认完成（或无需确认）后推进：叶子角色自身执行，协调角色按规则拆解
+    def _proceed_after_context(self) -> None:
         role_enum = self.role.role if self.role is not None else None
         if role_enum in AE_LEAF_ROLES:
-            # 叶子角色（llm/script）：自身执行（llm→requestLLMAnswer，script→start_flow），不再派发子 flow
             self._execute_leaf(role_enum)
-            return result
+            return
         if self.role is not None and self.role.workflow_rule:
             self.requestWorkflow()
         else:
@@ -75,6 +83,14 @@ class AERoleExcutor(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
             )
+
+    # 背景确认子 flow 完成回调：复用 AERoleContext 确认结果，直接完成本 flow（不请求 workflow）
+    def contextComplete(self, flowOutput) -> bool:
+        result = super().contextComplete(flowOutput)
+        self.flow_complete(
+            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+             AE_CONTENT: (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""},
+        )
         return result
 
     # 叶子角色自身执行：llm→requestLLMAnswer，script→start_flow。
