@@ -5,23 +5,20 @@ AERoleBase - 角色 Flow 基类。
 outResult_summary（上下文与结果总结）、flow_description / flow_complete_info（描述与完成信息）。
 """
 import logging
-from typing import Optional
 
-from WorkFlows.FlowWork.AEFlow import AEFlow
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
-from Roles.RoleBase.AERoleType import AERoleParamInfo, ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
+from Roles.RoleBase.AERoleType import ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
 from Roles.RoleBase.AERoleInformation import AERoleInformation
 from Roles.RoleBase.AERoleQuestion import AERoleQuestion
+from Roles.RoleBase.AERoleContext import AERoleContext
 from Roles.RoleBase.AERoleChoice import AERoleChoice
 from Roles.Excutor.AERoleWorkflow import AERoleWorkflow
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleBase(AERoleInformation, AERoleQuestion, AERoleChoice, AERoleWorkflow, AEFlow):
+class AERoleBase(AERoleInformation, AERoleQuestion, AERoleContext, AERoleChoice, AERoleWorkflow):
     """角色 Flow 基类：提供角色上下文 hook（role_brief / summarize_extend_messages / outResult_summary 等）。"""
-
-    roleParamInfo: Optional[AERoleParamInfo] = None
 
     # 拼接全部角色的花名册（type/职称/职责），供角色选择等场景使用
     def roleDescription(self) -> str:

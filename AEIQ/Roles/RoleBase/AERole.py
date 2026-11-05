@@ -1,17 +1,18 @@
-"""AERole - 角色信息属性基类。
+"""AERole - 角色信息属性基类（继承 AEFlow，角色即 flow）。
 
 持有角色相关属性（role / title / responsibility / rolePrompt），经 cooperative __init__ 初始化。
 """
 import logging
 from typing import Optional
 
+from WorkFlows.FlowWork.AEFlow import AEFlow
 from Roles.RoleBase.AERoleType import AERoleParamInfo
 
 logger = logging.getLogger(__name__)
 
 
-class AERole:
-    """角色信息属性基类：持有角色相关属性，经 cooperative __init__ 初始化。"""
+class AERole(AEFlow):
+    """角色信息属性基类（继承 AEFlow，角色即 flow）：持有角色相关属性，经 cooperative __init__ 初始化。"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -21,6 +22,8 @@ class AERole:
         self.title: str = ""             # 职称
         self.responsibility: str = ""    # 职责要求
         self.rolePrompt: str = ""        # 角色 prompt
+        # 背景确认控制：True 表示跳过自身背景确认（被派发的背景确认子 flow 置 True，避免递归）
+        self.skip_context_confirm: bool = False
 
     # 打印基础信息：角色描述、deepth、title/responsibility、问题与任务
     def print_info(self) -> None:
