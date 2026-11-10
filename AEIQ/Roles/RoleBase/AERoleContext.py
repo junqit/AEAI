@@ -36,45 +36,40 @@ class AERoleContext(AERole):
         # SYSTEM 放角色身份（title+responsibility，不含铁律）
         system_parts = []
         if self.title:
-            system_parts.append(f"你的身份是：{self.title}")
+            system_parts.append(f"身份：{self.title}")
         if self.responsibility:
-            system_parts.append(f"你的能力范围是：{self.responsibility}")
+            system_parts.append(f"能力范围：{self.responsibility}")
         messages = []
         if system_parts:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: "".join(system_parts)})
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "基于当前工作名称、能力范围与下方【确认目标】，判断是否需要额外的背景信息与上下文确认才能完成该目标。\n"
+                "基于当前工作名称与能力范围，根据下方【确认目标】确认完成该目标需要的背景信息。\n"
                 "要求：\n"
-                "- 仅判断「需要 / 不需要」二者其一；\n"
-                "- 目标所需信息已明确、无需补充背景时判「不需要」；"
-                "存在缺失参数、外部数据、前置条件等待确认时判「需要」；\n"
-                "- 若判「需要」，在 target 中给出需要解决问题的背景资料（只输出需要确认的信息目标）。\n"
+                "- 若需要额外背景信息，在 target 中给出需要确认的背景资料（只输出需要确认的信息目标）；\n"
+                "- 若目标所需信息已明确、无需补充背景，target 留空。\n"
                 "\n"
                 "【确认目标】\n" + goal
             ),
         })
         flow_out = self.generateFlowOutput(AERoleContextFunction.receiveContextNeeded)
         flow_out.set_llm_out({
-            "needed": llm_generate("true 或 false：是否需要背景确认"),
-            "target": llm_generate("需要解决问题的背景资料，只输出需要确认的信息目标"),
+            "target": llm_generate("需要确认的背景资料；无需则留空"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
         self.flow_send_llm_request(payload)
 
-    # 接收是否需要背景确认；不需要直接推进，需要则派发子 flow（completeIdent=contextComplete）
+    # 接收背景确认；target 有值则派发子 flow（completeIdent=contextComplete），无值直接推进
     def receiveContextNeeded(self, data: dict) -> bool:
-        needed = data.get("needed") if isinstance(data, dict) else False
         target = ""
         if isinstance(data, dict):
             target = str(data.get("target", "") or "").strip()
-        logger.info("[%s][d=%s] 背景确认需求判定: needed=%s, target=%s", self.title, self.deepth, needed, target)
-        if not needed:
-            self._proceed_after_context()
+        logger.info("[%s][d=%s] 背景确认需求判定: target=%s", self.title, self.deepth, target)
+        if not target:
+            self.contextComplete(None)  # 无 target 直接调 contextComplete（不经子 flow）
             return True
-        goal = self.input.get_goal() if self.input is not None else ""
-        sub = self._dispatch_context_flow(goal, target)
+        sub = self._dispatch_context_flow(target)
         if sub is None:
             logger.warning("[%s][d=%s] 背景确认子 flow 创建失败，跳过", self.title, self.deepth)
             return False
@@ -86,22 +81,12 @@ class AERoleContext(AERole):
         return True
 
     # 创建执行背景确认的子 flow（AERoleExcutor）；有 target 时针对该确认目标，否则泛化确认
-    def _dispatch_context_flow(self, goal: str, target: str = ""):
+    def _dispatch_context_flow(self, target: str):
         from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环（AERoleExcutor → AERoleBase → 本模块）
-        if target:
-            sub_goal = (
-                f"针对目标：\n{goal}\n\n需确认的背景资料：\n{target}"
-                if goal else f"需确认的背景资料：\n{target}"
-            )
-        else:
-            sub_goal = (
-                f"确认完成以下目标需要哪些背景信息与上下文：\n{goal}"
-                if goal else "确认完成当前目标需要哪些背景信息与上下文"
-            )
         sub = AERoleExcutor(
             flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
         )
-        sub.update_flow_input(AEFlowInput(content=sub_goal, ident=sub.ident, role=self.role.role if self.role is not None else None))
+        sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
         sub.skip_context_confirm = True  # 背景确认子 flow 跳过自身背景确认，避免递归
         return sub
 
@@ -114,9 +99,8 @@ class AERoleContext(AERole):
                 out = getattr(flowOutput, "out_schema", None)
                 if isinstance(out, dict):
                     result = out.get(AE_CONTENT, "") or ""
-        if result and self.input is not None:
-            self.input.add_context("background", result)
-            logger.info("[%s][d=%s] 背景确认子 flow 完成，结果已存入 input.context", self.title, self.deepth)
-        else:
-            logger.warning("[%s][d=%s] 背景确认子 flow 完成但结果为空", self.title, self.deepth)
+            if result:
+                logger.info("[%s][d=%s] 背景确认子 flow 完成，结果=%s", self.title, self.deepth, result)
+            elif not result:
+                logger.warning("[%s][d=%s] 背景确认子 flow 完成但结果为空", self.title, self.deepth)
         return bool(result)
