@@ -27,16 +27,16 @@ class AERoleInformation(AERole):
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
-                "根据下方用户问题，生成能解决该问题的「工作名称」与「职责范围」，要求：\n"
+                "根据下方问题，生成能解决该问题的「工作名称」与「职责范围」，要求：\n"
                 "- 工作名称：准确匹配该问题所需的解决角色名称；\n"
-                "- 职责范围：明确该角色解决此问题需要的能力（能做什么、如何解决），并明确职责边界与禁止事项；客观、完整，不得包含用户问题本身。"
+                "- 职责范围：明确该角色解决此问题需要的能力（能做什么、如何解决），并明确职责边界与禁止事项；客观、完整，不得包含问题本身。"
             ),
         })
         user_question = self.input.get_content() if self.input else ""
         user_msg = ""
         if user_question:
-            user_msg = f"用户问题：\n{user_question}\n\n"
-        user_msg += "请根据上述用户问题，生成解决该问题所需的工作名称与能力范围。"
+            user_msg = f"问题：\n{user_question}\n\n"
+        user_msg += "请根据上述问题，生成解决该问题所需的工作名称与能力范围。"
         messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: user_msg})
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
         flow_out.set_llm_out({

@@ -32,9 +32,9 @@ class AERoleTarget(AERole):
         # SYSTEM 放角色身份（title+responsibility，不含铁律），目标分解仅依据工作名称与能力范围
         system_parts = []
         if self.title:
-            system_parts.append(f"你的身份是：{self.title}")
+            system_parts.append(f"身份：{self.title}")
         if self.responsibility:
-            system_parts.append(f"你的能力范围是：{self.responsibility}")
+            system_parts.append(f"能力范围：{self.responsibility}")
         messages = []
         if system_parts:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: "".join(system_parts)})

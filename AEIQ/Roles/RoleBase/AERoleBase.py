@@ -50,9 +50,9 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleContext, AERoleChoice,
     def role_brief(self) -> str:
         parts = []
         if len(self.title) > 0:
-            parts.append(f"你的身份是：{self.title}")
+            parts.append(f"身份：{self.title}")
         if len(self.responsibility) > 0:
-            parts.append(f"你的能力范围是：{self.responsibility}")
+            parts.append(f"能力范围：{self.responsibility}")
         iron_law = get_role_iron_law(self.role.role if self.role is not None else None)
         if iron_law:
             parts.append(iron_law)
