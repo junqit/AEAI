@@ -137,7 +137,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         # 追加 completeIdent 非空的子 flow 的 goal 与答案作为上下文
         ctx_msgs = []
         for sub in self._flows.values():
-            if not getattr(sub, "completeIdent", ""):
+            if not sub.completeIdent:
                 continue
             sub_input = getattr(sub, "input", None)
             sub_output = getattr(sub, "output", None)
