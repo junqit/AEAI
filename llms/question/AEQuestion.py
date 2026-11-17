@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Dict, Any
-from common.aellm_enums import AELLMType, AEAiLevel  # noqa: F401  (re-export)
+from common.aellm_enums import AELLMType, AEAiLevel, AEQuestionType  # noqa: F401  (re-export)
 
 
 @dataclass
@@ -8,6 +8,8 @@ class AEQuestion:
     messages: List[Dict[str, Any]]
     llm_type: AELLMType
     level: AEAiLevel = AEAiLevel.default
+    # 问题类型：标识用途与模态，供 provider 按类型适配（默认纯文本）
+    question_type: AEQuestionType = AEQuestionType.text
     # 采样温度，范围 0.0 - 1.0（默认 0.7；供 provider 读取，按问题指定生成温度）
     temperature: float = 0.7
     # 流式生成过程中累计拼接的内容

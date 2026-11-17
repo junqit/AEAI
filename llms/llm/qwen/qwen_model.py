@@ -86,8 +86,22 @@ class AEQwenModel:
             # cleanup 后重建 session
             if self.session is None:
                 self.session = self._build_session()
-            # 允许通过环境变量覆盖配置
-            import os
+            import os, json
+            # 外部配置文件（JSON），路径由 QWEN_CONFIG 环境变量指定
+            config_file = os.getenv("QWEN_CONFIG")
+            if config_file and os.path.isfile(config_file):
+                with open(config_file, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if cfg.get("base_url"):
+                    self.base_url = cfg["base_url"]
+                if cfg.get("api_key"):
+                    self.api_key = cfg["api_key"]
+                if cfg.get("model_path"):
+                    self.model_path = cfg["model_path"]
+                if cfg.get("max_tokens"):
+                    self.max_tokens = int(cfg["max_tokens"])
+                logger.info(f"📋 已加载外部配置文件: {config_file}")
+            # 环境变量覆盖配置（优先级高于配置文件）
             if os.getenv("QWEN_API_URL"):
                 self.base_url = os.getenv("QWEN_API_URL")
             if os.getenv("QWEN_API_KEY"):

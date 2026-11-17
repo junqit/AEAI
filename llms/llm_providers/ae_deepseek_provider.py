@@ -65,7 +65,7 @@ class AEDeepSeekProvider(AEBaseProvider):
             if not self.is_loaded:
                 self.load()
 
-            messages = question.messages
+            messages = self._prepare_messages(question)
 
             # 只传 messages 与 level，模型名与 max_tokens 由 AEDeepSeekModel 内部决定
             result = self.deepseek_model.generate(
@@ -131,5 +131,15 @@ class AEDeepSeekProvider(AEBaseProvider):
         if self.deepseek_model is not None:
             self.deepseek_model.cleanup()
             self.deepseek_model = None
-
         self.is_loaded = False
+
+    def _adapt_image_messages(self, messages: list) -> list:
+        """DeepSeek 用 Anthropic 图片格式，将 OpenAI image_url 转为 Anthropic image。"""
+        adapted = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                msg = dict(msg)
+                msg["content"] = self._convert_image_url_to_anthropic(content)
+            adapted.append(msg)
+        return adapted

@@ -61,7 +61,7 @@ class AEGeminiProvider(AEBaseProvider):
             if not self.is_loaded:
                 self.load()
 
-            messages = question.messages
+            messages = self._prepare_messages(question)
 
             # 只传 messages 与 level，模型名/max_tokens/temperature 由 AEGeminiModel 内部决定
             response = self.gemini_model.generate(
@@ -92,6 +92,29 @@ class AEGeminiProvider(AEBaseProvider):
 
     def cleanup(self):
         """清理 Gemini 模型资源"""
+
+    def _adapt_image_messages(self, messages: list) -> list:
+        """Gemini 用 Google 图片格式，将 OpenAI image_url 转为 Gemini inline_data。"""
+        adapted = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                new_content = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "image_url":
+                        url = item.get("image_url", {}).get("url", "")
+                        if url.startswith("data:"):
+                            header, b64data = url.split(",", 1)
+                            media_type = header.split(":")[1].split(";")[0]
+                            new_content.append({"type": "image", "inline_data": {"mime_type": media_type, "data": b64data}})
+                        else:
+                            new_content.append(item)
+                    else:
+                        new_content.append(item)
+                msg = dict(msg)
+                msg["content"] = new_content
+            adapted.append(msg)
+        return adapted
         if self.gemini_model is not None:
             self.gemini_model.cleanup()
             self.gemini_model = None

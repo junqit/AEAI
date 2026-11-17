@@ -62,7 +62,7 @@ class AEQwenProvider(AEBaseProvider):
             if not self.is_loaded:
                 self.load()
 
-            messages = question.messages
+            messages = self._prepare_messages(question)
 
             # 只传 messages 与 level，max_tokens 由 AEQwenModel 内部决定
             result = self.qwen_model.generate(

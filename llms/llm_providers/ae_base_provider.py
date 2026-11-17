@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, Dict, Any
 from abc import ABC, abstractmethod
 from AEQuestion import AEQuestion
+from common.aellm_enums import AEQuestionType
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,9 @@ class AEBaseProvider(ABC):
                        delta_process: Optional[Callable[[Dict[str, Any]], None]] = None) -> str:
         # 打印完整的请求 messages（JSON）与回复内容，统一在此处输出；各 provider 内不再打印
         level = question.level
-        logger.info("[%s] 发送 level=%s messages=%s",
-                    self.name, getattr(level, "name", level),
+        qt = question.question_type
+        logger.info("[%s] 发送 level=%s question_type=%s messages=%s",
+                    self.name, getattr(level, "name", level), qt.value,
                     json.dumps(question.messages, ensure_ascii=False, indent=2))
         # 提交到 provider 专属线程池（并行队列）：超出 max_workers 的请求排队等待，
         # 同步 _generate 不阻塞事件循环
@@ -73,3 +75,33 @@ class AEBaseProvider(ABC):
             "name": self.name,
             "loaded": self.is_loaded
         }
+
+    # ==================== AEQuestionType 适配 ====================
+
+    def _prepare_messages(self, question: AEQuestion) -> list:
+        """按 question_type 适配 messages；子类可覆写 _adapt_image_messages 处理图片格式转换。"""
+        messages = question.messages
+        if question.question_type == AEQuestionType.image:
+            messages = self._adapt_image_messages(messages)
+        return messages
+
+    def _adapt_image_messages(self, messages: list) -> list:
+        """适配图片消息格式；默认透传（OpenAI image_url 格式，Qwen/ChatGPT 直接用）。子类按 API 差异覆写。"""
+        return messages
+
+    @staticmethod
+    def _convert_image_url_to_anthropic(content_list: list) -> list:
+        """将 OpenAI image_url 格式转为 Anthropic image 格式（Claude/DeepSeek/Zhipu 用）。"""
+        adapted = []
+        for item in content_list:
+            if isinstance(item, dict) and item.get("type") == "image_url":
+                url = item.get("image_url", {}).get("url", "")
+                if url.startswith("data:"):
+                    header, b64data = url.split(",", 1)
+                    media_type = header.split(":")[1].split(";")[0]  # e.g. image/png
+                    adapted.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64data}})
+                else:
+                    adapted.append({"type": "image", "source": {"type": "url", "url": url}})
+            else:
+                adapted.append(item)
+        return adapted

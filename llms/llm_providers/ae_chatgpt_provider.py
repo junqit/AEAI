@@ -29,7 +29,7 @@ class AEChatGPTProvider(AEBaseProvider):
 
         # 只传 messages 与 level，模型名与 max_tokens 由 AEGPTModel 内部决定
         result = self._gpt.generate(
-            messages=question.messages,
+            messages=self._prepare_messages(question),
             level=question.level,
             temperature=question.temperature,
             think_process=think_process,

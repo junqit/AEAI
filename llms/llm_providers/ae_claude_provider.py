@@ -61,7 +61,7 @@ class AEClaudeProvider(AEBaseProvider):
             if not self.is_loaded:
                 self.load()
 
-            messages = question.messages
+            messages = self._prepare_messages(question)
 
             # 只传 messages 与 level，模型名与 max_tokens 由 AEClaudeModel 内部决定
             result = self.claude_model.generate(
@@ -127,6 +127,17 @@ class AEClaudeProvider(AEBaseProvider):
         if self.claude_model is not None:
             self.claude_model.cleanup()
             self.claude_model = None
+
+    def _adapt_image_messages(self, messages: list) -> list:
+        """Claude 用 Anthropic 图片格式，将 OpenAI image_url 转为 Anthropic image。"""
+        adapted = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                msg = dict(msg)
+                msg["content"] = self._convert_image_url_to_anthropic(content)
+            adapted.append(msg)
+        return adapted
 
         self.is_loaded = False
 
