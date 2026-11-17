@@ -52,6 +52,8 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
 
     # 最大决策轮数（防止无限循环）
     MAX_DECISIONS: int = 10
+    # 最大拆解深度（超过则不允许 decompose，强制 answer/complete）
+    MAX_DECOMPOSE_DEPTH: int = 3
 
     def on_flow_start(self, flowInput=None) -> bool:
         if not super().on_flow_start(flowInput):
@@ -175,11 +177,11 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         all_actions = [
             (AEAction.clarify_role, "明确角色身份与能力范围", "需要明确以什么身份/能力解决问题", ""),
             (AEAction.optimize_goal, "优化目标", "目标不够清晰、需转化为可执行目标", ""),
-            (AEAction.gather_context, "获取背景信息", "解决问题缺少必要信息", "填 target 字段"),
-            (AEAction.decompose, "拆解为子任务", "问题复杂、需分步骤解决", "填 subtasks 字段（数组）"),
+            (AEAction.gather_context, "获取背景信息", "解决问题缺少必要信息", "填 detail 字段"),
+            (AEAction.decompose, "拆解为子任务", "问题复杂、需分步骤解决", "填 detail 字段（每行一个子任务）"),
             (AEAction.answer, "直接作答", "已有足够信息、可直接回答", ""),
             (AEAction.execute_script, "执行脚本", "需要程序化操作（查询/计算/爬取）", ""),
-            (AEAction.complete, "完成", "问题已解决、输出结果", "填 result 字段"),
+            (AEAction.complete, "完成", "问题已解决、输出结果", "填 detail 字段"),
         ]
         lines = ["可用动作："]
         for action, desc, when, extra in all_actions:
@@ -188,6 +190,9 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             if action == AEAction.optimize_goal and self.input and self.input.get_goal():
                 continue
             if action == AEAction.gather_context and self.skip_context_confirm:
+                continue
+            # 超过最大拆解深度，不允许 decompose，强制 answer/complete
+            if action == AEAction.decompose and self.deepth >= self.MAX_DECOMPOSE_DEPTH:
                 continue
             line = f"- {action.value}：{desc}（{when}）"
             if extra:
