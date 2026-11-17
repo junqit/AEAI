@@ -51,7 +51,7 @@ class AEContextCenter(AEContextDelegate):
         self._delegate.send_response(response)
 
     def send_llm_request(self, payload) -> None:
-        """转发 LLM 请求给上层 delegate；注入目录级 Context 环境参数 prompt。
+        """转发 LLM 请求给上层 delegate；注入目录级 Context 环境参数 prompt 与系统规则。
 
         铁律已下沉到各角色 role_brief，按角色能力适配，不再在此 blanket 注入。
         """
@@ -63,6 +63,11 @@ class AEContextCenter(AEContextDelegate):
                 prompt = directory.build_env_param_prompt(env_param)
                 if prompt:
                     payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: prompt})
+        # 系统规则：根据所有信息判断目标是解决问题还是提取精练信息
+        # payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: (
+        #     "系统规则：需要完成的目标或工作任务，需根据所有信息确认是需要解决处理问题，还是提取精练信息；"
+        #     "仔细思考每个上下文的所有信息。"
+        # })})
         self._delegate.send_llm_request(payload)
 
     # ==================== Context 命中与创建 ====================

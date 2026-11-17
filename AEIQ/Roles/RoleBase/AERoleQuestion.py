@@ -46,7 +46,7 @@ class AERoleQuestion(AERole):
         })
         flow_out = self.generateFlowOutput(AERoleQuestionFunction.receivePromptTemplate)
         flow_out.set_llm_out({AE_CONTENT: llm_generate("角色 prompt 模板")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 接收角色 prompt 模板，存入 rolePrompt 后触发目标生成（不存 goal，故不推进执行器）
@@ -88,7 +88,7 @@ class AERoleQuestion(AERole):
         messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: "\n\n".join(user_parts)})
         flow_out = self.generateFlowOutput(AERoleQuestionFunction.receiveOptimizeInput)
         flow_out.set_llm_out({AE_CONTENT: llm_generate("可完成的目标")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 接收生成的目标，存入 input.goal（不完成 flow；由执行器 receiveOptimizeInput 推进角色选择）

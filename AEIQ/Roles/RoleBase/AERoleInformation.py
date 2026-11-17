@@ -43,7 +43,7 @@ class AERoleInformation(AERole):
             AE_TITLE: llm_generate("准确、完整解决当前问题所需的角色名称"),
             AE_RESPONSIBILITY: llm_generate("解决问题的能力范围，明确能做什么、如何解决及边界"),
         })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 写入 title / responsibility；均非空返回 True，否则 False（不闭环）
@@ -74,7 +74,7 @@ class AERoleInformation(AERole):
         })
         flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRolePrompt)
         flow_out.set_llm_out({"rolePrompt": llm_generate("基于职称与能力范围的角色指令，不含具体问题")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 存入 self.rolePrompt；非空返回 True，否则 False（不闭环）

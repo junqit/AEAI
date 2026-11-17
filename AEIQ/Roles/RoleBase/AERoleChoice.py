@@ -66,7 +66,7 @@ class AERoleChoice(AERole):
         flow_out.set_llm_out({
             AE_ROLE: llm_generate(f"角色，从可选角色中选一个：{' / '.join(allowed)}"),
         })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 接收选中的角色设为 self.role；成功 True，无效 False

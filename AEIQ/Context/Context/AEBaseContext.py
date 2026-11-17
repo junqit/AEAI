@@ -7,7 +7,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from Network.Core import AENetReq, AENetRsp
 from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
-from Roles.AERoleExcutor import AERoleExcutor
+from Roles.AEOrchestrator import AEOrchestrator
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AEFlowStatus, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
@@ -27,7 +27,7 @@ class AEBaseContext:
         self.space: str = space
         self.context_type: AEContextType = context_type
         self.delegate: Optional['AEContextDelegate'] = None
-        self._chat_map: Dict[str, AERoleExcutor] = {}
+        self._chat_map: Dict[str, AEOrchestrator] = {}
         # 并行队列：独立线程池管理 chat flow 执行
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-flow")
 
@@ -62,7 +62,7 @@ class AEBaseContext:
             return
         from .AELLMPayload import llm_generate
         chat_ident = uuid.uuid4().hex
-        chat = AERoleExcutor(
+        chat = AEOrchestrator(
             ident=chat_ident,
             flowOutput=AEFlowOutput(ident=chat_ident, out_schema={AE_CONTENT: llm_generate("对用户的回复")}),
         )

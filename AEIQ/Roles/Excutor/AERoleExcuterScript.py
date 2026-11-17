@@ -88,7 +88,7 @@ class AEScriptAttempt:
 
 class AERoleExcuterScript:
     """脚本执行能力 mixin：仅脚本执行循环（选型→生成→执行→验证→修正）；前置链路与编排由宿主
-    （AERoleExcutor）承担。目标 = 宿主 input.goal；type 由本 mixin 经 LLM 选型后贯穿执行；脚本内容
+    （AEOrchestrator）承担。目标 = 宿主 input.goal；type 由本 mixin 经 LLM 选型后贯穿执行；脚本内容
     由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）。回包方法落在宿主实例上。
 
     流程：start_flow → _request_script_type（LLM 选型）→ receiveScriptType → _request_script_generate
@@ -134,7 +134,7 @@ class AERoleExcuterScript:
             "type": llm_generate("脚本类型：python / shell / ruby 之一，按当前能力与已装工具包选最适合的"),
             "reason": llm_generate("简短理由：为何该类型最适合"),
         })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 选择脚本类型", self.title, self.deepth)
         self.flow_send_llm_request(payload)
@@ -182,7 +182,7 @@ class AERoleExcuterScript:
         ]
         flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptGenerate)
         flow_out.set_llm_out({"script": llm_generate("可执行的脚本文本")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.2)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 生成 %s 脚本内容", self.title, self.deepth, self.type)
         self.flow_send_llm_request(payload)
@@ -280,7 +280,7 @@ class AERoleExcuterScript:
             "score": llm_generate("0到100的整数分值，100为完全符合预期"),
             "reason": llm_generate("当前程序结论不达标的唯一准确原因"),
         })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self._apply_script_env(payload)
         logger.info("[%s][d=%s] 请求 LLM 验证脚本执行结果", self.title, self.deepth)
         self.flow_send_llm_request(payload)
@@ -352,10 +352,12 @@ class AERoleExcuterScript:
         ]
         flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptFix)
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        # 严谨不奏效时逐步提高温度，让 LLM 更活跃、尝试不同思路：0.2 → 0.4 → 0.6 → 0.8（上限）
+        fix_temp = min(0.2 + len(self.attempts) * 0.2, 0.8)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=fix_temp)
         self._apply_script_env(payload)
-        logger.info("[%s][d=%s] 请求 LLM 修正脚本%s",
-                    self.title, self.deepth, "（含历次执行记录）" if include_history else "")
+        logger.info("[%s][d=%s] 请求 LLM 修正脚本%s（temperature=%.1f）",
+                    self.title, self.deepth, "（含历次执行记录）" if include_history else "", fix_temp)
         self.flow_send_llm_request(payload)
 
     # 接收修正脚本，创建新 attempt 后重新执行。

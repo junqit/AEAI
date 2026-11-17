@@ -52,7 +52,7 @@ class AERoleTarget(AERole):
         })
         flow_out = self.generateFlowOutput(AERoleTargetFunction.receiveTarget)
         flow_out.set_llm_out({"targets": [llm_generate("分解出的子目标")]})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 接收子目标列表，存入 self.targets；空则返回 False（不闭环）

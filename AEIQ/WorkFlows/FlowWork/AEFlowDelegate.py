@@ -184,7 +184,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             AE_CONTENT: self.summarize_prompt(),
         })
 
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.5)
         self.flow_send_llm_request(payload)
 
     # 汇总扩展 message hook，默认空

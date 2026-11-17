@@ -58,7 +58,7 @@ class AERoleWorkflow(AERole):
                 "expected_output": llm_generate("该任务需要输出的内容"),
             }]
         })
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
     # 接收任务列表并派发；空则错误完成闭环。
@@ -91,7 +91,7 @@ class AERoleWorkflow(AERole):
 
     # 为每个任务创建子 flow 串行派发；返回派发数量。
     def _dispatch_workflow_tasks(self, tasks: list) -> int:
-        from Roles.AERoleExcutor import AERoleExcutor  # 懒导入避免循环（AERoleExcutor → AERoleBase → 本模块）
+        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
         dispatched = 0
         first_child = None
         for t in tasks:
@@ -102,7 +102,7 @@ class AERoleWorkflow(AERole):
             goal = str(goal or "").strip()
             if not goal:
                 continue
-            child = AERoleExcutor(
+            child = AEOrchestrator(
                 flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
             )
             self.add_flow(child)
@@ -113,5 +113,5 @@ class AERoleWorkflow(AERole):
         # 全部添加完成后，再启动首个任务（串行；余者由 receive_flow_complete 的 nextFlow 逐个推进）
         if first_child is not None:
             first_child.on_flow_start()
-        logger.info("[%s][d=%s] 创建 %d 个串行子任务 AERoleExcutor（首个已启动），等待完成后汇总", self.title, self.deepth, dispatched)
+        logger.info("[%s][d=%s] 创建 %d 个串行子任务 AEOrchestrator（首个已启动），等待完成后汇总", self.title, self.deepth, dispatched)
         return dispatched
