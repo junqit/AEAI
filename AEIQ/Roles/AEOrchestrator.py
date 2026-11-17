@@ -82,11 +82,8 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         messages = self._build_decision_messages()
         flow_out = self.generateFlowOutput(AEOrchestratorFunction.receive_orchestrate)
         flow_out.set_llm_out({
-            "action": llm_generate("选择的动作名：clarify_role / optimize_goal / gather_context / decompose / answer / execute_script / complete"),
-            "reason": llm_generate("为什么选这个动作"),
-            "target": llm_generate("gather_context 时填：需要获取的具体信息目标；其余动作留空"),
-            "subtasks": [llm_generate("decompose 时填：子任务描述，可多个；其余留空")],
-            "result": llm_generate("complete 时填：最终结论；其余留空"),
+            "action": llm_generate("动作名：clarify_role / optimize_goal / gather_context / decompose / answer / execute_script / complete"),
+            "detail": llm_generate("按动作填：gather_context=要获取的信息目标；decompose=子任务（每行一个）；complete=最终结论；其余留空"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=decision_temp)
         logger.info("[%s][d=%s] 编排决策第 %d 轮（temperature=%.1f）",
@@ -94,20 +91,13 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         self.flow_send_llm_request(payload)
 
     def receive_orchestrate(self, data: dict) -> bool:
-        """LLM 决策回包：执行选定的动作。扁平结构，无嵌套 params。"""
+        """LLM 决策回包：执行选定的动作。"""
         if not isinstance(data, dict):
             data = {}
         action_str = data.get("action", "")
-        reason = data.get("reason", "")
-        # 扁平字段，直接从顶层取
-        target = str(data.get("target", "") or "").strip()
-        subtasks = data.get("subtasks", [])
-        if not isinstance(subtasks, list):
-            subtasks = [str(subtasks)] if subtasks else []
-        subtasks = [str(s).strip() for s in subtasks if str(s).strip()]
-        result = str(data.get("result", "") or "").strip()
+        detail = str(data.get("detail", "") or "").strip()
 
-        logger.info("[%s][d=%s] LLM 决策: action=%s, reason=%s", self.title, self.deepth, action_str, reason)
+        logger.info("[%s][d=%s] LLM 决策: action=%s, detail=%s", self.title, self.deepth, action_str, detail[:100])
 
         # 记录动作
         self.flow_context.record_action(action_str)
@@ -125,15 +115,16 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         elif action == AEAction.optimize_goal:
             self._do_optimize_goal()
         elif action == AEAction.gather_context:
-            self._do_gather_context(target)
+            self._do_gather_context(detail)
         elif action == AEAction.decompose:
+            subtasks = [s.strip() for s in detail.split("\n") if s.strip()] if detail else []
             self._do_decompose(subtasks)
         elif action == AEAction.answer:
             self._do_answer()
         elif action == AEAction.execute_script:
             self._do_execute_script()
         elif action == AEAction.complete:
-            self._do_complete(result)
+            self._do_complete(detail)
         else:
             self._orchestrate()
         return True
