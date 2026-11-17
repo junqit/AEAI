@@ -167,7 +167,9 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             AE_CONTENT: (
                 f"当前上下文：\n{self.flow_context.to_prompt(question=question, title=self.title, responsibility=self.responsibility, goal=goal, sub_results=sub_results)}\n\n"
                 f"基于你对问题的整体理解，选择下一步动作来全面解决问题。\n"
-                f"输出 JSON：action（动作名）、reason（原因）、params（参数，complete 时含 result 字段）。"
+                f"注意：选择 decompose 时，子任务必须是当前目标的**细化分解**（更小范围的子问题），"
+                f"合起来完整覆盖当前目标，不得发散到无关方向。\n"
+                f"输出 JSON：action（动作名）、detail（按动作填参数）。"
             ),
         })
         return messages
@@ -178,7 +180,7 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             (AEAction.clarify_role, "明确角色身份与能力范围", "需要明确以什么身份/能力解决问题", ""),
             (AEAction.optimize_goal, "优化目标", "目标不够清晰、需转化为可执行目标", ""),
             (AEAction.gather_context, "获取背景信息", "解决问题缺少必要信息", "填 detail 字段"),
-            (AEAction.decompose, "拆解为子任务", "问题复杂、需分步骤解决", "填 detail 字段（每行一个子任务）"),
+            (AEAction.decompose, "拆解为子任务（须是当前目标的细化分解，合起来完整覆盖目标，不得发散）", "问题复杂、需分步骤解决", "填 detail 字段（每行一个子任务）"),
             (AEAction.answer, "直接作答", "已有足够信息、可直接回答", ""),
             (AEAction.execute_script, "执行脚本", "需要程序化操作（查询/计算/爬取）", ""),
             (AEAction.complete, "完成", "问题已解决、输出结果", "填 detail 字段"),
