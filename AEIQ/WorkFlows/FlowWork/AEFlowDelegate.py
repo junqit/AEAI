@@ -125,15 +125,16 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
         if self.delegate is None:
             raise RuntimeError("AEFlow delegate 未设置，无法发送 LLM 请求")
-        # goal 为空时用 content 兜底（Orchestrator 可能跳过 optimize_goal，content 即当前层在处理的任务）
-        goal = (self.input.get_goal() if self.input is not None else "") or \
-               (self.input.get_content() if self.input is not None else "")
+        # goal 为空时用 content 兜底（没优化目标的层，content 即当前层在处理的任务）
+        goal = ""
+        if self.input is not None:
+            goal = self.input.get_goal() or self.input.get_content()
         if payload.deepth is None:
             content = f"当前目标上下文为第 {self.deepth} 级，请仅回答本级任务"
             payload.deepth = self.deepth
         else:
             if goal:
-                content = f"第 {self.deepth} 级目标：{goal}，此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"
+                content = f"第 {self.deepth} 级目标：{goal}。此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"
             else:
                 content = ""
         if content:

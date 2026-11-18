@@ -22,8 +22,7 @@ class AERole(AEFlow):
         self.title: str = ""             # 职称
         self.responsibility: str = ""    # 职责要求
         self.rolePrompt: str = ""        # 角色 prompt
-        # 背景确认控制：True 表示跳过自身背景确认（被派发的背景确认子 flow 置 True，避免递归）
-        self.skip_context_confirm: bool = False
+        self.rolePrompt: str = ""        # 角色 prompt
 
     # 打印基础信息：角色描述、deepth、title/responsibility、问题与任务
     def print_info(self) -> None:

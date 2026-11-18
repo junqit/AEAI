@@ -175,31 +175,38 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         return messages
 
     def _action_catalog(self) -> str:
-        """可用动作清单（按已有信息动态过滤），含每个动作的 params 结构规范。"""
+        """可用动作清单（按已有信息动态过滤），含使用条件与选择顺序建议。"""
         all_actions = [
-            (AEAction.clarify_role, "明确角色身份与能力范围", "需要明确以什么身份/能力解决问题", ""),
-            (AEAction.optimize_goal, "优化目标", "目标不够清晰、需转化为可执行目标", ""),
-            (AEAction.gather_context, "获取背景信息", "解决问题缺少必要信息", "填 detail 字段"),
-            (AEAction.decompose, "拆解为子任务（须是当前目标的细化分解，合起来完整覆盖目标，不得发散）", "问题复杂、需分步骤解决", "填 detail 字段（每行一个子任务）"),
-            (AEAction.answer, "直接作答", "已有足够信息、可直接回答", ""),
-            (AEAction.execute_script, "执行脚本", "需要程序化操作（查询/计算/爬取）", ""),
-            (AEAction.complete, "完成", "问题已解决、输出结果", "填 detail 字段"),
+            (AEAction.clarify_role, "仅当缺少「以什么身份/能力解决问题」且该信息会显著改变回答时使用", ""),
+            (AEAction.optimize_goal, "仅当原始问题模糊、无法直接执行，需要转化为可执行目标时使用", ""),
+            (AEAction.gather_context, "仅当缺少外部事实、数据或来源，且这些信息无法通过推理得到时使用", "填 detail 字段"),
+            (AEAction.decompose, "仅当当前目标可以拆成若干更小、互不重叠、合起来覆盖当前目标的子任务时使用", "填 detail 字段（每行一个子任务）"),
+            (AEAction.answer, "当已有足够信息，且不需要外部数据或脚本时使用", ""),
+            (AEAction.execute_script, "当需要查询、计算、爬取或程序化处理时使用", ""),
+            (AEAction.complete, "当问题已解决，需要输出最终结论时使用", "填 detail 字段"),
         ]
         lines = ["可用动作："]
-        for action, desc, when, extra in all_actions:
+        for action, desc, extra in all_actions:
             if action == AEAction.clarify_role and self.title:
                 continue
             if action == AEAction.optimize_goal and self.input and self.input.get_goal():
                 continue
-            if action == AEAction.gather_context and self.skip_context_confirm:
+            # 非顶层（depth>=2）不允许 gather_context，避免递归
+            if action == AEAction.gather_context and self.deepth >= 2:
                 continue
-            # 超过最大拆解深度，不允许 decompose，强制 answer/complete
             if action == AEAction.decompose and self.deepth >= self.MAX_DECOMPOSE_DEPTH:
                 continue
-            line = f"- {action.value}：{desc}（{when}）"
+            line = f"- {action.value}：{desc}"
             if extra:
                 line += f"；{extra}"
             lines.append(line)
+        lines.append("")
+        lines.append("选择顺序建议：")
+        lines.append("1. 当前级任务是否已明确？不明确 → optimize_goal")
+        lines.append("2. 是否缺少关键外部数据？缺少 → gather_context 或 execute_script")
+        lines.append("3. 当前目标是否需要拆成多个子任务？需要 → decompose")
+        lines.append("4. 是否已有足够信息直接回答？是 → answer")
+        lines.append("5. 是否已完成并需输出结论？是 → complete")
         return "\n".join(lines)
 
     # ==================== 动作执行器（复用现有能力 mixin） ====================
@@ -213,7 +220,7 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         self.requestOptimizeInput()
 
     def _do_gather_context(self, target: str) -> None:
-        """获取背景信息：直接用 target 派发子 flow。"""
+        """获取背景信息：派发子 flow 解决，在父目标框架下。"""
         if not target:
             self._orchestrate()
             return
@@ -241,8 +248,8 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         self.requestLLMAnswer()
 
     def _do_execute_script(self) -> None:
-        """脚本执行（AERoleExcuterScript.start_flow）。"""
-        self.start_flow()
+        """脚本执行：进入选型→生成→执行→验证循环。"""
+        self._request_script_type()
 
     def _do_complete(self, result: str) -> None:
         """完成并输出结果。"""

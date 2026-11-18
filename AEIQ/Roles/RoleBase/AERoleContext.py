@@ -82,14 +82,13 @@ class AERoleContext(AERole):
         logger.info("[%s][d=%s] 已派发背景确认子 flow（completeIdent=contextComplete）", self.title, self.deepth)
         return True
 
-    # 创建执行背景确认的子 flow（AEOrchestrator）；skip_context_confirm 过滤 gather_context 避免递归
+    # 创建执行背景确认的子 flow（AEOrchestrator）
     def _dispatch_context_flow(self, target: str):
         from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
         sub = AEOrchestrator(
             flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
-        sub.skip_context_confirm = True  # 子 flow 不允许 gather_context，避免递归
         return sub
 
     # 背景确认子 flow 完成回调（completeIdent）：确认结果有无并存入父 flow 的 input.context，返回是否有结果

@@ -104,15 +104,15 @@ class AERoleExcuterScript:
 
     type: str = ""
 
-    # 流程入口：初始化 attempts 后选型→生成→执行→验证循环。
+    # 流程入口：选型→生成→执行→验证循环。
     def start_flow(self) -> None:
-        self.attempts = []
         self._request_script_type()
 
     # 请求 LLM 按能力与已装工具包选脚本类型。
     def _request_script_type(self) -> None:
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+        self.attempts = []  # 初始化脚本执行记账
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
