@@ -6,7 +6,8 @@ import logging
 from typing import Optional
 
 from WorkFlows.FlowWork.AEFlow import AEFlow
-from Roles.RoleBase.AERoleType import AERoleParamInfo
+from Roles.RoleBase.AERoleType import AERoleParamInfo, AEAction
+from Roles.RoleBase.AEFlowContext import AEFlowContext
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +23,21 @@ class AERole(AEFlow):
         self.title: str = ""             # 职称
         self.responsibility: str = ""    # 职责要求
         self.rolePrompt: str = ""        # 角色 prompt
-        self.rolePrompt: str = ""        # 角色 prompt
+        # 出生 action：父 flow 创建本 flow 时所用的 action（subflow 专属，根 flow 为 None）；
+        # subflow 内 _action_catalog 过滤掉它，防同 action 递归
+        self.born_action: Optional[AEAction] = None
+        # 决策辅助上下文（中间结论：background/action_history/errors/synthesis/verification/sub_task_results）
+        self.flow_context = AEFlowContext()
 
     # 打印基础信息：角色描述、deepth、title/responsibility、问题与任务
     def print_info(self) -> None:
         role_desc = ""
         if self.role is not None:
             role_desc = f"{self.role.role.value}（{self.role.title}：{self.role.responsibility}）"
-        inp = getattr(self, "input", None)
+        inp = self.input
         question = inp.get_content() if inp is not None else ""
         goal = inp.get_goal() if inp is not None else ""
-        deepth = getattr(self, "deepth", 0)
+        deepth = self.deepth
         logger.info(
             "[%s][d=%s] 基础信息:\n"
             "========================================\n"
@@ -43,6 +48,6 @@ class AERole(AEFlow):
             "  问题: %s\n"
             "  明确的任务: %s\n"
             "========================================",
-            getattr(self, "title", ""), deepth,
+            self.title, deepth,
             role_desc, deepth, self.title, self.responsibility, question, goal,
         )

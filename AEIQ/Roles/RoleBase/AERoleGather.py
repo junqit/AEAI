@@ -1,4 +1,4 @@
-"""AERoleContext - 背景确认能力 mixin。
+"""AERoleGather - 背景确认能力 mixin。
 
 以当前能力（title+responsibility）与确认目标（input.goal）判断是否需要背景确认：
   requestContextNeeded → receiveContextNeeded：请求 LLM 判定「需要 / 不需要」。
@@ -13,18 +13,18 @@ from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
 from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleContextFunction(AEFunctional):
+class AERoleGatherFunction(AEFunctional):
     """背景确认回包功能性方法名。"""
     receiveContextNeeded = "receiveContextNeeded"
 
 
-class AERoleContext(AERole):
+class AERoleGather(AERole):
     """背景确认能力 mixin：以能力+目标判定是否需要背景确认，需要则派发子 flow 执行背景确认（并行）。"""
 
     # 以当前能力与确认目标，请求 LLM 判定是否需要背景确认（true/false）
@@ -55,7 +55,7 @@ class AERoleContext(AERole):
                 "【目标】\n" + goal
             ),
         })
-        flow_out = self.generateFlowOutput(AERoleContextFunction.receiveContextNeeded)
+        flow_out = self.generateFlowOutput(AERoleGatherFunction.receiveContextNeeded)
         flow_out.set_llm_out({
             "target": llm_generate("获取必要背景信息的单一明确目标（prompt）；无需则留空"),
         })
@@ -71,10 +71,12 @@ class AERoleContext(AERole):
         if not target:
             self.contextComplete(None)  # 无 target 直接调 contextComplete（不经子 flow）
             return True
-        sub = self._dispatch_context_flow(target)
-        if sub is None:
-            logger.warning("[%s][d=%s] 背景确认子 flow 创建失败，跳过", self.title, self.deepth)
-            return False
+        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
+        sub = AEOrchestrator(
+            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
+        )
+        sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
+        sub.born_action = AEAction.gather_context
         # 子 flow 完成回包路由回自身（flowOutput.ident=self.ident），由 completeIdent 调 contextComplete
         self.completeIdent = self.registerFunctional("contextComplete")
         self.add_flow(sub)
@@ -82,22 +84,31 @@ class AERoleContext(AERole):
         logger.info("[%s][d=%s] 已派发背景确认子 flow（completeIdent=contextComplete）", self.title, self.deepth)
         return True
 
-    # 创建执行背景确认的子 flow（AEOrchestrator）
-    def _dispatch_context_flow(self, target: str):
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
+    # gather_context 动作：派发子 flow 获取背景信息，传递动作历史让 LLM 看到决策链
+    def do_gather_context(self, target: str) -> None:
+        if not target:
+            self._orchestrate()
+            return
+        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环
         sub = AEOrchestrator(
             flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
-        return sub
+        sub.born_action = AEAction.gather_context
+        # 传递父级动作历史，让子 flow 的 LLM 看到决策链（避免重复选 gather_context）
+        sub.flow_context.action_history = list(self.flow_context.action_history)
+        sub.flow_context.action_history.append({"action": "gather_context", "params": {"target": target}, "result": None})
+        self.completeIdent = self.registerFunctional("contextComplete")
+        self.add_flow(sub)
+        sub.on_flow_start()
 
     # 背景确认子 flow 完成回调（completeIdent）：确认结果有无并存入父 flow 的 input.context，返回是否有结果
     def contextComplete(self, flowOutput) -> bool:
         result = ""
         if flowOutput is not None:
-            result = getattr(flowOutput, "outResult", "") or ""
+            result = flowOutput.outResult or ""
             if not result:
-                out = getattr(flowOutput, "out_schema", None)
+                out = flowOutput.out_schema
                 if isinstance(out, dict):
                     result = out.get(AE_CONTENT, "") or ""
             if result:

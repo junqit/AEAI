@@ -68,15 +68,12 @@ class AEFlowInfo:
 
     # 返回本 flow 的 AEFlowOutput，schema 结构为 {ident, funcationkey, llm_out}。
     # functional: 功能性方法名，直接用于注册临时处理方法；回包由 flow_receive_llm 按 AE_funcationkey 路由到对应方法。
-    # llm_out：complete 阶段必为 self.output.out_schema（本 flow 输出结构，交 LLM 填充）；
-    #   其余阶段用默认占位 {AE_CONTENT: llm_generate("生成的答案")}。
+    # llm_out：complete 阶段为 self.output.out_schema（本 flow 输出结构）；其余阶段由调用方 set_llm_out 设置。
     def generateFlowOutput(self, functional: AEFunctional) -> AEFlowOutput:
-        from Context.Context.AELLMPayload import llm_generate
-
         if functional == AEFunctional.receive_summarize_result and self.output is not None:
             llm_out = self.output.out_schema
         else:
-            llm_out = {AE_CONTENT: llm_generate("给出最准确的答案，不可随意！！")}
+            llm_out = {}
 
         funcationkey = self.registerFunctional(functional)
 

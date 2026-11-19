@@ -1,4 +1,4 @@
-"""AERoleInformation - 角色信息能力 mixin：生成 title / responsibility / rolePrompt。
+"""AERoleClarify - 角色信息能力 mixin：生成 title / responsibility / rolePrompt。
 角色信息属性（role / title / responsibility / rolePrompt）由基类持有。"""
 import logging
 
@@ -11,13 +11,13 @@ from Roles.RoleBase.AERole import AERole
 logger = logging.getLogger(__name__)
 
 
-class AERoleInformationFunction(AEFunctional):
+class AERoleClarifyFunction(AEFunctional):
     """角色信息回包功能性方法名。"""
     receiveRoleInfomation = "receiveRoleInfomation"
     receiveRolePrompt = "receiveRolePrompt"
 
 
-class AERoleInformation(AERole):
+class AERoleClarify(AERole):
     """角色信息能力 mixin：提供 title / responsibility / rolePrompt 生成请求。
     角色信息属性由基类经 cooperative __init__ 持有。"""
 
@@ -38,7 +38,7 @@ class AERoleInformation(AERole):
             user_msg = f"问题：\n{user_question}\n\n"
         user_msg += "请根据上述问题，生成解决该问题所需的工作名称与能力范围。"
         messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: user_msg})
-        flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRoleInfomation)
+        flow_out = self.generateFlowOutput(AERoleClarifyFunction.receiveRoleInfomation)
         flow_out.set_llm_out({
             AE_TITLE: llm_generate("准确、完整解决当前问题所需的角色名称"),
             AE_RESPONSIBILITY: llm_generate("解决问题的能力范围，明确能做什么、如何解决及边界"),
@@ -72,7 +72,7 @@ class AERoleInformation(AERole):
                 "- 简洁、明确，只输出指令文本"
             ),
         })
-        flow_out = self.generateFlowOutput(AERoleInformationFunction.receiveRolePrompt)
+        flow_out = self.generateFlowOutput(AERoleClarifyFunction.receiveRolePrompt)
         flow_out.set_llm_out({"rolePrompt": llm_generate("基于职称与能力范围的角色指令，不含具体问题")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)

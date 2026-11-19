@@ -14,6 +14,19 @@ class AEConentRole(Enum):
     CONTEXT = "context"
 
 
+class AEAction(str, Enum):
+    """LLM 可自主选择的动作（收敛链：明确→收集→处理→拆解→验证→汇总→输出；answer 为旁路终态）。"""
+    clarify_role = "clarify_role"       # 明确角色身份与能力范围
+    optimize_goal = "optimize_goal"     # 优化目标（含成功标准/约束）
+    gather_context = "gather_context"   # 获取背景信息
+    execute_script = "execute_script"   # 程序化获取/处理（与 gather_context 同属输入侧）
+    decompose = "decompose"             # 拆解为子任务
+    verify = "verify"                   # 任务完成验证：子任务齐备/有效/覆盖原目标（汇总前闸门）
+    synthesize = "synthesize"           # 汇总子结果为候选答案（中间结论）
+    complete = "complete"               # 完成并输出最终结果（synthesize 后，主出口）
+    answer = "answer"                   # LLM 直接作答（简单问题旁路终态）
+
+
 class AEFlowRole(Enum):
     """Flow 角色类型：专家 / 工作组 / 员工 / 原子任务 / LLM / 脚本
 

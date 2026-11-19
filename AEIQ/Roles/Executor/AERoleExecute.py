@@ -1,4 +1,4 @@
-"""AERoleExcuterScript - 脚本执行能力 mixin。
+"""AERoleExecute - 脚本执行能力 mixin。
 
 流程：start_flow → _request_script_type（LLM 按 ruby/python/shell 能力与已装工具包选型）→
 receiveScriptType → _request_script_generate（LLM 生成脚本内容）→ receiveScriptGenerate →
@@ -17,12 +17,13 @@ from typing import Optional
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleExcuterScriptFunction(AEFunctional):
-    """AERoleExcuterScript 专属回包功能性方法名。"""
+class AERoleExecuteFunction(AEFunctional):
+    """AERoleExecute 专属回包功能性方法名。"""
     receiveScriptType = "receiveScriptType"            # LLM 选脚本类型（按当前能力与已装工具包）
     receiveScriptGenerate = "receiveScriptGenerate"  # 生成脚本内容（类型已选定）
     receiveScriptFix = "receiveScriptFix"
@@ -43,7 +44,7 @@ class AEScriptAttempt:
     stdout 与 error 互斥：执行成功记 stdout（error 空）；执行失败记 error（stdout 空）。
     score/reason 仅在执行成功且经 LLM 验证后由 receiveScriptVerify 回填到该次 attempt。
     attempt 于收到脚本时创建（receiveScriptGenerate/receiveScriptFix），执行结果与验证评分随后
-    回填到同一实例；AERoleExcuterScript 不另存脚本内容，当前 attempt = self.attempts[-1]。
+    回填到同一实例；AERoleExecute 不另存脚本内容，当前 attempt = self.attempts[-1]。
     last_error/pending_stdout/verified_score/verify_count 等均由历次 attempt 派生，不另存冗余字段。
     """
     script: str = ""
@@ -86,7 +87,7 @@ class AEScriptAttempt:
         return max(0, min(100, n))
 
 
-class AERoleExcuterScript:
+class AERoleExecute(AERole):
     """脚本执行能力 mixin：仅脚本执行循环（选型→生成→执行→验证→修正）；前置链路与编排由宿主
     （AEOrchestrator）承担。目标 = 宿主 input.goal；type 由本 mixin 经 LLM 选型后贯穿执行；脚本内容
     由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）。回包方法落在宿主实例上。
@@ -122,17 +123,17 @@ class AERoleExcuterScript:
                 AE_ROLE: AEConentRole.USER.value,
                 AE_CONTENT: (
                     "请根据下方提供的当前 ruby / python / shell 能力与已安装的工具包，"
-                    "选择最适合产出上述目标/期望输出的脚本类型。严格输出 JSON，含：\n"
-                    "  - type：在 python / shell / ruby 中选择最适合的一种\n"
-                    "  - reason：简短说明为何该类型最适合（能力 / 已装工具包匹配度）\n\n"
+                    "选择匹配上述目标/期望输出的脚本类型。严格输出 JSON，含：\n"
+                    "  - type：在 python / shell / ruby 中选择匹配的一种\n"
+                    "  - reason：简短说明为何该类型匹配（能力 / 已装工具包匹配度）\n\n"
                     "选择依据：哪种语言的已装工具包与能力最能高效、可靠地产出目标/期望输出。"
                 ),
             },
         ]
-        flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptType)
+        flow_out = self.generateFlowOutput(AERoleExecuteFunction.receiveScriptType)
         flow_out.set_llm_out({
-            "type": llm_generate("脚本类型：python / shell / ruby 之一，按当前能力与已装工具包选最适合的"),
-            "reason": llm_generate("简短理由：为何该类型最适合"),
+            "type": llm_generate("脚本类型：python / shell / ruby 之一，按当前能力与已装工具包选匹配的"),
+            "reason": llm_generate("简短理由：为何该类型匹配"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self._apply_script_env(payload)
@@ -180,7 +181,7 @@ class AERoleExcuterScript:
                 ),
             },
         ]
-        flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptGenerate)
+        flow_out = self.generateFlowOutput(AERoleExecuteFunction.receiveScriptGenerate)
         flow_out.set_llm_out({"script": llm_generate("可执行的脚本文本")})
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.2)
         self._apply_script_env(payload)
@@ -275,7 +276,7 @@ class AERoleExcuterScript:
                 ),
             },
         ]
-        flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptVerify)
+        flow_out = self.generateFlowOutput(AERoleExecuteFunction.receiveScriptVerify)
         flow_out.set_llm_out({
             "score": llm_generate("0到100的整数分值，100为完全符合预期"),
             "reason": llm_generate("当前程序结论不达标的唯一准确原因"),
@@ -350,7 +351,7 @@ class AERoleExcuterScript:
                 AE_CONTENT: "请输出修正后的完整脚本内容（仅脚本代码本身，不要解释、不要 markdown 代码块标记）。",
             },
         ]
-        flow_out = self.generateFlowOutput(AERoleExcuterScriptFunction.receiveScriptFix)
+        flow_out = self.generateFlowOutput(AERoleExecuteFunction.receiveScriptFix)
         flow_out.set_llm_out({"script": llm_generate("修正后的完整脚本内容")})
         # 严谨不奏效时逐步提高温度，让 LLM 更活跃、尝试不同思路：0.2 → 0.4 → 0.6 → 0.8（上限）
         fix_temp = min(0.2 + len(self.attempts) * 0.2, 0.8)

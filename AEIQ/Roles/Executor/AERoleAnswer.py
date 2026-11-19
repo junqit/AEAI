@@ -1,5 +1,5 @@
 """
-AERoleExcuteLLM - LLM 作答能力 mixin。
+AERoleAnswer - LLM 作答能力 mixin。
 
 仅提供 LLM 直接作答能力（requestLLMAnswer）；前置链路（角色信息/问题优化/角色选择/任务拆解）
 与 flow 编排由宿主 AEOrchestrator 承担。作为 mixin 混入 AEOrchestrator，回包方法落在宿主实例上
@@ -12,11 +12,12 @@ from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleExcuteLLM:
+class AERoleAnswer(AERole):
     """LLM 作答能力 mixin：仅 requestLLMAnswer。前置链路与编排由宿主（AEOrchestrator）承担。"""
 
     # 请求 LLM 作答；无可作答问题则错误完成闭环。

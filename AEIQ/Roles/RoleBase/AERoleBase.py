@@ -1,24 +1,20 @@
 """
 AERoleBase - 角色 Flow 基类。
 
-提供角色上下文 hook：role_brief（身份与能力范围）、summarize_extend_messages（汇总扩展消息）、
-outResult_summary（上下文与结果总结）、flow_description / flow_complete_info（描述与完成信息）。
+提供角色上下文 hook：role_brief（身份与能力范围）、flow_description / flow_complete_info（描述与完成信息）。
 """
 import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Roles.RoleBase.AERoleType import ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
-from Roles.RoleBase.AERoleInformation import AERoleInformation
-from Roles.RoleBase.AERoleQuestion import AERoleQuestion
-from Roles.RoleBase.AERoleContext import AERoleContext
-from Roles.RoleBase.AERoleChoice import AERoleChoice
-from Roles.Excutor.AERoleWorkflow import AERoleWorkflow
+from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleBase(AERoleInformation, AERoleQuestion, AERoleContext, AERoleChoice, AERoleWorkflow):
-    """角色 Flow 基类：提供角色上下文 hook（role_brief / summarize_extend_messages / outResult_summary 等）。"""
+class AERoleBase(AERole):
+    """角色 Flow hook 基类：提供角色上下文 hook（role_brief / flow_description / flow_complete_info 等）。
+    不聚合具体阶段能力——各能力 mixin 由 AEOrchestrator 显式继承。"""
 
     # 拼接全部角色的花名册（type/职称/职责），供角色选择等场景使用
     def roleDescription(self) -> str:
@@ -39,13 +35,6 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleContext, AERoleChoice,
         parts.append(super().flow_description())
         return "".join(parts)
 
-    # 把 role_brief 作为 system 消息追加到汇总 messages 头部
-    def summarize_extend_messages(self) -> list:
-        role_brief = self.role_brief()
-        if len(role_brief) > 0:
-            return [{AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief}]
-        return []
-
     # 组装身份与能力范围描述，末尾追加角色铁律
     def role_brief(self) -> str:
         parts = []
@@ -60,32 +49,20 @@ class AERoleBase(AERoleInformation, AERoleQuestion, AERoleContext, AERoleChoice,
             return ""
         return "".join(parts)
 
-    # 组装问题、身份、结果为三段式总结，供父 flow 汇总
-    def outResult_summary(self) -> str:
-        answer = self.output.outResult or ""
-        question = (self.input.get_goal() if self.input is not None else "")
-        parts = []
-        if question:
-            parts.append(question)
-        if self.title:
-            parts.append(f"以「{self.title}」身份")
-        parts.append(f"给出结果：{answer}")
-        return "\n".join(parts)
-
     # 在基类 info 上补 role/deepth/delegate 信息，供树形呈现
     def flow_complete_info(self) -> dict:
         info = super().flow_complete_info()
-        role = getattr(self, "role", None)
+        role = self.role
         if role is not None:
             info["role"] = role.value
         info["deepth"] = self.deepth
-        delegate = getattr(self, "delegate", None)
+        delegate = self.delegate
         dep_info = None
         if delegate is not None:
             try:
                 dep_info = {
-                    "ident": getattr(delegate, "ident", ""),
-                    "title": getattr(delegate, "title", "") or "",
+                    "ident": delegate.ident,
+                    "title": delegate.title or "",
                 }
             except ReferenceError:  # weakref 已失效
                 dep_info = None

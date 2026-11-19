@@ -10,9 +10,8 @@ Flow 在执行过程中通过该 Delegate 与外部交互：
 
 AEFlowDelegateImpl 为协议方法的实例实现（mixin）。方法内部以 self 引用所属 flow。
 
-本类管工作流流转（结果路由 / 子 flow 编排 / 完成聚合触发）与结果汇总编排（summarize_to_llm，
-非私有，可被子类单独实现）；汇总扩展消息 hook（summarize_extend_messages）与 outResult_summary
-为 hook，可被子类覆写（receive_flow_result 在所有子 flow 完成时调 self.summarize_to_llm()）。
+本类管工作流流转（结果路由 / 子 flow 编排 / 完成聚合触发）；所有子 flow 完成时调 summarize_to_llm
+整理子结果完成本 flow（不调 LLM，仅 flow 控制）。
 """
 import logging
 from enum import Enum
@@ -129,32 +128,28 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         goal = ""
         if self.input is not None:
             goal = self.input.get_goal() or self.input.get_content()
+        # 前置上下文消息：goal 上下文 + completeIdent 子 flow 的 goal/答案，插到原 messages 前
+        prefix_msgs = []
         if payload.deepth is None:
-            content = f"当前目标上下文为第 {self.deepth} 级，请仅回答本级任务"
             payload.deepth = self.deepth
-        else:
-            if goal:
-                content = f"第 {self.deepth} 级目标：{goal}。此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"
-            else:
-                content = ""
-        if content:
-            payload.messages.insert(0, {AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: content})
-        # 追加 completeIdent 非空的子 flow 的 goal 与答案作为上下文
-        ctx_msgs = []
+            prefix_msgs.append({AE_ROLE: AEConentRole.SYSTEM.value,
+                                AE_CONTENT: f"当前目标上下文为第 {self.deepth} 级，请仅回答本级任务"})
+        elif goal:
+            prefix_msgs.append({AE_ROLE: AEConentRole.SYSTEM.value,
+                                AE_CONTENT: f"第 {self.deepth} 级目标：{goal}。此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"})
+        # completeIdent 非空的子 flow 的 goal 与答案作为上下文
         for sub in self._flows.values():
             if not sub.completeIdent:
                 continue
-            sub_input = getattr(sub, "input", None)
-            sub_output = getattr(sub, "output", None)
-            sub_goal = sub_input.get_goal() if sub_input is not None else ""
-            sub_answer = sub_output.outResult if sub_output is not None else ""
+            sub_goal = sub.input.get_goal() if sub.input else ""
+            sub_answer = sub.output.outResult or ""
             if sub_goal or sub_answer:
-                ctx_msgs.append({
+                prefix_msgs.append({
                     AE_ROLE: AEConentRole.ASSISTANT.value,
                     AE_CONTENT: f"目标：{sub_goal}\n答案：{sub_answer}",
                 })
-        if ctx_msgs:
-            payload.messages[1:1] = ctx_msgs
+        if prefix_msgs:
+            payload.messages = prefix_msgs + payload.messages
         payload.out_schema = {
             AE_IDENT: self.ident,
             AE_LLM_OUT: payload.out_schema,
@@ -163,53 +158,18 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # ==================== 结果汇总编排 ====================
 
-    # 收集所有子 flow 的 outResult 交 LLM 总结，所有子 flow 完成时调用
+    # 所有子 flow 完成时：整理子结果完成本 flow（不调 LLM，仅 flow 控制）
     def summarize_to_llm(self) -> None:
         logger.info(
-            "[%s][d=%s] summarize_to_llm: 子 flow 全部完成 %d/%d，发送总结请求",
+            "[%s][d=%s] 子 flow 全部完成 %d/%d，整理结果完成本 flow",
             type(self).__name__, self.deepth, len(self._flows), len(self._flows),
         )
-        flow_out = self.generateFlowOutput(AEFunctional.receive_summarize_result)
-        messages = []
-        messages.extend(self.summarize_extend_messages())
+        results = []
         for f in self._flows.values():
-            if f.output.outResult:
-                try:
-                    summary = f.outResult_summary()
-                    messages.append({
-                        AE_ROLE: AEConentRole.ASSISTANT.value,
-                        AE_CONTENT: summary,
-                    })
-                except Exception as e:
-                    logger.error("[%s][d=%s] summarize 子 flow outResult_summary 异常: %s", type(self).__name__, self.deepth, e, exc_info=True)
-            else:
-                logger.warning("[%s][d=%s] summarize 子 flow output.outResult 为空, 跳过, status=%s", type(self).__name__, self.deepth, f.status)
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: self.summarize_prompt(),
-        })
-
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.5)
-        self.flow_send_llm_request(payload)
-
-    # 汇总扩展 message hook，默认空
-    def summarize_extend_messages(self) -> list:
-        return []
-
-    # 汇总 user 指令 hook，子类可覆写
-    def summarize_prompt(self) -> str:
-        goal = (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""
-        prompt = "以上是各子任务的执行结果与结论。请综合全部子任务的结果，输出一份完整的最终结论。"
-        if goal:
-            prompt += f"\n原始问题/目标：{goal}\n结论须针对该问题/目标作答。"
-        prompt += (
-            "\n要求：\n"
-            "- 必须涵盖上述每一个子任务的结果，不得遗漏任何一个；\n"
-            "- 对内容相同或重复的结论合并为一项，不得逐条复制重复内容；\n"
-            "- 按逻辑顺序组织（如：先结论后依据、先总体后细节，或按子任务顺序），使读者能快速理解；\n"
-            "- 仅输出综合结论本身，不得输出过程说明、分析步骤或额外解释。"
-        )
-        return prompt
+            r = f.output.outResult or ""
+            if r:
+                results.append(r)
+        self.flow_complete({AE_IDENT: self.ident, AE_CONTENT: "\n".join(results)})
 
     # 接收汇总结果，调 flow_complete 完成本 flow
     def receive_summarize_result(self, data: dict) -> bool:

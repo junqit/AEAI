@@ -1,4 +1,4 @@
-"""AERoleWorkflow - 任务拆解 mixin。
+"""AERoleDecompose - 任务拆解 mixin。
 
 提供 requestWorkflow / receiveWorkflow：据已优化的问题与当前角色能力范围，拆解成多个任务，
 每项含任务目标（goal）与任务需输出内容（expected_output）；receiveWorkflow 解析任务列表并打印。
@@ -11,18 +11,18 @@ from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
 from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
 
 
-class AERoleWorkflowFunction(AEFunctional):
+class AERoleDecomposeFunction(AEFunctional):
     """任务拆解回包功能性方法名。"""
     receiveWorkflow = "receiveWorkflow"
 
 
-class AERoleWorkflow(AERole):
+class AERoleDecompose(AERole):
     """任务拆解 mixin：据已优化问题与当前角色能力范围，拆成多个任务。"""
 
     # 据问题与角色能力拆解为最小颗粒度串行任务。
@@ -40,7 +40,7 @@ class AERoleWorkflow(AERole):
                 "- 将当前问题拆解为最小颗粒度的任务（不可再分的原子任务），按串行顺序排列，合起来须完整解决该问题。\n"
                 "- 每个任务必须包含：goal（该任务的目标）与 expected_output（该任务需要输出的内容）。\n"
                 "- 每个任务的 goal 与 expected_output 须落在当前角色能力范围内，是最小颗粒度（不可再拆解）。\n"
-                "- 任务按串行顺序执行（前一任务完成后才执行下一任务），任务数量尽可能少，避免过度拆解；不得编造、不得拒绝。"
+                "- 任务按串行顺序执行（前一任务完成后才执行下一任务），每个任务为不可再分的原子任务；不得编造、不得拒绝。"
             ),
         })
         messages.append({
@@ -51,7 +51,7 @@ class AERoleWorkflow(AERole):
                 f"每项含 goal 与 expected_output，按串行顺序排列。"
             ),
         })
-        flow_out = self.generateFlowOutput(AERoleWorkflowFunction.receiveWorkflow)
+        flow_out = self.generateFlowOutput(AERoleDecomposeFunction.receiveWorkflow)
         flow_out.set_llm_out({
             "tasks": [{
                 "goal": llm_generate("该最小颗粒度任务的目标"),
@@ -69,36 +69,15 @@ class AERoleWorkflow(AERole):
         elif not isinstance(tasks, list):
             tasks = []
         logger.info("[%s][d=%s] 拆解出 %d 个任务：", self.title, self.deepth, len(tasks))
+        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
+        first_child = None
         for i, t in enumerate(tasks):
             if isinstance(t, dict):
-                logger.info(
-                    "  任务 %d：goal=%s | expected_output=%s",
-                    i + 1, t.get("goal"), t.get("expected_output"),
-                )
-            else:
-                logger.info("  任务 %d：%s", i + 1, t)
-        subtask_count = self._dispatch_workflow_tasks(tasks)
-        if not subtask_count:
-            logger.warning("[%s][d=%s] 任务拆解为空或无可派发任务（子任务 %d 个），以错误完成本 flow 避免卡死",
-                           self.title, self.deepth, subtask_count)
-            self.flow_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-                 AE_CONTENT: "任务拆解为空或无可派发任务"},
-                AEFlowCompletEvent.error,
-            )
-            return False
-        return True
-
-    # 为每个任务创建子 flow 串行派发；返回派发数量。
-    def _dispatch_workflow_tasks(self, tasks: list) -> int:
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
-        dispatched = 0
-        first_child = None
-        for t in tasks:
-            if isinstance(t, dict):
                 goal = t.get("goal") or t.get("expected_output") or ""
+                logger.info("  任务 %d：goal=%s | expected_output=%s", i + 1, t.get("goal"), t.get("expected_output"))
             else:
                 goal = t
+                logger.info("  任务 %d：%s", i + 1, t)
             goal = str(goal or "").strip()
             if not goal:
                 continue
@@ -107,11 +86,44 @@ class AERoleWorkflow(AERole):
             )
             self.add_flow(child)
             child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
+            child.born_action = AEAction.decompose
             if first_child is None:
                 first_child = child
-            dispatched += 1
-        # 全部添加完成后，再启动首个任务（串行；余者由 receive_flow_complete 的 nextFlow 逐个推进）
-        if first_child is not None:
-            first_child.on_flow_start()
-        logger.info("[%s][d=%s] 创建 %d 个串行子任务 AEOrchestrator（首个已启动），等待完成后汇总", self.title, self.deepth, dispatched)
-        return dispatched
+        if first_child is None:
+            logger.warning("[%s][d=%s] 任务拆解为空或无可派发任务，以错误完成本 flow 避免卡死", self.title, self.deepth)
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "任务拆解为空或无可派发任务"},
+                AEFlowCompletEvent.error,
+            )
+            return False
+        # 串行：首个启动，余者由 receive_flow_complete 的 nextFlow 逐个推进
+        first_child.on_flow_start()
+        logger.info("[%s][d=%s] 创建子任务并启动首个（串行），等待完成后汇总", self.title, self.deepth)
+        return True
+
+    # decompose 动作：优先用 subtasks 直接派发，未给则请求 LLM 拆解
+    def do_decompose(self, subtasks: list) -> None:
+        if not subtasks:
+            self.requestWorkflow()
+            return
+        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环
+        first_child = None
+        for goal in subtasks:
+            goal = str(goal or "").strip()
+            if not goal:
+                continue
+            child = AEOrchestrator(
+                flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
+            )
+            self.add_flow(child)
+            child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
+            child.born_action = AEAction.decompose
+            if first_child is None:
+                first_child = child
+        if first_child is None:
+            self.flow_context.add_error("任务拆解为空或无可派发任务")
+            self._orchestrate()
+            return
+        first_child.on_flow_start()
+        logger.info("[%s][d=%s] 创建子任务并启动首个（串行）", self.title, self.deepth)

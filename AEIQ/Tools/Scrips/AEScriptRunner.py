@@ -13,7 +13,7 @@ import platform
 import subprocess
 from typing import Dict, Type, Optional
 
-from Roles.Excutor.AERoleExcuterScript import AEScriptType
+from Roles.Executor.AERoleExecute import AEScriptType
 
 logger = logging.getLogger(__name__)
 

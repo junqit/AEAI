@@ -2,7 +2,7 @@
 
 提供 requestTarget / receiveTarget：把 input.goal 按当前工作名称（title）与工作能力
 （responsibility）分解为若干落在角色能力范围内的子目标，存入 self.targets
-（不派发子 flow、不完成 flow；区别于 AERoleWorkflow 的任务拆解+派发）。
+（不派发子 flow、不完成 flow；区别于 AERoleDecompose 的任务拆解+派发）。
 """
 import logging
 
@@ -45,7 +45,7 @@ class AERoleTarget(AERole):
                 "要求：\n"
                 "- 每个子目标落在当前角色能力范围内，是达成原目标的一个明确环节；\n"
                 "- 子目标之间相互独立、合起来完整覆盖原目标；\n"
-                "- 颗粒度适中，避免过度拆解；不得编造、不得偏离原目标。\n"
+                "- 每个子目标为不可再分的原子目标；不得编造、不得偏离原目标。\n"
                 "\n"
                 "【目标】\n" + goal
             ),

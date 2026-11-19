@@ -5,8 +5,8 @@ AEOrchestrator - LLM 驱动的自主决策编排器。
 来全面解决问题，按需调用对应能力（角色信息/目标优化/背景确认/任务拆解/作答/脚本），
 结果回写 flow 自身状态 + AEFlowContext（只存 background/action_history/errors），继续决策直到完成。
 
-现有能力 mixin（AERoleInformation/AERoleQuestion/AERoleChoice/AERoleContext/
-AERoleWorkflow/AERoleExcuteLLM/AERoleExcuterScript）作为 action handler 被调用，
+现有能力 mixin（AERoleClarify/AERoleOptimize/AERoleChoice/AERoleGather/
+AERoleDecompose/AERoleAnswer/AERoleExecute）作为 action handler 被调用，
 不再是固定序列中的步骤。
 """
 import logging
@@ -15,26 +15,26 @@ from typing import Dict, Any, List
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus, AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
+from Roles.RoleBase.AERoleClarify import AERoleClarify
+from Roles.RoleBase.AERoleOptimize import AERoleOptimize
+from Roles.RoleBase.AERoleGather import AERoleGather
+from Roles.RoleBase.AERoleChoice import AERoleChoice
+from Roles.RoleBase.AERoleTarget import AERoleTarget
+from Roles.RoleBase.AERoleVerify import AERoleVerify
+from Roles.RoleBase.AERoleSynthesize import AERoleSynthesize
+from Roles.RoleBase.AERoleComplete import AERoleComplete
 from Roles.RoleBase.AERoleBase import AERoleBase
 from Roles.RoleBase.AEFlowContext import AEFlowContext
-from Roles.Excutor.AERoleExcuteLLM import AERoleExcuteLLM
-from Roles.Excutor.AERoleExcuterScript import AERoleExcuterScript
+from Roles.RoleBase.AERoleDecompose import AERoleDecompose
+from Roles.Executor.AERoleAnswer import AERoleAnswer
+from Roles.Executor.AERoleExecute import AERoleExecute
 
 logger = logging.getLogger(__name__)
-
-
-class AEAction(str, Enum):
-    """LLM 可自主选择的动作。"""
-    clarify_role = "clarify_role"       # 明确角色身份与能力范围
-    optimize_goal = "optimize_goal"     # 优化目标
-    gather_context = "gather_context"   # 获取背景信息
-    decompose = "decompose"             # 拆解为子任务
-    answer = "answer"                   # LLM 直接作答
-    execute_script = "execute_script"   # 脚本执行
-    complete = "complete"               # 完成并输出结果
 
 
 class AEOrchestratorFunction(AEFunctional):
@@ -42,7 +42,9 @@ class AEOrchestratorFunction(AEFunctional):
     receive_orchestrate = "receive_orchestrate"
 
 
-class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
+class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
+                     AERoleDecompose, AERoleVerify, AERoleSynthesize, AERoleComplete, AERoleAnswer,
+                     AERoleChoice, AERoleTarget, AERoleBase):
     """LLM 驱动的自主决策编排器：LLM 理解问题 → 自主选能力 → 执行 → 结果回写 → 继续决策。
 
     替代 AERoleExcutor 的硬编码链路（on_flow_start→requestRoleInformation→...→flow_complete），
@@ -64,8 +66,6 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
                 AEFlowCompletEvent.error,
             )
             return False
-        # 只初始化 flow 没有的辅助上下文（background/action_history/errors）
-        self.flow_context = AEFlowContext()
         self._orchestrate()
         return True
 
@@ -83,8 +83,9 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
 
         messages = self._build_decision_messages()
         flow_out = self.generateFlowOutput(AEOrchestratorFunction.receive_orchestrate)
+        available_action_names = " / ".join(a.value for a in AEAction if a != self.born_action)
         flow_out.set_llm_out({
-            "action": llm_generate("动作名：clarify_role / optimize_goal / gather_context / decompose / answer / execute_script / complete"),
+            "action": llm_generate(f"动作名：{available_action_names}"),
             "detail": llm_generate("按动作填：gather_context=要获取的信息目标；decompose=子任务（每行一个）；complete=最终结论；其余留空"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=decision_temp)
@@ -113,20 +114,24 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             return True
 
         if action == AEAction.clarify_role:
-            self._do_clarify_role()
+            self.requestRoleInformation()
         elif action == AEAction.optimize_goal:
-            self._do_optimize_goal()
+            self.requestOptimizeInput()
         elif action == AEAction.gather_context:
-            self._do_gather_context(detail)
+            self.do_gather_context(detail)
         elif action == AEAction.decompose:
             subtasks = [s.strip() for s in detail.split("\n") if s.strip()] if detail else []
-            self._do_decompose(subtasks)
-        elif action == AEAction.answer:
-            self._do_answer()
+            self.do_decompose(subtasks)
         elif action == AEAction.execute_script:
-            self._do_execute_script()
+            self.start_flow()
+        elif action == AEAction.synthesize:
+            self.do_synthesize()
+        elif action == AEAction.verify:
+            self.do_verify()
+        elif action == AEAction.answer:
+            self.requestLLMAnswer()
         elif action == AEAction.complete:
-            self._do_complete(detail)
+            self.requestComplete(detail)
         else:
             self._orchestrate()
         return True
@@ -152,114 +157,79 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
             AE_CONTENT: self._action_catalog(),
         })
 
-        # 从 flow 自身读 question/goal/sub_results，传给 flow_context.to_prompt 补独有信息
+        # 从 flow 自身读 question/goal，传给 flow_context.to_prompt（子任务结果由 flow_context 自持）
         question = self.input.get_content() if self.input is not None else ""
         goal = self.input.get_goal() if self.input is not None else ""
-        sub_results = []
-        for f in self._flows.values():
-            r = getattr(f.output, "outResult", "") if f.output else ""
-            if r:
-                sub_results.append(r)
 
         # USER: 当前上下文 + 决策指令
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"当前上下文：\n{self.flow_context.to_prompt(question=question, title=self.title, responsibility=self.responsibility, goal=goal, sub_results=sub_results)}\n\n"
-                f"基于你对问题的整体理解，选择下一步动作来全面解决问题。\n"
-                f"注意：选择 decompose 时，子任务必须是当前目标的**细化分解**（更小范围的子问题），"
-                f"合起来完整覆盖当前目标，不得发散到无关方向。\n"
+                f"当前上下文：\n{self.flow_context.to_prompt(question=question, title=self.title, responsibility=self.responsibility, goal=goal)}\n\n"
+                f"依据当前上下文与收敛顺序，选择下一步动作。\n"
+                f"注意：\n"
+                f"- decompose 的子任务必须是当前目标的**细化分解**（更小范围的子问题），合起来完整覆盖当前目标，不得发散。\n"
+                f"- 子任务完成后须 verify 验证齐备/有效 → synthesize 汇总 → complete，不得跳过验证直接汇总输出。\n"
+                f"- verify/synthesize 的结论为中间流程结论（写入辅助上下文），最终结果仅在 complete 时写入 output。\n"
                 f"输出 JSON：action（动作名）、detail（按动作填参数）。"
             ),
         })
         return messages
 
     def _action_catalog(self) -> str:
-        """可用动作清单（按已有信息动态过滤），含使用条件与选择顺序建议。"""
+        """完整动作清单（收敛链：从复杂到简单，verify 为收敛闸门），含使用条件与选择顺序。"""
         all_actions = [
-            (AEAction.clarify_role, "仅当缺少「以什么身份/能力解决问题」且该信息会显著改变回答时使用", ""),
-            (AEAction.optimize_goal, "仅当原始问题模糊、无法直接执行，需要转化为可执行目标时使用", ""),
-            (AEAction.gather_context, "仅当缺少外部事实、数据或来源，且这些信息无法通过推理得到时使用", "填 detail 字段"),
-            (AEAction.decompose, "仅当当前目标可以拆成若干更小、互不重叠、合起来覆盖当前目标的子任务时使用", "填 detail 字段（每行一个子任务）"),
-            (AEAction.answer, "当已有足够信息，且不需要外部数据或脚本时使用", ""),
-            (AEAction.execute_script, "当需要查询、计算、爬取或程序化处理时使用", ""),
-            (AEAction.complete, "当问题已解决，需要输出最终结论时使用", "填 detail 字段"),
+            (AEAction.clarify_role, "缺少角色身份（title）与能力范围（responsibility）时使用，生成后写入 flow 自身", ""),
+            (AEAction.optimize_goal, "仅当原始问题模糊、缺少成功标准/约束、无法直接执行时，转化为可执行目标", ""),
+            (AEAction.gather_context, "仅当缺少外部事实/数据/来源（且无法推理得到）时获取。任务本身即获取信息则直接 execute_script/answer", "填 detail 字段（要获取的信息目标）"),
+            (AEAction.execute_script, "当需要查询/计算/爬取/程序化处理时使用", ""),
+            (AEAction.decompose, "仅当当前目标可拆成更小、互不重叠、合起来覆盖目标的子任务时使用", "填 detail 字段（每行一个子任务）"),
+            (AEAction.verify, "当子任务已全部完成，需验证子任务结果齐备/有效/覆盖原目标时使用（通过后才 synthesize）", ""),
+            (AEAction.synthesize, "当 verify 通过、子任务结果齐备，需汇总成连贯候选答案时使用（候选写入中间上下文，非最终输出）", ""),
+            (AEAction.complete, "当 synthesize 已产出候选答案，需输出最终结论时使用（最终结果写入 output）", "填 detail 字段（可选，缺省取综合候选）"),
+            (AEAction.answer, "无需拆解与汇总、可直接由 LLM 推理作答时使用（旁路终态，结果直接写入 output）", ""),
         ]
+        # subflow 内禁选出生 action（born_action），防同 action 递归
+        born_action = self.born_action
+        available = [a for a in all_actions if a[0] != born_action]
         lines = ["可用动作："]
-        for action, desc, extra in all_actions:
-            if action == AEAction.clarify_role and self.title:
-                continue
-            if action == AEAction.optimize_goal and self.input and self.input.get_goal():
-                continue
-            # 非顶层（depth>=2）不允许 gather_context，避免递归
-            if action == AEAction.gather_context and self.deepth >= 2:
-                continue
-            if action == AEAction.decompose and self.deepth >= self.MAX_DECOMPOSE_DEPTH:
-                continue
+        if born_action:
+            lines.append(f"（本 flow 由 {born_action.value} 创建，不可再选 {born_action.value}，避免同动作递归）")
+        for action, desc, extra in available:
             line = f"- {action.value}：{desc}"
             if extra:
                 line += f"；{extra}"
             lines.append(line)
         lines.append("")
-        lines.append("选择顺序建议：")
-        lines.append("1. 当前级任务是否已明确？不明确 → optimize_goal")
+        lines.append("收敛顺序（从复杂到简单，按序推进）：")
+        lines.append("1. 当前级任务是否已明确（含成功标准/约束）？不明确 → optimize_goal")
         lines.append("2. 是否缺少关键外部数据？缺少 → gather_context 或 execute_script")
         lines.append("3. 当前目标是否需要拆成多个子任务？需要 → decompose")
-        lines.append("4. 是否已有足够信息直接回答？是 → answer")
-        lines.append("5. 是否已完成并需输出结论？是 → complete")
+        lines.append("4. 子任务是否已全部完成？是 → verify 验证子任务齐备/有效/覆盖原目标")
+        lines.append("5. verify 通过 → synthesize 汇总子结果为候选答案；未通过 → 回到 3 补做失败子任务")
+        lines.append("6. 已汇总候选答案 → complete 输出最终结果")
+        lines.append("7. 无需拆解与汇总（可直接推理作答）→ answer（旁路终态）")
         return "\n".join(lines)
 
-    # ==================== 动作执行器（复用现有能力 mixin） ====================
-
-    def _do_clarify_role(self) -> None:
-        """调用角色信息能力（AERoleInformation.requestRoleInformation）。"""
-        self.requestRoleInformation()
-
-    def _do_optimize_goal(self) -> None:
-        """调用目标优化能力（AERoleQuestion.requestOptimizeInput）。"""
-        self.requestOptimizeInput()
-
-    def _do_gather_context(self, target: str) -> None:
-        """获取背景信息：派发子 flow 解决，在父目标框架下。"""
-        if not target:
-            self._orchestrate()
-            return
-        sub = self._dispatch_context_flow(target)
-        if sub is None:
-            self.flow_context.add_error("背景确认子 flow 创建失败")
-            self._orchestrate()
-            return
-        self.completeIdent = self.registerFunctional("contextComplete")
-        self.add_flow(sub)
-        sub.on_flow_start()
-
-    def _do_decompose(self, subtasks: list) -> None:
-        """任务拆解：优先用 subtasks 直接派发，未给则请求 LLM 拆解。"""
-        if subtasks:
-            count = self._dispatch_workflow_tasks(subtasks)
-            if count == 0:
-                self.flow_context.add_error("任务拆解为空或无可派发任务")
-                self._orchestrate()
-        else:
-            self.requestWorkflow()
-
-    def _do_answer(self) -> None:
-        """LLM 直接作答（AERoleExcuteLLM.requestLLMAnswer）。"""
-        self.requestLLMAnswer()
-
-    def _do_execute_script(self) -> None:
-        """脚本执行：进入选型→生成→执行→验证循环。"""
-        self._request_script_type()
-
-    def _do_complete(self, result: str) -> None:
-        """完成并输出结果。"""
+    def receive_synthesize(self, data: dict) -> bool:
+        """综合汇总回包：super 写 flow_context.synthesis（中间结论）后继续决策（建议 verify）。"""
+        result = super().receive_synthesize(data)
         if not result:
-            result = (self.input.get_goal() if self.input is not None else "") or \
-                   (self.input.get_content() if self.input is not None else "")
-        self.flow_complete(
-            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-             AE_CONTENT: result},
-        )
+            self.flow_context.add_error("综合汇总为空")
+        self._orchestrate()
+        return True
+
+    def receive_verify(self, data: dict) -> bool:
+        """验证回包：super 写 flow_context（passed/verification）后继续决策；未通过记 error。"""
+        passed = super().receive_verify(data)
+        if not passed:
+            gaps = self.flow_context.verification
+            self.flow_context.add_error(f"验证未通过：{gaps}" if gaps else "验证未通过")
+            logger.info("[%s][d=%s] verify 未通过，缺口：%s", self.title, self.deepth, gaps[:100])
+        else:
+            logger.info("[%s][d=%s] verify 通过，可 synthesize", self.title, self.deepth)
+        self._orchestrate()
+        return True
 
     # ==================== 能力回包 → 继续决策（不再双向同步 flow 已有字段） ====================
 
@@ -283,11 +253,43 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
         """背景确认子 flow 完成回调：结果写入 flow_context.background，继续决策。"""
         result = super().contextComplete(flowOutput)
         if result and flowOutput is not None:
-            bg = getattr(flowOutput, "outResult", "") or ""
+            bg = flowOutput.outResult or ""
             if bg:
                 self.flow_context.set_background(bg)
         self._orchestrate()
         return True
+
+    def receive_flow_complete(self, flowOutput) -> bool:
+        """子 flow 完成回调：记录子任务目标+结论到 flow_context；全完成回 _orchestrate 走收敛链。
+
+        子 flow 创建时 output.ident 设为父 ident（见 _do_gather_context / _do_decompose / receiveContextNeeded / receiveWorkflow），
+        故完成通知 ident==self.ident：
+        - completeIdent 非空（gather_context 等一次性回调）：交 super 触发注册方法，不记子任务。
+        - 否则（decompose）：记录已 complete 的子 flow 目标+结论（按 ident 去重）；
+          全部完成 → _orchestrate（让 LLM 选 synthesize→verify→complete），不走 summarize_to_llm；
+          未全完成 → super 推进 nextFlow。
+        """
+        ident = flowOutput.ident if flowOutput is not None else ""
+        if ident == self.ident:
+            if self.completeIdent:
+                return super().receive_flow_complete(flowOutput)
+            self._record_completed_sub_tasks()
+            if self._flows and all(f.status == AEFlowStatus.complete for f in self._flows.values()):
+                logger.info("[%s][d=%s] 全部子 flow 完成，回到 _orchestrate 走 synthesize→verify→complete",
+                            self.title, self.deepth)
+                self._orchestrate()
+                return True
+            return super().receive_flow_complete(flowOutput)
+        return super().receive_flow_complete(flowOutput)
+
+    def _record_completed_sub_tasks(self) -> None:
+        """记录所有已 complete 子 flow 的目标与结论到 flow_context（按 ident 去重）。"""
+        for sub_ident, sub in self._flows.items():
+            if sub.status != AEFlowStatus.complete:
+                continue
+            goal = (sub.input.get_goal() or sub.input.get_content()) if sub.input else ""
+            result = sub.output.outResult or ""
+            self.flow_context.record_sub_task(sub_ident, goal, result)
 
     def receiveWorkflow(self, data: dict) -> bool:
         """任务拆解回包：子 flow 完成后结果在 self._flows，直接继续决策。"""
@@ -306,10 +308,3 @@ class AEOrchestrator(AERoleExcuteLLM, AERoleExcuterScript, AERoleBase):
              AE_CONTENT: answer},
         )
         return True
-
-    # ==================== 背景确认子 flow 派发（复用 AERoleContext） ====================
-
-    def _dispatch_context_flow(self, target: str):
-        """创建执行背景确认的子 flow（复用 AERoleContext._dispatch_context_flow 逻辑）。"""
-        from Roles.RoleBase.AERoleContext import AERoleContext
-        return AERoleContext._dispatch_context_flow(self, target)
