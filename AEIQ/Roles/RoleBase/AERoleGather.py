@@ -95,9 +95,6 @@ class AERoleGather(AERole):
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
         sub.born_action = AEAction.gather_context
-        # 传递父级动作历史，让子 flow 的 LLM 看到决策链（避免重复选 gather_context）
-        sub.flow_context.action_history = list(self.flow_context.action_history)
-        sub.flow_context.action_history.append({"action": "gather_context", "params": {"target": target}, "result": None})
         self.completeIdent = self.registerFunctional("contextComplete")
         self.add_flow(sub)
         sub.on_flow_start()

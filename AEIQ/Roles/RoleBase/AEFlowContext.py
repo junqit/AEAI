@@ -50,10 +50,6 @@ class AEFlowContext:
         """验证是否通过。"""
         return self.verified
 
-    def decision_count(self) -> int:
-        """已决策轮数（用于温度递增）。"""
-        return len(self.action_history)
-
     # ==================== 写入方法 ====================
 
     def set_background(self, background: str) -> None:
@@ -83,11 +79,11 @@ class AEFlowContext:
         if error:
             self.errors.append(error)
 
-    def record_action(self, action: str, result: Any = None, params: Dict[str, Any] = None) -> None:
-        """记录一轮动作与结果。"""
+    def record_action(self, action: str, detail: str = "", result: Any = None) -> None:
+        """记录一轮步骤、要做的事情与结果。"""
         self.action_history.append({
             "action": action,
-            "params": params or {},
+            "detail": detail,
             "result": result,
         })
 
@@ -126,7 +122,7 @@ class AEFlowContext:
             parts.append(f"【错误信息】\n{errors_text}")
         if self.action_history:
             history_text = "\n".join(
-                f"- 动作: {h['action']}, 结果: {str(h['result'])[:100]}"
+                f"- 步骤: {h['action']}, 要做: {h.get('detail', '')}, 结果: {str(h.get('result'))[:100]}"
                 for h in self.action_history
             )
             parts.append(f"【历史动作】\n{history_text}")

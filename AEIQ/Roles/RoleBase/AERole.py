@@ -23,7 +23,7 @@ class AERole(AEFlow):
         self.title: str = ""             # 职称
         self.responsibility: str = ""    # 职责要求
         self.rolePrompt: str = ""        # 角色 prompt
-        # 出生 action：父 flow 创建本 flow 时所用的 action（subflow 专属，根 flow 为 None）；
+        # 上一个 action：创建本 flow 时父 flow 所用的 action（subflow 设为父创建它的 action，根 flow 为 None）；
         # subflow 内 _action_catalog 过滤掉它，防同 action 递归
         self.born_action: Optional[AEAction] = None
         # 决策辅助上下文（中间结论：background/action_history/errors/synthesis/verification/sub_task_results）

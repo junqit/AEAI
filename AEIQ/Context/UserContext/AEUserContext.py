@@ -96,9 +96,23 @@ class AEUserContext:
 
     async def _do_llm(self, payload) -> None:
         """在 loop 上 await async LLM，回复到达后回填信封并 dispatch 驱动 flow（与请求同在一个异步线程）。"""
+        import json
         from ..Context.AELLMClient import send_llm_request
-
+        from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
+        from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
+        # system 要求：所有回答必须基于当前用户的实际环境与所提供的数据，不得臆想与瞎说
+        payload.messages.insert(0, {
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: (
+                "所有回答必须基于当前用户的实际环境与所提供的上下文、数据：\n"
+                "- 不得编造、臆测或凭空生成未经验证的信息\n"
+                "- 涉及事实、数据或外部信息时，若用户未提供或无法确认，须明确说明信息不足，不得自行补全\n"
+                "- 不得臆想与瞎说"
+            ),
+        })
+        logger.info("📤 发送 LLM:\n%s", json.dumps(payload.messages, ensure_ascii=False, indent=2))
         envelope = await send_llm_request(payload)
         if envelope is None:
             return
+        logger.info("📥 接收 LLM:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
         self._context_center.dispatch_llm_response(envelope)

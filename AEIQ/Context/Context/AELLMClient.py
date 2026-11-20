@@ -1,4 +1,3 @@
-import json
 import logging
 
 import httpx
@@ -24,19 +23,9 @@ def _get_async_client() -> httpx.AsyncClient:
 
 
 async def send_llm_request(payload: AELLMPayload) -> dict:
-    """两步流程：仅把内容模板发给 LLM 生成内容，回包后回填固定信封，返回完整信封 dict（含可信 ident）。
-
-    LLM 全程不接触 ident 等路由字段，故不会腐蚀路由信封；ident 由框架持有的信封逐字保留。
-    LLM 返回错误或内容不可解析时，不再丢弃回包，而是把原数据结构内 AE_CONTENT 置为
-    "llm 生成失败" 后返回完整信封，使 flow 仍能收到回包事件并推进，避免挂死。
-    """
+    """发 LLM 请求，回包解析后回填信封返回（ident 逐字保留）；失败回填失败占位信封避免挂死。"""
     try:
         client = _get_async_client()
-        # 诊断：即将发送的 LLM 请求（messages + 内容模板），看清上游摘要是否空洞
-        logger.info(
-            "📤 即将发送 LLM 请求:\n%s",
-            json.dumps(payload.to_llm_request_dic(), ensure_ascii=False, indent=2),
-        )
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
@@ -46,29 +35,16 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
             len(reply) if reply else 0,
             f", 耗时: {elapsed:.2f}s" if isinstance(elapsed, (int, float)) else "",
         )
-        # 诊断：原始回复预览，确认 LLM 究竟回了什么（content 是否为空 / 内容是否落在别的字段）
-        logger.info("[LLM] 原始回复预览(前800字符): %s", (reply or "")[:800])
-        # token 消耗：依赖网关透传上游 usage（prompt_tokens / completion_tokens / total_tokens）
+        logger.info("[LLM] 原始回复: %s", reply or "")
         usage = result.get("usage") or {}
-        if not usage:
-            usage = {k: result[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens") if k in result}
         if usage:
-            logger.info(
-                "[LLM] token 消耗: prompt=%s, completion=%s, total=%s",
-                usage.get("prompt_tokens", "-"),
-                usage.get("completion_tokens", "-"),
-                usage.get("total_tokens", "-"),
-            )
+            logger.info("[LLM] token: prompt=%s, completion=%s, total=%s",
+                        usage.get("prompt_tokens", "-"), usage.get("completion_tokens", "-"), usage.get("total_tokens", "-"))
         filled_content = _parse_content_json(reply)
-        # 诊断：解析后内容预览，确认 content 占位符被填成了什么（是否为空串）
-        logger.info("[LLM] 解析内容预览(前800字符): %s", str(filled_content)[:800])
         if filled_content is None:
             logger.error("LLM 内容解析失败，回填失败占位信封")
             return _build_failure_envelope(payload)
-        envelope = payload.fill_content(filled_content)
-        # 诊断：回填后的完整信封（含 AE_CONTENT），确认最终内容是否为空
-        logger.info("LLM 回填信封:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
-        return envelope
+        return payload.fill_content(filled_content)
     except Exception as e:
         logger.error(f"LLM request failed: {e}，回填失败占位信封")
         return _build_failure_envelope(payload)

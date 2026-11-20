@@ -78,17 +78,16 @@ class AEFlow(AEFlowInfo, AEFlowDelegateImpl, AEFlowInterfaceImpl):
     def flow_complete_info(self) -> dict:
         info = {
             "ident": self.ident,
-            "title": getattr(self, "title", "") or "",
-            "responsibility": getattr(self, "responsibility", "") or "",
+            "title": self.title,
+            "responsibility": self.responsibility,
             "question": "",
-            "goal": (self.input.get_goal() if self.input is not None else ""),
+            "goal": self.input.get_goal() if self.input else "",
             "answer": "",
             "children": [sub.flow_complete_info() for sub in self._flows.values()],
         }
         # question 取 flow 的输入（父 flow 传入的问题/子任务内容）
-        inp = getattr(self, "input", None)
-        if inp is not None and isinstance(inp, AEFlowInput):
-            info["question"] = inp.get_content() or ""
+        if self.input is not None and isinstance(self.input, AEFlowInput):
+            info["question"] = self.input.get_content() or ""
         # answer 取 flow 产出（output.outResult，由 receive_summarize_result 填充）
         if self.output is not None:
             info["answer"] = self.output.outResult or ""

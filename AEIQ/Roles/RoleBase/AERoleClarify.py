@@ -1,8 +1,8 @@
-"""AERoleClarify - 角色信息能力 mixin：生成 title / responsibility / rolePrompt。
+"""AERoleClarify - 角色信息能力 mixin：一次请求生成 title / responsibility / rolePrompt。
 角色信息属性（role / title / responsibility / rolePrompt）由基类持有。"""
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_CONTENT, AE_RESPONSIBILITY
+from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_RESPONSIBILITY
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -14,83 +14,49 @@ logger = logging.getLogger(__name__)
 class AERoleClarifyFunction(AEFunctional):
     """角色信息回包功能性方法名。"""
     receiveRoleInfomation = "receiveRoleInfomation"
-    receiveRolePrompt = "receiveRolePrompt"
 
 
 class AERoleClarify(AERole):
-    """角色信息能力 mixin：提供 title / responsibility / rolePrompt 生成请求。
-    角色信息属性由基类经 cooperative __init__ 持有。"""
+    """角色信息能力 mixin：一次请求生成 title / responsibility / rolePrompt。"""
 
-    # 请求 LLM 生成 title / responsibility，回包经 receiveRoleInfomation 写入
+    # 请求 LLM 生成 title / responsibility / rolePrompt（一次请求），回包经 receiveRoleInfomation 写入
     def requestRoleInformation(self) -> None:
         messages = []
         messages.append({
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
-                "根据下方问题，生成能解决该问题的「工作名称」与「职责范围」，要求：\n"
-                "- 工作名称：准确匹配该问题所需的解决角色名称；\n"
-                "- 职责范围：明确该角色解决此问题需要的能力（能做什么、如何解决），并明确职责边界与禁止事项；客观、完整，不得包含问题本身。"
+                "根据下方问题，生成解决该问题所需的角色信息，包含三个字段：\n"
+                "- title（工作名称）：准确匹配该问题所需的解决角色名称\n"
+                "- responsibility（职责范围）：该角色解决此问题的能力（能做什么、如何解决），明确职责边界与禁止事项；客观、完整，不含问题本身\n"
+                "- rolePrompt（角色指令）：基于工作名称与职责范围的角色指令，指导如何将输入转化为符合该角色职责的可执行目标；仅基于角色定位，不引用具体问题；简洁、明确"
             ),
         })
         user_question = self.input.get_content() if self.input else ""
-        user_msg = ""
-        if user_question:
-            user_msg = f"问题：\n{user_question}\n\n"
-        user_msg += "请根据上述问题，生成解决该问题所需的工作名称与能力范围。"
+        user_msg = f"问题：\n{user_question}\n\n请生成上述三个字段。" if user_question else "请生成上述三个字段。"
         messages.append({AE_ROLE: AEConentRole.USER.value, AE_CONTENT: user_msg})
         flow_out = self.generateFlowOutput(AERoleClarifyFunction.receiveRoleInfomation)
         flow_out.set_llm_out({
-            AE_TITLE: llm_generate("准确、完整解决当前问题所需的角色名称"),
-            AE_RESPONSIBILITY: llm_generate("解决问题的能力范围，明确能做什么、如何解决及边界"),
+            AE_TITLE: llm_generate("准确匹配该问题所需的解决角色名称"),
+            AE_RESPONSIBILITY: llm_generate("该角色解决此问题的能力范围，明确能做什么、如何解决及职责边界，不含问题本身"),
+            "rolePrompt": llm_generate("基于工作名称与职责范围的角色指令，指导如何将输入转化为符合该角色职责的可执行目标，不引用具体问题，简洁明确"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
-    # 写入 title / responsibility；均非空返回 True，否则 False（不闭环）
+    # 写入 title / responsibility / rolePrompt；均非空返回 True，否则 False（不闭环）
     def receiveRoleInfomation(self, data: dict) -> bool:
         if not isinstance(data, dict):
             data = {}
         self.title = data.get(AE_TITLE, "") or ""
         self.responsibility = data.get(AE_RESPONSIBILITY, "") or ""
-        if not self.title or not self.responsibility:
+        self.rolePrompt = data.get("rolePrompt", "") or ""
+        if not self.title or not self.responsibility or not self.rolePrompt:
             return False
-        return True
-
-    # 基于 title + responsibility 生成 rolePrompt，回包经 receiveRolePrompt 写入
-    def requestRolePrompt(self) -> None:
-        messages = []
-        role_brief = self.role_brief()
-        if len(role_brief) > 0:
-            messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        messages.append({
-            AE_ROLE: AEConentRole.USER.value,
-            AE_CONTENT: (
-                "根据以上职称与能力范围，生成一条角色指令（rolePrompt）。\n"
-                "要求：\n"
-                "- 仅基于职称与能力范围，不引用任何具体问题\n"
-                "- 指导如何将输入转化为符合该角色职责的可执行目标\n"
-                "- 简洁、明确，只输出指令文本"
-            ),
-        })
-        flow_out = self.generateFlowOutput(AERoleClarifyFunction.receiveRolePrompt)
-        flow_out.set_llm_out({"rolePrompt": llm_generate("基于职称与能力范围的角色指令，不含具体问题")})
-        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
-        self.flow_send_llm_request(payload)
-
-    # 存入 self.rolePrompt；非空返回 True，否则 False（不闭环）
-    def receiveRolePrompt(self, data: dict) -> bool:
-        if not isinstance(data, dict):
-            data = {}
-        prompt = data.get("rolePrompt") or ""
-        if not prompt:
-            return False
-        self.rolePrompt = prompt
         logger.info(
             "[%s][d=%s] 角色信息就绪:\n"
             "========================================\n"
-            "  role: %s\n  deepth: %s\n  title: %s\n  responsibility: %s\n  rolePrompt: %s\n"
+            "  title: %s\n  responsibility: %s\n  rolePrompt: %s\n"
             "========================================",
-            self.title, self.deepth,
-            self.role, self.deepth, self.title, self.responsibility, self.rolePrompt,
+            self.title, self.deepth, self.title, self.responsibility, self.rolePrompt,
         )
         return True
