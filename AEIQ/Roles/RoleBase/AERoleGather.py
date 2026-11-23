@@ -45,12 +45,13 @@ class AERoleGather(AERole):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                "基于当前角色与能力，根据下方【目标】及现有信息，识别解决此问题尚未明确的必要背景信息，"
-                "在 target 中生成一个准确的单一目标（prompt）以获取该信息。\n"
+                "根据下方【目标】及现有信息，识别解决此问题尚未明确的必要背景信息，"
+                "在 target 中生成一个准确的单一目标以获取该信息。\n"
                 "要求：\n"
-                "- 目标仅用于提供必要背景信息，不解决原问题，与当前用户无关；\n"
-                "- 目标须可完成：信息在上下文存在则提取，不存在则明确如何通过网络查询等方式获取；\n"
-                "- 若问题所需信息已完整准确，target 留空。\n"
+                "- 若已提供角色与能力范围，基于之判定所需背景；否则基于目标本身判定\n"
+                "- 目标仅用于提供必要背景信息，不解决原问题\n"
+                "- 目标须可完成：信息在上下文存在则提取，不存在则明确如何获取\n"
+                "- 若问题所需信息已完整准确，target 留空\n"
                 "\n"
                 "【目标】\n" + goal
             ),
@@ -76,28 +77,13 @@ class AERoleGather(AERole):
             flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
-        sub.born_action = AEAction.gather_context
+        sub.born_action = self.born_action
         # 子 flow 完成回包路由回自身（flowOutput.ident=self.ident），由 completeIdent 调 contextComplete
         self.completeIdent = self.registerFunctional("contextComplete")
         self.add_flow(sub)
         sub.on_flow_start()
         logger.info("[%s][d=%s] 已派发背景确认子 flow（completeIdent=contextComplete）", self.title, self.deepth)
         return True
-
-    # gather_context 动作：派发子 flow 获取背景信息，传递动作历史让 LLM 看到决策链
-    def do_gather_context(self, target: str) -> None:
-        if not target:
-            self._orchestrate()
-            return
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环
-        sub = AEOrchestrator(
-            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
-        )
-        sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
-        sub.born_action = AEAction.gather_context
-        self.completeIdent = self.registerFunctional("contextComplete")
-        self.add_flow(sub)
-        sub.on_flow_start()
 
     # 背景确认子 flow 完成回调（completeIdent）：确认结果有无并存入父 flow 的 input.context，返回是否有结果
     def contextComplete(self, flowOutput) -> bool:

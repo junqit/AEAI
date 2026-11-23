@@ -86,7 +86,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         available_action_names = " / ".join(a.value for a in AEAction if a != self.born_action)
         flow_out.set_llm_out({
             "action": llm_generate(f"动作名：{available_action_names}"),
-            "detail": llm_generate("按动作填：gather_context=要获取的信息目标；decompose=子任务（每行一个）；complete=最终结论；其余留空"),
+            "detail": llm_generate("按所选动作填参数"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=decision_temp)
         logger.info("[%s][d=%s] 编排决策第 %d 轮（temperature=%.1f）",
@@ -121,7 +121,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         elif action == AEAction.optimize_goal:
             self.requestOptimizeInput()
         elif action == AEAction.gather_context:
-            self.do_gather_context(detail)
+            self.requestContextNeeded()
         elif action == AEAction.decompose:
             subtasks = [s.strip() for s in detail.split("\n") if s.strip()] if detail else []
             self.do_decompose(subtasks)
@@ -253,7 +253,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
     def receive_flow_complete(self, flowOutput) -> bool:
         """子 flow 完成回调：记录子任务目标+结论到 flow_context；全完成回 _orchestrate 走收敛链。
 
-        子 flow 创建时 output.ident 设为父 ident（见 _do_gather_context / _do_decompose / receiveContextNeeded / receiveWorkflow），
+        子 flow 创建时 output.ident 设为父 ident（见 do_decompose / receiveContextNeeded / receiveWorkflow），
         故完成通知 ident==self.ident：
         - completeIdent 非空（gather_context 等一次性回调）：交 super 触发注册方法，不记子任务。
         - 否则（decompose）：记录已 complete 的子 flow 目标+结论（按 ident 去重）；

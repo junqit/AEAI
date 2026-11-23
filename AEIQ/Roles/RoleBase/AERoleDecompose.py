@@ -86,7 +86,7 @@ class AERoleDecompose(AERole):
             )
             self.add_flow(child)
             child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
-            child.born_action = AEAction.decompose
+            child.born_action = self.born_action
             if first_child is None:
                 first_child = child
         if first_child is None:
@@ -118,7 +118,7 @@ class AERoleDecompose(AERole):
             )
             self.add_flow(child)
             child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
-            child.born_action = AEAction.decompose
+            child.born_action = self.born_action
             if first_child is None:
                 first_child = child
         if first_child is None:
