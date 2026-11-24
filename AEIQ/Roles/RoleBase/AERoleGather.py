@@ -13,7 +13,7 @@ from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
-from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
+from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
 from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,8 @@ class AERoleGather(AERole):
     def requestContextNeeded(self) -> None:
         goal = self.input.get_goal() if self.input is not None else ""
         if not goal:
-            logger.warning("[%s][d=%s] 无 input.goal，跳过背景确认", self.title, self.deepth)
+            logger.warning("[%s][d=%s] 无 input.goal，跳过背景确认，回退决策", self.title, self.deepth)
+            self._orchestrate()
             return
         # SYSTEM 放角色身份（title+responsibility，不含铁律）
         system_parts = []
@@ -70,22 +71,22 @@ class AERoleGather(AERole):
             target = str(data.get("target", "") or "").strip()
         logger.info("[%s][d=%s] 背景确认需求判定: target=%s", self.title, self.deepth, target)
         if not target:
-            self.contextComplete(None)  # 无 target 直接调 contextComplete（不经子 flow）
+            self._orchestrate()  # 无 target，不需要背景确认，继续决策
             return True
         from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
+        # completeIdent 塞进子 flow output：子 flow 完成时带回，父 receive_flow_complete 据此调 contextComplete
+        complete_ident = self.registerFunctional("contextComplete")
         sub = AEOrchestrator(
-            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
+            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}, completeIdent=complete_ident),
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
         sub.born_action = self.born_action
-        # 子 flow 完成回包路由回自身（flowOutput.ident=self.ident），由 completeIdent 调 contextComplete
-        self.completeIdent = self.registerFunctional("contextComplete")
         self.add_flow(sub)
         sub.on_flow_start()
         logger.info("[%s][d=%s] 已派发背景确认子 flow（completeIdent=contextComplete）", self.title, self.deepth)
         return True
 
-    # 背景确认子 flow 完成回调（completeIdent）：确认结果有无并存入父 flow 的 input.context，返回是否有结果
+    # 背景确认子 flow 完成回调（completeIdent）：结果写入 flow_context.background，返回是否有结果
     def contextComplete(self, flowOutput) -> bool:
         result = ""
         if flowOutput is not None:
@@ -96,6 +97,7 @@ class AERoleGather(AERole):
                     result = out.get(AE_CONTENT, "") or ""
             if result:
                 logger.info("[%s][d=%s] 背景确认子 flow 完成，结果=%s", self.title, self.deepth, result)
-            elif not result:
+                self.flow_context.set_background(result)
+            else:
                 logger.warning("[%s][d=%s] 背景确认子 flow 完成但结果为空", self.title, self.deepth)
         return bool(result)

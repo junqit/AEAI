@@ -19,9 +19,8 @@ from typing import Protocol, TYPE_CHECKING, runtime_checkable
 
 from .AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEFlowInfo import AE_IDENT, AE_CONTENT
-from .AEFlowInput import AEFlowStatus, AEFlowInput, AE_CONTENT
+from .AEFlowInput import AEFlowStatus
 from Context.Context.AELLMPayload import AELLMPayload
-from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
 
 if TYPE_CHECKING:
@@ -77,13 +76,12 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     # 接收 flow 完成通知，按 ident 路由
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
         if flowOutput.ident == self.ident:
-            # 完成回调命中自身：若设了 completeIdent，优先调用其注册方法（funcident）；否则走默认汇总/推进
-            if self.completeIdent:
-                ident = self.completeIdent
-                self.completeIdent = ""  # 一次性：触发后清除，避免后续子 flow 完成重复触发
+            # 完成回调命中自身：flowOutput 带 completeIdent 时调用其注册方法（funcident）；否则走默认汇总/推进
+            complete_ident = flowOutput.completeIdent or ""
+            if complete_ident:
                 logger.info("[%s][d=%s] 完成回调命中自身，调用 completeIdent=%s 注册方法",
-                            self.title, self.deepth, ident)
-                return self.excutor.exec(ident, flowOutput)
+                            self.title, self.deepth, complete_ident)
+                return self.excutor.exec(complete_ident, flowOutput)
             if not self._flows:
                 return True
             if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
@@ -139,7 +137,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                                 AE_CONTENT: f"第 {self.deepth} 级目标：{goal}。此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"})
         # completeIdent 非空的子 flow 的 goal 与答案作为上下文
         for sub in self._flows.values():
-            if not sub.completeIdent:
+            if not sub.output.completeIdent:
                 continue
             sub_goal = sub.input.get_goal() if sub.input else ""
             sub_answer = sub.output.outResult or ""

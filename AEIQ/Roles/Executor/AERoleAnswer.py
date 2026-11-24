@@ -46,3 +46,16 @@ class AERoleAnswer(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.7)
         self.flow_send_llm_request(payload)
         return True
+
+    # 作答/汇总结果回包：最终结论，直接完成 flow
+    def receive_summarize_result(self, data: dict) -> bool:
+        answer = ""
+        if isinstance(data, dict):
+            answer = data.get(AE_CONTENT, "") or ""
+        elif isinstance(data, str):
+            answer = data
+        self.flow_complete(
+            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+             AE_CONTENT: answer},
+        )
+        return True

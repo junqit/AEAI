@@ -9,7 +9,7 @@ from Network.Core.AENetReq import AENetCont, AENetQues, AENetReqInfo
 from Network.Core.AENetRsp import AENetRspCode
 from Roles.AEOrchestrator import AEOrchestrator
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput, AEFlowStatus, AE_CONTENT
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput, AE_LLM_OUT
 from .AEContextType import AEContextType
 

@@ -10,13 +10,9 @@ AERoleDecompose/AERoleAnswer/AERoleExecute）作为 action handler 被调用，
 不再是固定序列中的步骤。
 """
 import logging
-from enum import Enum
-from typing import Dict, Any, List
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus, AEFlowInput
-from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
@@ -26,8 +22,8 @@ from Roles.RoleBase.AERoleGather import AERoleGather
 from Roles.RoleBase.AERoleVerify import AERoleVerify
 from Roles.RoleBase.AERoleSynthesize import AERoleSynthesize
 from Roles.RoleBase.AERoleComplete import AERoleComplete
+from Roles.RoleBase.AEFlowConverge import AEFlowConverge
 from Roles.RoleBase.AERoleBase import AERoleBase
-from Roles.RoleBase.AEFlowContext import AEFlowContext
 from Roles.RoleBase.AERoleDecompose import AERoleDecompose
 from Roles.Executor.AERoleAnswer import AERoleAnswer
 from Roles.Executor.AERoleExecute import AERoleExecute
@@ -42,7 +38,7 @@ class AEOrchestratorFunction(AEFunctional):
 
 class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                      AERoleDecompose, AERoleVerify, AERoleSynthesize, AERoleComplete, AERoleAnswer,
-                     AERoleBase):
+                     AEFlowConverge, AERoleBase):
     """LLM 驱动的自主决策编排器：LLM 理解问题 → 自主选能力 → 执行 → 结果回写 → 继续决策。
 
     替代 AERoleExcutor 的硬编码链路（on_flow_start→requestRoleInformation→...→flow_complete），
@@ -75,7 +71,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         """请求 LLM 决策：看上下文全貌 + 可用动作，选择下一步。"""
         if self.decision_round >= self.MAX_DECISIONS:
             logger.warning("[%s][d=%s] 达到最大决策轮数 %d，强制完成", self.title, self.deepth, self.MAX_DECISIONS)
-            self._do_complete({})
             return
 
         # 决策温度递增：首次 0.3，每次 +0.2，上限 0.9
@@ -202,100 +197,70 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             lines.append(line)
         return "\n".join(lines)
 
-    def receive_synthesize(self, data: dict) -> bool:
-        """综合汇总回包：super 写 flow_context.synthesis（中间结论）后继续决策（建议 verify）。"""
-        result = super().receive_synthesize(data)
-        if not result:
-            self.flow_context.add_error("综合汇总为空")
-        self._orchestrate()
-        return True
-
-    def receive_verify(self, data: dict) -> bool:
-        """验证回包：super 写 flow_context（passed/verification）后继续决策；未通过记 error。"""
-        passed = super().receive_verify(data)
-        if not passed:
-            gaps = self.flow_context.verification
-            self.flow_context.add_error(f"验证未通过：{gaps}" if gaps else "验证未通过")
-            logger.info("[%s][d=%s] verify 未通过，缺口：%s", self.title, self.deepth, gaps[:100])
-        else:
-            logger.info("[%s][d=%s] verify 通过，可 synthesize", self.title, self.deepth)
-        self._orchestrate()
-        return True
-
-    # ==================== 能力回包 → 继续决策（不再双向同步 flow 已有字段） ====================
+    # ==================== 能力回包 → 判断 super 返回值，正确推进 / 失败 error 终止 ====================
 
     def receiveRoleInfomation(self, data: dict) -> bool:
-        """角色信息回包：super 已写入 self.title/responsibility，直接继续决策。"""
+        """角色信息回包：super 写入 title/responsibility；正确继续决策，失败 error 终止。"""
         result = super().receiveRoleInfomation(data)
-        if not result or not self.title:
-            self.flow_context.add_error("角色信息生成失败")
-        self._orchestrate()
+        if result:
+            self._orchestrate()
+        else:
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "角色信息生成失败"},
+                AEFlowCompletEvent.error,
+            )
         return True
 
     def receiveOptimizeInput(self, data: dict) -> bool:
-        """目标优化回包：super 已写入 input.goal，直接继续决策。"""
+        """目标优化回包：super 写入 input.goal；正确继续决策，失败 error 终止。"""
         result = super().receiveOptimizeInput(data)
-        if not result or not (self.input.get_goal() if self.input else ""):
-            self.flow_context.add_error("目标优化失败")
-        self._orchestrate()
+        if result:
+            self._orchestrate()
+        else:
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "目标优化失败"},
+                AEFlowCompletEvent.error,
+            )
         return True
 
     def contextComplete(self, flowOutput) -> bool:
-        """背景确认子 flow 完成回调：结果写入 flow_context.background，继续决策。"""
+        """背景确认子 flow 完成回调：super 写入 background；正确继续决策，失败 error 终止。"""
         result = super().contextComplete(flowOutput)
-        if result and flowOutput is not None:
-            bg = flowOutput.outResult or ""
-            if bg:
-                self.flow_context.set_background(bg)
-        self._orchestrate()
+        if result:
+            self._orchestrate()
+        else:
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "背景确认失败"},
+                AEFlowCompletEvent.error,
+            )
         return True
 
-    def receive_flow_complete(self, flowOutput) -> bool:
-        """子 flow 完成回调：记录子任务目标+结论到 flow_context；全完成回 _orchestrate 走收敛链。
+    def receive_synthesize(self, data: dict) -> bool:
+        """综合汇总回包：super 写入 synthesis；正确继续决策，失败 error 终止。"""
+        result = super().receive_synthesize(data)
+        if result:
+            self._orchestrate()
+        else:
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "综合汇总失败"},
+                AEFlowCompletEvent.error,
+            )
+        return True
 
-        子 flow 创建时 output.ident 设为父 ident（见 do_decompose / receiveContextNeeded / receiveWorkflow），
-        故完成通知 ident==self.ident：
-        - completeIdent 非空（gather_context 等一次性回调）：交 super 触发注册方法，不记子任务。
-        - 否则（decompose）：记录已 complete 的子 flow 目标+结论（按 ident 去重）；
-          全部完成 → _orchestrate（让 LLM 选 synthesize→verify→complete），不走 summarize_to_llm；
-          未全完成 → super 推进 nextFlow。
-        """
-        ident = flowOutput.ident if flowOutput is not None else ""
-        if ident == self.ident:
-            if self.completeIdent:
-                return super().receive_flow_complete(flowOutput)
-            self._record_completed_sub_tasks()
-            if self._flows and all(f.status == AEFlowStatus.complete for f in self._flows.values()):
-                logger.info("[%s][d=%s] 全部子 flow 完成，回到 _orchestrate 走 synthesize→verify→complete",
-                            self.title, self.deepth)
-                self._orchestrate()
-                return True
-            return super().receive_flow_complete(flowOutput)
-        return super().receive_flow_complete(flowOutput)
-
-    def _record_completed_sub_tasks(self) -> None:
-        """记录所有已 complete 子 flow 的目标与结论到 flow_context（按 ident 去重）。"""
-        for sub_ident, sub in self._flows.items():
-            if sub.status != AEFlowStatus.complete:
-                continue
-            goal = (sub.input.get_goal() or sub.input.get_content()) if sub.input else ""
-            result = sub.output.outResult or ""
-            self.flow_context.record_sub_task(sub_ident, goal, result)
-
-    def receiveWorkflow(self, data: dict) -> bool:
-        """任务拆解回包：子 flow 完成后结果在 self._flows，直接继续决策。"""
-        result = super().receiveWorkflow(data)
-        return result
-
-    def receive_summarize_result(self, data: dict) -> bool:
-        """作答/汇总结果回包：这是最终结论，直接完成 flow。"""
-        answer = ""
-        if isinstance(data, dict):
-            answer = data.get(AE_CONTENT, "") or ""
-        elif isinstance(data, str):
-            answer = data
-        self.flow_complete(
-            {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-             AE_CONTENT: answer},
-        )
+    def receive_verify(self, data: dict) -> bool:
+        """验证回包：super 写入 verification；通过继续决策，未通过 error 终止。"""
+        result = super().receive_verify(data)
+        if result:
+            self._orchestrate()
+        else:
+            gaps = self.flow_context.verification
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: f"验证未通过：{gaps}" if gaps else "验证未通过"},
+                AEFlowCompletEvent.error,
+            )
         return True

@@ -5,8 +5,7 @@ AERoleBase - 角色 Flow 基类。
 """
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
-from Roles.RoleBase.AERoleType import ROLE_PARAMS, AEConentRole, AE_ROLE, get_role_iron_law
+from Roles.RoleBase.AERoleType import ROLE_PARAMS, get_role_iron_law
 from Roles.RoleBase.AERole import AERole
 
 logger = logging.getLogger(__name__)

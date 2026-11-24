@@ -6,6 +6,7 @@
 """
 import logging
 
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -69,7 +70,7 @@ class AERoleVerify(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.2)
         self.flow_send_llm_request(payload)
 
-    # 接收验证结论，写入 flow_context（passed/verification）；返回是否通过（不闭环）
+    # 接收验证结论，写入 flow_context（passed/verification）；返回是否通过
     def receive_verify(self, data: dict) -> bool:
         passed_str = ""
         gaps = ""

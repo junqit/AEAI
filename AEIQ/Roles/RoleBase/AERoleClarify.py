@@ -2,7 +2,7 @@
 角色信息属性（role / title / responsibility / rolePrompt）由基类持有。"""
 import logging
 
-from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_RESPONSIBILITY
+from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE, AE_RESPONSIBILITY, AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -43,7 +43,7 @@ class AERoleClarify(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
-    # 写入 title / responsibility / rolePrompt；均非空返回 True，否则 False（不闭环）
+    # 写入 title / responsibility / rolePrompt；均非空返回 True，否则 False
     def receiveRoleInfomation(self, data: dict) -> bool:
         if not isinstance(data, dict):
             data = {}

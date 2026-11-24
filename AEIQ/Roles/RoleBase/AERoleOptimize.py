@@ -91,11 +91,11 @@ class AERoleOptimize(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
         self.flow_send_llm_request(payload)
 
-    # 接收生成的目标，存入 input.goal（不完成 flow；由执行器 receiveOptimizeInput 推进角色选择）
+    # 接收生成的目标，存入 input.goal；goal 非空返回 True，否则 False
     def receiveOptimizeInput(self, data: dict) -> bool:
         goal = data.get(AE_CONTENT) if isinstance(data, dict) else None
         if goal is None and isinstance(data, str):
             goal = data
         if self.input is not None:
             self.input.set_goal(goal or "")
-        return True
+        return bool(self.input.get_goal() if self.input else "")

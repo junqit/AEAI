@@ -6,6 +6,7 @@
 """
 import logging
 
+from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -58,7 +59,7 @@ class AERoleSynthesize(AERole):
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.5)
         self.flow_send_llm_request(payload)
 
-    # 接收候选答案，写入 flow_context.synthesis（中间结论）；非空返回 True，否则 False（不闭环）
+    # 接收候选答案，写入 flow_context.synthesis；非空返回 True，否则 False
     def receive_synthesize(self, data: dict) -> bool:
         synthesis = ""
         if isinstance(data, dict):
