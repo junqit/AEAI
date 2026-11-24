@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from .AEBaseContext import AEBaseContext
 from .AEContextType import AEContextType
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
-from WorkFlows.FlowWork.AEFlow import AE_IDENT
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT
 from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 
 if TYPE_CHECKING:

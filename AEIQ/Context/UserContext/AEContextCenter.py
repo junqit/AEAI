@@ -20,7 +20,7 @@ from ..Context.AEPermissionContext import AEPermissionContext
 from ..Context.AEDirectoryContext import AEDirectoryContext
 from ..Context.AEWorkSpaceContext import AEWorkSpaceContext
 from WorkFlows.FlowWork.AEFlowOutput import AE_LLM_OUT
-from WorkFlows.FlowWork.AEFlow import AE_IDENT
+from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT
 from WorkFlows.FlowWork.AEFlowInfo import AE_TITLE
 
 logger = logging.getLogger(__name__)
