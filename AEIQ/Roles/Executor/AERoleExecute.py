@@ -102,6 +102,8 @@ class AERoleExecute(AERole):
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
     PASS_SCORE = 80
+    # 最大脚本尝试次数（超限强制完成，防无限循环）
+    MAX_ATTEMPTS = 5
 
     type: str = ""
 
@@ -317,6 +319,14 @@ class AERoleExecute(AERole):
 
     # 请求 LLM 修正脚本；include_history=True 带历次记录，否则仅带当前脚本与错误。
     def _request_script_fix(self, problem: str, include_history: bool = False) -> None:
+        if len(self.attempts) >= self.MAX_ATTEMPTS:
+            logger.warning("[%s][d=%s] 脚本尝试达上限 %d，强制完成", self.title, self.deepth, self.MAX_ATTEMPTS)
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: "脚本执行多次未通过，强制完成"},
+                AEFlowCompletEvent.error,
+            )
+            return
         from Context.Context.AELLMPayload import AELLMPayload, llm_generate
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         if include_history and self.attempts:

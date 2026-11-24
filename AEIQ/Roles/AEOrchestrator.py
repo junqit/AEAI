@@ -46,8 +46,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
     flow 自身状态（title/responsibility/input.goal 等）直接读取，不经 AEFlowContext 中转。
     """
 
-    # 最大决策轮数（防止无限循环）
-    MAX_DECISIONS: int = 10
     # 最大拆解深度（超过则不允许 decompose，强制 answer/complete）
     MAX_DECOMPOSE_DEPTH: int = 3
     # 已发起的决策轮数（每个 action 后 LLM 决定下一步的计数；温度递增与防循环用）
@@ -69,10 +67,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
     def _orchestrate(self) -> None:
         """请求 LLM 决策：看上下文全貌 + 可用动作，选择下一步。"""
-        if self.decision_round >= self.MAX_DECISIONS:
-            logger.warning("[%s][d=%s] 达到最大决策轮数 %d，强制完成", self.title, self.deepth, self.MAX_DECISIONS)
-            return
-
         # 决策温度递增：首次 0.3，每次 +0.2，上限 0.9
         decision_temp = min(0.3 + self.decision_round * 0.2, 0.9)
 
@@ -91,6 +85,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
     def receive_orchestrate(self, data: dict) -> bool:
         """LLM 决策回包：执行选定的动作。"""
+        self.decision_round = 0  # 每次收到重置，下轮决策从 0 开始
         if not isinstance(data, dict):
             data = {}
         action_str = data.get("action", "")
@@ -98,12 +93,16 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
         logger.info("[%s][d=%s] LLM 决策: action=%s, detail=%s", self.title, self.deepth, action_str, detail[:100])
 
-        # 按动作分发
+        # 按动作分发；无效 action 直接 error 终止，不重试（防循环）
         try:
             action = AEAction(action_str)
         except ValueError:
-            logger.warning("[%s][d=%s] 未识别的动作 %s，重新决策", self.title, self.deepth, action_str)
-            self._orchestrate()
+            logger.warning("[%s][d=%s] 未识别的动作 %s，error 终止", self.title, self.deepth, action_str)
+            self.flow_complete(
+                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
+                 AE_CONTENT: f"未识别的动作：{action_str}"},
+                AEFlowCompletEvent.error,
+            )
             return True
 
         # action 有效再记录步骤与要做的事情
