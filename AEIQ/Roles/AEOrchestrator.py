@@ -16,16 +16,16 @@ from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
-from Roles.RoleBase.AERoleClarify import AERoleClarify
-from Roles.RoleBase.AERoleOptimize import AERoleOptimize
-from Roles.RoleBase.AERoleGather import AERoleGather
-from Roles.RoleBase.AERoleVerify import AERoleVerify
-from Roles.RoleBase.AERoleSynthesize import AERoleSynthesize
-from Roles.RoleBase.AERoleComplete import AERoleComplete
+from Roles.capability.AERoleClarify import AERoleClarify
+from Roles.capability.AERoleOptimize import AERoleOptimize
+from Roles.capability.AERoleGather import AERoleGather
+from Roles.capability.AERoleVerify import AERoleVerify
+from Roles.capability.AERoleSynthesize import AERoleSynthesize
+from Roles.capability.AERoleComplete import AERoleComplete
 from Roles.RoleBase.AERoleBase import AERoleBase
-from Roles.RoleBase.AERoleDecompose import AERoleDecompose
-from Roles.Executor.AERoleAnswer import AERoleAnswer
-from Roles.Executor.AERoleExecute import AERoleExecute
+from Roles.capability.AERoleDecompose import AERoleDecompose
+from Roles.capability.AERoleAnswer import AERoleAnswer
+from Roles.capability.AERoleExecute import AERoleExecute
 
 logger = logging.getLogger(__name__)
 
