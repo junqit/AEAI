@@ -22,7 +22,6 @@ from Roles.RoleBase.AERoleGather import AERoleGather
 from Roles.RoleBase.AERoleVerify import AERoleVerify
 from Roles.RoleBase.AERoleSynthesize import AERoleSynthesize
 from Roles.RoleBase.AERoleComplete import AERoleComplete
-from Roles.RoleBase.AEFlowConverge import AEFlowConverge
 from Roles.RoleBase.AERoleBase import AERoleBase
 from Roles.RoleBase.AERoleDecompose import AERoleDecompose
 from Roles.Executor.AERoleAnswer import AERoleAnswer
@@ -38,7 +37,7 @@ class AEOrchestratorFunction(AEFunctional):
 
 class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                      AERoleDecompose, AERoleVerify, AERoleSynthesize, AERoleComplete, AERoleAnswer,
-                     AEFlowConverge, AERoleBase):
+                     AERoleBase):
     """LLM 驱动的自主决策编排器：LLM 理解问题 → 自主选能力 → 执行 → 结果回写 → 继续决策。
 
     替代 AERoleExcutor 的硬编码链路（on_flow_start→requestRoleInformation→...→flow_complete），
@@ -67,6 +66,11 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
     def _orchestrate(self) -> None:
         """请求 LLM 决策：看上下文全貌 + 可用动作，选择下一步。"""
+        # goal 为空时强制 optimize_goal 生成可完成目标，不让 LLM 跳过
+        goal = self.input.get_goal() if self.input is not None else ""
+        if not goal:
+            self.requestOptimizeInput()
+            return
         # 决策温度递增：首次 0.3，每次 +0.2，上限 0.9
         decision_temp = min(0.3 + self.decision_round * 0.2, 0.9)
 

@@ -119,7 +119,7 @@ class AERoleExecute(AERole):
         messages = [
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
-                AE_CONTENT: f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n",
+                AE_CONTENT: f"目标/期望输出:\n{self.input.get_goal() or ''}\n",
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
@@ -162,7 +162,7 @@ class AERoleExecute(AERole):
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                    f"目标/期望输出:\n{self.input.get_goal() or ''}\n"
                     f"脚本类型: {self.type}\n"
                 ),
             },
@@ -262,7 +262,7 @@ class AERoleExecute(AERole):
             {
                 AE_ROLE: AEConentRole.ASSISTANT.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                    f"目标/期望输出:\n{self.input.get_goal() or ''}\n"
                     f"程序输出:\n{stdout}\n"
                 ),
             },
@@ -334,7 +334,7 @@ class AERoleExecute(AERole):
             history_lines = [att.to_history_message(i) for i, att in enumerate(self.attempts)]
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                f"目标/期望输出:\n{self.input.get_goal() or ''}\n"
                 f"历次执行记录（脚本内容 + 执行结果 + 不达标理由）:\n"
                 + "\n".join(history_lines) + "\n"
                 f"问题说明:\n{problem}\n"
@@ -343,7 +343,7 @@ class AERoleExecute(AERole):
         else:
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                f"目标/期望输出:\n{self.input.get_goal() or ''}\n"
                 f"当前脚本内容:\n{self.attempts[-1].script}\n"
                 f"问题说明:\n{problem}\n"
                 "请依据问题说明修正脚本，使其产出目标/期望输出。"
