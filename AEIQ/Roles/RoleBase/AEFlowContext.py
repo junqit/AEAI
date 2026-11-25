@@ -122,7 +122,7 @@ class AEFlowContext:
             parts.append(f"【错误信息】\n{errors_text}")
         if self.action_history:
             history_text = "\n".join(
-                f"- 步骤: {h['action']}, 要做: {h.get('detail', '')}, 结果: {str(h.get('result'))[:100]}"
+                f"- {h['action']}"
                 for h in self.action_history
             )
             parts.append(f"【历史动作】\n{history_text}")

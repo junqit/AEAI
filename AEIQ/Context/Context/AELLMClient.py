@@ -35,7 +35,6 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
             len(reply) if reply else 0,
             f", 耗时: {elapsed:.2f}s" if isinstance(elapsed, (int, float)) else "",
         )
-        logger.info("[LLM] 原始回复: %s", reply or "")
         usage = result.get("usage") or {}
         if usage:
             logger.info("[LLM] token: prompt=%s, completion=%s, total=%s",

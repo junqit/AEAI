@@ -161,7 +161,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"当前上下文：\n{self.flow_context.to_prompt(question=question, title=self.title, responsibility=self.responsibility, goal=goal)}\n\n"
+                f"当前上下文：\n{self.flow_context.to_prompt(question=question, goal=goal)}\n\n"
                 f"依据当前上下文，选择下一步动作。\n"
                 f"注意：decompose 的子任务必须是当前目标的细化分解（更小范围的子问题），合起来完整覆盖当前目标，不得发散。\n"
                 f"输出 JSON：action（动作名）、detail（参数）。"
