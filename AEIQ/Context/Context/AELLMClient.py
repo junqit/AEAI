@@ -26,6 +26,7 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
     """发 LLM 请求，回包解析后回填信封返回（ident 逐字保留）；失败回填失败占位信封避免挂死。"""
     try:
         client = _get_async_client()
+        logger.info("[LLM] 发送请求:\n%s", json.dumps(payload.messages, ensure_ascii=False, indent=2))
         resp = await client.post(LLM_SERVICE_URL, json=payload.to_llm_request_dic(), headers=LLM_HEADERS)
         result = resp.json()
         reply = result.get("response", "")
