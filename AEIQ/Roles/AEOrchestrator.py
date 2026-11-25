@@ -119,7 +119,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             subtasks = [s.strip() for s in detail.split("\n") if s.strip()] if detail else []
             self.do_decompose(subtasks)
         elif action == AEAction.execute_script:
-            self.start_flow()
+            self.do_execute()
         elif action == AEAction.synthesize:
             self.do_synthesize()
         elif action == AEAction.verify:

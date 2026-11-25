@@ -1,12 +1,12 @@
 """AERoleExecute - 脚本执行能力 mixin。
 
-流程：start_flow → _request_script_type（LLM 按 ruby/python/shell 能力与已装工具包选型）→
+流程：do_execute → _request_script_type（LLM 按 ruby/python/shell 能力与已装工具包选型）→
 receiveScriptType → _request_script_generate（LLM 生成脚本内容）→ receiveScriptGenerate →
 _run_script（执行）→ _verify（LLM 验证评分，≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。
 执行失败亦经 _request_script_fix 重试，循环至通过。
 
 目标取 input.goal；脚本内容由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）；
-执行记账 self.attempts 由 start_flow 初始化；outResult 由历次 attempt 组装。
+执行记账 self.attempts 由 do_execute 初始化；outResult 由历次 attempt 组装。
 """
 import logging
 import re
@@ -92,12 +92,12 @@ class AERoleExecute(AERole):
     （AEOrchestrator）承担。目标 = 宿主 input.goal；type 由本 mixin 经 LLM 选型后贯穿执行；脚本内容
     由 LLM 生成并存于每次 attempt（AEScriptAttempt.script）。回包方法落在宿主实例上。
 
-    流程：start_flow → _request_script_type（LLM 选型）→ receiveScriptType → _request_script_generate
+    流程：do_execute → _request_script_type（LLM 选型）→ receiveScriptType → _request_script_generate
     （LLM 生成内容）→ receiveScriptGenerate → _run_script（执行结果回填到当前 attempt）→
     _verify（≥PASS_SCORE 完成；不达标 _request_script_fix 重试）。执行失败亦经 _request_script_fix
     重试，循环至通过。outResult 由历次 attempt 组装（每次结果，不论对错）。
 
-    实例执行记账：self.attempts（历次 AEScriptAttempt，含脚本/结果/评分）为信息源；由 start_flow 初始化。
+    实例执行记账：self.attempts（历次 AEScriptAttempt，含脚本/结果/评分）为信息源；由 do_execute 初始化。
     """
 
     VALID_TYPES = tuple(t.value for t in AEScriptType)
@@ -108,7 +108,7 @@ class AERoleExecute(AERole):
     type: str = ""
 
     # 流程入口：选型→生成→执行→验证循环。
-    def start_flow(self) -> None:
+    def do_execute(self) -> None:
         self._request_script_type()
 
     # 请求 LLM 按能力与已装工具包选脚本类型。
