@@ -118,7 +118,7 @@ class AERoleExecute(AERole):
         self.attempts = []  # 初始化脚本执行记账
         messages = [
             {
-                AE_ROLE: AEConentRole.ASSISTANT.value,
+                AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n",
             },
             {
@@ -160,7 +160,7 @@ class AERoleExecute(AERole):
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
-                AE_ROLE: AEConentRole.ASSISTANT.value,
+                AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: (
                     f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                     f"脚本类型: {self.type}\n"
@@ -260,7 +260,7 @@ class AERoleExecute(AERole):
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         messages = [
             {
-                AE_ROLE: AEConentRole.ASSISTANT.value,
+                AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: (
                     f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
                     f"程序输出:\n{stdout}\n"
@@ -351,7 +351,7 @@ class AERoleExecute(AERole):
             )
         messages = [
             {
-                AE_ROLE: AEConentRole.ASSISTANT.value,
+                AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: assistant_content,
             },
             {

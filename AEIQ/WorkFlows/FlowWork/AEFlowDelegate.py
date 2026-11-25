@@ -143,7 +143,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
             sub_answer = sub.output.outResult or ""
             if sub_goal or sub_answer:
                 prefix_msgs.append({
-                    AE_ROLE: AEConentRole.ASSISTANT.value,
+                    AE_ROLE: AEConentRole.SYSTEM.value,
                     AE_CONTENT: f"目标：{sub_goal}\n答案：{sub_answer}",
                 })
         if prefix_msgs:

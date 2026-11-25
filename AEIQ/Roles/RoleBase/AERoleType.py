@@ -10,8 +10,6 @@ AE_ROLE = "role"
 class AEConentRole(Enum):
     SYSTEM = "system"
     USER = "user"
-    ASSISTANT = "assistant"
-    CONTEXT = "context"
 
 
 class AEAction(str, Enum):
