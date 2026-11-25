@@ -31,9 +31,10 @@ async def send_llm_request(payload: AELLMPayload) -> dict:
         reply = result.get("response", "")
         elapsed = result.get("elapsed_seconds")
         logger.info(
-            "[LLM] 收到回复: %d chars%s",
+            "[LLM] 收到回复: %d chars%s\n%s",
             len(reply) if reply else 0,
             f", 耗时: {elapsed:.2f}s" if isinstance(elapsed, (int, float)) else "",
+            reply or "",
         )
         usage = result.get("usage") or {}
         if usage:
