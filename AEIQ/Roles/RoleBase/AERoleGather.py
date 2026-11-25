@@ -29,11 +29,7 @@ class AERoleGather(AERole):
 
     # 以当前能力与确认目标，请求 LLM 判定是否需要背景确认（true/false）
     def requestContextNeeded(self) -> None:
-        goal = self.input.get_goal() if self.input is not None else ""
-        if not goal:
-            logger.warning("[%s][d=%s] 无 input.goal，跳过背景确认，回退决策", self.title, self.deepth)
-            self._orchestrate()
-            return
+        target = (self.input.get_goal() or self.input.get_content()) if self.input is not None else ""
         # SYSTEM 放角色身份（title+responsibility，不含铁律）
         system_parts = []
         if self.title:
@@ -54,7 +50,7 @@ class AERoleGather(AERole):
                 "- 目标须可完成：信息在上下文存在则提取，不存在则明确如何获取\n"
                 "- 若问题所需信息已完整准确，target 留空\n"
                 "\n"
-                "【目标】\n" + goal
+                "【目标】\n" + target
             ),
         })
         flow_out = self.generateFlowOutput(AERoleGatherFunction.receiveContextNeeded)

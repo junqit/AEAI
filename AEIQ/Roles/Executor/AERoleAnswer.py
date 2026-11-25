@@ -25,7 +25,7 @@ class AERoleAnswer(AERole):
         # 优先用优化后的 goal，没有则用原始问题 content
         answer_target = ""
         if self.input is not None:
-            answer_target = self.input.get_goal()
+            answer_target = self.input.get_goal() or self.input.get_content()
         if not answer_target:
             logger.warning("[%s][d=%s] 无可作答问题，以错误完成本 flow 避免卡死", self.title, self.deepth)
             self.flow_complete(

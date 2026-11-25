@@ -66,11 +66,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
     def _orchestrate(self) -> None:
         """请求 LLM 决策：看上下文全貌 + 可用动作，选择下一步。"""
-        # goal 为空时强制 optimize_goal 生成可完成目标，不让 LLM 跳过
-        goal = self.input.get_goal() if self.input is not None else ""
-        if not goal:
-            self.requestOptimizeInput()
-            return
         # 决策温度递增：首次 0.3，每次 +0.2，上限 0.9
         decision_temp = min(0.3 + self.decision_round * 0.2, 0.9)
 
