@@ -96,7 +96,6 @@ class AEUserContext:
 
     async def _do_llm(self, payload) -> None:
         """在 loop 上 await async LLM，回复到达后回填信封并 dispatch 驱动 flow（与请求同在一个异步线程）。"""
-        import json
         from ..Context.AELLMClient import send_llm_request
         from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
         from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
@@ -110,9 +109,7 @@ class AEUserContext:
                 "- 不得臆想与瞎说"
             ),
         })
-        logger.info("📤 发送 LLM:\n%s", json.dumps(payload.messages, ensure_ascii=False, indent=2))
         envelope = await send_llm_request(payload)
         if envelope is None:
             return
-        logger.info("📥 接收 LLM:\n%s", json.dumps(envelope, ensure_ascii=False, indent=2, default=str))
         self._context_center.dispatch_llm_response(envelope)
