@@ -52,7 +52,7 @@ class AERoleClarify(AERole):
         self.rolePrompt = data.get("rolePrompt", "") or ""
         if not self.title or not self.responsibility or not self.rolePrompt:
             return False
-        self.flow_context.record_step("clarify_role", self.input.get_target(), f"{self.title}/{self.responsibility}")
+        self.flow_context.record_action_result("clarify_role", self.input.get_target(), f"{self.title}/{self.responsibility}")
         logger.info(
             "[%s][d=%s] 角色信息就绪:\n"
             "========================================\n"

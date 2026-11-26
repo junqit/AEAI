@@ -25,7 +25,7 @@ class AERoleSynthesize(AERole):
 
     # synthesize 动作：校验后请求汇总（无子结果与背景则回退决策）
     def do_synthesize(self) -> None:
-        if not self.flow_context.has_steps():
+        if not self.flow_context.has_subflow_results():
             logger.info("[%s][d=%s] synthesize 无步骤结论，回退决策（建议 answer）",
                         self.title, self.deepth)
             self._orchestrate()
@@ -41,9 +41,7 @@ class AERoleSynthesize(AERole):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"目标：{self.input.get_target() if self.input is not None else ''}\n"
-                f"步骤结论：\n{self.flow_context.to_prompt() or '（无）'}\n\n"
-                f"请综合以上所有信息，给出完整、连贯、直接回答目标的候选答案。"
+                "请综合以上所有信息，给出完整、连贯、直接回答目标的候选答案。"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleSynthesizeFunction.receive_synthesize)
@@ -61,6 +59,6 @@ class AERoleSynthesize(AERole):
         elif isinstance(data, str):
             synthesis = data.strip()
         if synthesis:
-            self.flow_context.record_step("synthesize", self.input.get_target(), synthesis)
+            self.flow_context.record_action_result("synthesize", self.input.get_target(), synthesis)
             return True
         return False

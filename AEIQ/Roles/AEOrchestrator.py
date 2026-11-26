@@ -13,6 +13,7 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
@@ -45,8 +46,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
     flow 自身状态（title/responsibility/input.goal 等）直接读取，不经 AEFlowContext 中转。
     """
 
-    # 最大拆解深度（超过则不允许 decompose，强制 answer/complete）
-    MAX_DECOMPOSE_DEPTH: int = 3
     # 已发起的决策轮数（每个 action 后 LLM 决定下一步的计数；温度递增与防循环用）
     decision_round: int = 0
 
@@ -151,14 +150,25 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             AE_CONTENT: self._action_catalog(),
         })
 
-        # USER: 当前上下文 + 决策指令
+        # SYSTEM: 决策规则
+        messages.append({
+            AE_ROLE: AEConentRole.SYSTEM.value,
+            AE_CONTENT: (
+                "决策规则：\n"
+                "- decompose 的子任务必须是当前目标的细化分解（更小范围的子问题），合起来完整覆盖当前目标，不得发散\n"
+                "- detail 必须是可完成的目标或参数，不得是疑问、提问或要求用户交互，不得对目标或问题提出疑问或质疑\n"
+                "- 涉及用户上下文信息时，用技术手段获取（如 IP 定位），除权限问题外\n"
+                "输出 JSON：action（动作名）、detail（参数）。"
+            ),
+        })
+
+        # USER: 当前目标
+        target = self.input.get_target() if self.input is not None else ""
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"当前上下文：\n{self.flow_context.to_prompt()}\n\n"
-                f"依据当前上下文，选择下一步动作。\n"
-                f"注意：decompose 的子任务必须是当前目标的细化分解（更小范围的子问题），合起来完整覆盖当前目标，不得发散。\n"
-                f"输出 JSON：action（动作名）、detail（参数）。"
+                f"当前目标：{target}\n\n"
+                "依据当前上下文，选择下一步动作。"
             ),
         })
         return messages
@@ -188,6 +198,30 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                 line += f"；{extra}"
             lines.append(line)
         return "\n".join(lines)
+
+    # ==================== LLM 请求：加父 flow 步骤结论作为背景，确保上下文完整 ====================
+
+    def flow_send_llm_request(self, payload: "AELLMPayload") -> None:
+        """发送 LLM 请求前加自己的步骤结论作为背景；super 层层调用，每层加各自的 context。"""
+        context = self.flow_context.to_prompt()
+        if context:
+            payload.messages.insert(0, {
+                AE_ROLE: AEConentRole.SYSTEM.value,
+                AE_CONTENT: f"步骤结论：\n{context}",
+            })
+        super().flow_send_llm_request(payload)
+
+    # ==================== 子 flow 完成：记录子 flow 目标与结果 ====================
+
+    def receive_flow_complete(self, flowOutput) -> bool:
+        """子 flow 完成回调：记录完成的子 flow 目标与结果到 flow_context（subflow_results）。"""
+        ident = flowOutput.ident if flowOutput is not None else ""
+        if ident == self.ident and not flowOutput.completeIdent:
+            # decompose 子 flow 完成：遍历完成的子 flow，记录目标与结果（去重）
+            for sub in self._flows.values():
+                if sub.status == AEFlowStatus.complete:
+                    self.flow_context.record_subflow_result(sub)
+        return super().receive_flow_complete(flowOutput)
 
     # ==================== 能力回包 → 判断 super 返回值，正确推进 / 失败 error 终止 ====================
 

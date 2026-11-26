@@ -1,7 +1,10 @@
 """AEFlowContext - 步骤结论上下文。
 
-只保存每个步骤的结论（AEStepResult：action + target + result），供 LLM 决策
-与 subflow / 当前 flow 请求时作为背景信息。输出时把每步的 action + target + result 合并返回。
+记录两部分：
+1. action_results：当前 flow 各 action 的结论（clarify/optimize/gather/synthesize/verify/execute）。
+2. subflow_results：子 flow 的目标与结果（子 flow 完成时记录）。
+
+请求 LLM 时（flow_send_llm_request）添加的是 subflow_results（子 flow 目标与结果）作为背景。
 """
 from dataclasses import dataclass, field
 from typing import List
@@ -11,18 +14,17 @@ from typing import List
 class AEStepResult:
     """单步结果：action + target + result。
 
-    Attributes:
-        action: 该步的 action 名（如 clarify_role / optimize_goal / gather_context 等）。
-        target: 该步的目标（goal or content），即该步要处理的问题或目标。
-        result: 该步的结论 / 产出（如角色信息、优化目标、背景数据、脚本结果、综合候选、验证结论等）。
+    action 非空时为 action 结论；action 空时为 subflow 结果（只有 target + result）。
     """
     action: str = ""
     target: str = ""
     result: str = ""
 
-    # 合并 action + target + result 返回（供 to_prompt 拼接）
+    # 合并 action + target + result 返回（action 空则跳过）
     def to_prompt(self) -> str:
-        parts = [f"[{self.action}]"]
+        parts = []
+        if self.action:
+            parts.append(f"[{self.action}]")
         if self.target:
             parts.append(f"目标：{self.target}")
         if self.result:
@@ -32,26 +34,39 @@ class AEStepResult:
 
 @dataclass
 class AEFlowContext:
-    """步骤结论上下文：保存每个步骤的结论，供 LLM 决策与请求时作为背景信息。"""
+    """步骤结论上下文：记录 action 结果与 subflow 目标/结果。"""
 
-    steps: List[AEStepResult] = field(default_factory=list)
+    # 当前 flow 各 action 的结论
+    action_results: List[AEStepResult] = field(default_factory=list)
+    # 子 flow 的目标与结果（请求 LLM 时作为背景添加）
+    subflow_results: List[AEStepResult] = field(default_factory=list)
 
     # ==================== 状态查询 ====================
 
-    def has_steps(self) -> bool:
-        """是否已有步骤结论。"""
-        return bool(self.steps)
+    def has_subflow_results(self) -> bool:
+        """是否已有子 flow 结果。"""
+        return bool(self.subflow_results)
 
     # ==================== 写入方法 ====================
 
-    def record_step(self, action: str, target: str = "", result: str = "") -> None:
-        """记录一个步骤的结论（action + target + result）。"""
-        self.steps.append(AEStepResult(action=action, target=target, result=result))
+    def record_action_result(self, action: str, target: str = "", result: str = "") -> None:
+        """记录当前 flow 一个 action 的结论。"""
+        self.action_results.append(AEStepResult(action=action, target=target, result=result))
 
-    # ==================== 序列化（供 LLM 决策 / 请求时作为背景信息） ====================
+    def record_subflow_result(self, flow) -> None:
+        """记录一个子 flow 的目标与结果（接收 flow，按 target 去重）。"""
+        target = flow.input.get_target() if flow.input else ""
+        result = flow.output.outResult or "" if flow.output else ""
+        for s in self.subflow_results:
+            if s.target == target:
+                s.result = result
+                return
+        self.subflow_results.append(AEStepResult(action="", target=target, result=result))
+
+    # ==================== 序列化（请求 LLM 时添加 subflow 目标与结果） ====================
 
     def to_prompt(self) -> str:
-        """输出所有步骤结论（每步 action + target + result 合并）作为背景信息。"""
-        if not self.steps:
+        """输出 subflow 目标与结果（请求 LLM 时作为背景添加）。"""
+        if not self.subflow_results:
             return ""
-        return "\n\n".join(s.to_prompt() for s in self.steps)
+        return "\n\n".join(s.to_prompt() for s in self.subflow_results)

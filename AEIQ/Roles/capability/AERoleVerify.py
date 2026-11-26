@@ -25,7 +25,7 @@ class AERoleVerify(AERole):
 
     # verify 动作（汇总前闸门）：校验后请求验证（无子任务结果则回退决策）
     def do_verify(self) -> None:
-        if not self.flow_context.has_steps():
+        if not self.flow_context.has_subflow_results():
             logger.info("[%s][d=%s] verify 无步骤结论，回退决策（建议先 decompose）",
                         self.title, self.deepth)
             self._orchestrate()
@@ -50,9 +50,7 @@ class AERoleVerify(AERole):
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"目标：{self.input.get_target() if self.input is not None else ''}\n"
-                f"步骤结论：\n{self.flow_context.to_prompt() or '（无）'}\n\n"
-                f"请验证步骤结论是否完整覆盖目标，输出 PASS/FAIL 与缺口。"
+                "请验证步骤结论是否完整覆盖目标，输出 PASS/FAIL 与缺口。"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleVerifyFunction.receive_verify)
@@ -71,5 +69,5 @@ class AERoleVerify(AERole):
             passed_str = str(data.get("passed", "") or "").strip().upper()
             gaps = str(data.get("gaps", "") or "").strip()
         passed = passed_str.startswith("PASS")
-        self.flow_context.record_step("verify", self.input.get_target(), gaps if not passed else "passed")
+        self.flow_context.record_action_result("verify", self.input.get_target(), gaps if not passed else "passed")
         return passed

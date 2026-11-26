@@ -234,7 +234,7 @@ class AERoleExecute(AERole):
     # 以执行结果完成本 flow。
     def _complete(self) -> None:
         results = self._build_results()
-        self.flow_context.record_step("execute_script", self.input.get_target(), results)
+        self.flow_context.record_action_result("execute_script", self.input.get_target(), results)
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
         self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: results})
 

@@ -43,11 +43,11 @@ class AERoleGather(AERole):
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
                 "根据下方【目标】及现有信息，识别解决此问题尚未明确的必要背景信息，"
-                "在 target 中生成一个准确的单一目标以获取该信息。\n"
+                "在 target 中生成一个系统可自行完成的单一目标以获取该信息。\n"
                 "要求：\n"
                 "- 若已提供角色与能力范围，基于之判定所需背景；否则基于目标本身判定\n"
-                "- 目标仅用于提供必要背景信息，不解决原问题\n"
-                "- 目标须可完成：信息在上下文存在则提取，不存在则明确如何获取\n"
+                "- target 必须是系统可自行完成的目标（通过脚本/API/技术手段获取），不得是疑问、提问或要求用户交互，不得对目标或问题提出疑问或质疑\n"
+                "- 涉及用户上下文信息时，用技术手段获取（如 IP 定位获取地理位置、系统命令获取环境信息等），除需用户授权的权限问题外\n"
                 "- 若问题所需信息已完整准确，target 留空\n"
                 "\n"
                 "【目标】\n" + target
@@ -93,7 +93,7 @@ class AERoleGather(AERole):
                     result = out.get(AE_CONTENT, "") or ""
             if result:
                 logger.info("[%s][d=%s] 背景确认子 flow 完成，结果=%s", self.title, self.deepth, result)
-                self.flow_context.record_step("gather_context", self.input.get_target(), result)
+                self.flow_context.record_action_result("gather_context", self.input.get_target(), result)
             else:
                 logger.warning("[%s][d=%s] 背景确认子 flow 完成但结果为空", self.title, self.deepth)
         return bool(result)
