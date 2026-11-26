@@ -104,8 +104,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             )
             return True
 
-        # action 有效再记录步骤与要做的事情
-        self.flow_context.record_action(action_str, detail=detail)
         # 更新 born_action 为当前 action，下次决策不可重复此步骤
         self.born_action = action
 
@@ -153,15 +151,11 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             AE_CONTENT: self._action_catalog(),
         })
 
-        # 从 flow 自身读 question/goal，传给 flow_context.to_prompt（子任务结果由 flow_context 自持）
-        question = self.input.get_content() if self.input is not None else ""
-        goal = self.input.get_goal() if self.input is not None else ""
-
         # USER: 当前上下文 + 决策指令
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"当前上下文：\n{self.flow_context.to_prompt(question=question, goal=goal)}\n\n"
+                f"当前上下文：\n{self.flow_context.to_prompt()}\n\n"
                 f"依据当前上下文，选择下一步动作。\n"
                 f"注意：decompose 的子任务必须是当前目标的细化分解（更小范围的子问题），合起来完整覆盖当前目标，不得发散。\n"
                 f"输出 JSON：action（动作名）、detail（参数）。"
@@ -255,7 +249,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         if result:
             self._orchestrate()
         else:
-            gaps = self.flow_context.verification
+            gaps = data.get("gaps", "") if isinstance(data, dict) else ""
             self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: f"验证未通过：{gaps}" if gaps else "验证未通过"},

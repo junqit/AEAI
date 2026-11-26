@@ -125,7 +125,7 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         # goal 为空时用 content 兜底（没优化目标的层，content 即当前层在处理的任务）
         goal = ""
         if self.input is not None:
-            goal = self.input.get_goal() or self.input.get_content()
+            goal = self.input.get_target()
         # 前置上下文消息：goal 上下文 + completeIdent 子 flow 的 goal/答案，插到原 messages 前
         prefix_msgs = []
         if payload.deepth is None:

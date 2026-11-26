@@ -52,6 +52,10 @@ class AEFlowInput:
     def get_goal(self) -> str:
         return self._goal
 
+    # 有 goal 返回 goal，否则返回 content
+    def get_target(self) -> str:
+        return self.get_goal() or self.get_content()
+
     # 设置任务目标
     def set_goal(self, goal: str) -> None:
         self._goal = goal

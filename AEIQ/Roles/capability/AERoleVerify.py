@@ -25,17 +25,15 @@ class AERoleVerify(AERole):
 
     # verify 动作（汇总前闸门）：校验后请求验证（无子任务结果则回退决策）
     def do_verify(self) -> None:
-        if not self.flow_context.has_sub_task_results():
-            logger.info("[%s][d=%s] verify 无子任务结果，回退决策（建议先 decompose）",
+        if not self.flow_context.has_steps():
+            logger.info("[%s][d=%s] verify 无步骤结论，回退决策（建议先 decompose）",
                         self.title, self.deepth)
-            self.flow_context.add_error("verify 无子任务结果，需先 decompose")
             self._orchestrate()
             return
         self.requestVerify()
 
     # 验证子任务完成/有效/覆盖原目标，请求 LLM 产出 PASS/FAIL + 缺口（汇总前闸门）
     def requestVerify(self) -> None:
-        sub_tasks = self.flow_context.sub_task_results
         messages = []
         role_brief = self.role_brief()
         if role_brief:
@@ -44,22 +42,17 @@ class AERoleVerify(AERole):
             AE_ROLE: AEConentRole.SYSTEM.value,
             AE_CONTENT: (
                 "任务完成验证规则（汇总前闸门）：\n"
-                "- 每个子任务是否都已完成、结果非空（无失败/空结果）？\n"
-                "- 子任务目标合起来是否完整覆盖原始目标（有无遗漏的子问题）？\n"
-                "- 有无错误信息需先补做？\n"
-                "- 输出 PASS 或 FAIL；FAIL 时列出具体缺口（哪个子任务失败/缺失）与补缺方案。"
+                "- 每个步骤是否都已完成、结果非空（无失败/空结果）？\n"
+                "- 步骤结论合起来是否完整覆盖原始目标（有无遗漏的子问题）？\n"
+                "- 输出 PASS 或 FAIL；FAIL 时列出具体缺口与补缺方案。"
             ),
         })
-        sub_text = "\n".join(f"- 目标：{t.get('goal', '')}\n  结论：{t.get('result', '')}"
-                             for t in sub_tasks) if sub_tasks else "（无）"
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"原始问题：{self.input.get_content() if self.input is not None else ''}\n"
-                f"优化目标：{self.input.get_goal() if self.input is not None else ''}\n"
-                f"子任务结果：\n{sub_text}\n"
-                f"错误信息：{'; '.join(self.flow_context.errors) if self.flow_context.errors else '无'}\n\n"
-                f"请验证子任务是否完成且覆盖原目标，输出 PASS/FAIL 与缺口。"
+                f"目标：{self.input.get_target() if self.input is not None else ''}\n"
+                f"步骤结论：\n{self.flow_context.to_prompt() or '（无）'}\n\n"
+                f"请验证步骤结论是否完整覆盖目标，输出 PASS/FAIL 与缺口。"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleVerifyFunction.receive_verify)
@@ -78,5 +71,5 @@ class AERoleVerify(AERole):
             passed_str = str(data.get("passed", "") or "").strip().upper()
             gaps = str(data.get("gaps", "") or "").strip()
         passed = passed_str.startswith("PASS")
-        self.flow_context.set_verification(gaps, passed)
+        self.flow_context.record_step("verify", self.input.get_target(), gaps if not passed else "passed")
         return passed

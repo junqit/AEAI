@@ -25,31 +25,25 @@ class AERoleSynthesize(AERole):
 
     # synthesize 动作：校验后请求汇总（无子结果与背景则回退决策）
     def do_synthesize(self) -> None:
-        if not self.flow_context.has_sub_task_results() and not self.flow_context.has_background():
-            logger.info("[%s][d=%s] synthesize 无子结果与背景，回退决策（建议 answer）",
+        if not self.flow_context.has_steps():
+            logger.info("[%s][d=%s] synthesize 无步骤结论，回退决策（建议 answer）",
                         self.title, self.deepth)
-            self.flow_context.add_error("synthesize 无可汇总内容")
             self._orchestrate()
             return
         self.requestSynthesize()
 
     # 综合子任务结果与背景，请求 LLM 汇总成连贯候选答案
     def requestSynthesize(self) -> None:
-        sub_tasks = self.flow_context.sub_task_results
         messages = []
         role_brief = self.role_brief()
         if role_brief:
             messages.append({AE_ROLE: AEConentRole.SYSTEM.value, AE_CONTENT: role_brief})
-        sub_text = "\n".join(f"- 目标：{t.get('goal', '')}\n  结论：{t.get('result', '')}"
-                             for t in sub_tasks) if sub_tasks else "（无）"
         messages.append({
             AE_ROLE: AEConentRole.USER.value,
             AE_CONTENT: (
-                f"原始问题：{self.input.get_content() if self.input is not None else ''}\n"
-                f"优化目标：{self.input.get_goal() if self.input is not None else ''}\n"
-                f"背景信息：{self.flow_context.background or '（无）'}\n"
-                f"子任务结果：\n{sub_text}\n\n"
-                f"请综合以上所有信息，给出完整、连贯、直接回答原始问题的候选答案。"
+                f"目标：{self.input.get_target() if self.input is not None else ''}\n"
+                f"步骤结论：\n{self.flow_context.to_prompt() or '（无）'}\n\n"
+                f"请综合以上所有信息，给出完整、连贯、直接回答目标的候选答案。"
             ),
         })
         flow_out = self.generateFlowOutput(AERoleSynthesizeFunction.receive_synthesize)
@@ -67,6 +61,6 @@ class AERoleSynthesize(AERole):
         elif isinstance(data, str):
             synthesis = data.strip()
         if synthesis:
-            self.flow_context.set_synthesis(synthesis)
+            self.flow_context.record_step("synthesize", self.input.get_target(), synthesis)
             return True
         return False

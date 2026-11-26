@@ -22,12 +22,9 @@ class AERoleComplete(AERole):
         无 synthesis 时退化用 input.goal/content 兜底防卡死（告警）。
         """
         if not result:
-            result = self.flow_context.synthesis or ""
-        if not result:
-            logger.warning("[%s][d=%s] complete 无综合候选，退化用 input 兜底（建议先 verify→synthesize→complete）",
+            logger.warning("[%s][d=%s] complete 无显式结论，用 input 兜底",
                            self.title, self.deepth)
-            result = (self.input.get_goal() if self.input is not None else "") or \
-                   (self.input.get_content() if self.input is not None else "")
+            result = self.input.get_target() if self.input is not None else ""
         self.flow_complete(
             {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
              AE_CONTENT: result},

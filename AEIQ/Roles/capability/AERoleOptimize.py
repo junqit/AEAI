@@ -98,4 +98,7 @@ class AERoleOptimize(AERole):
             goal = data
         if self.input is not None:
             self.input.set_goal(goal or "")
-        return bool(self.input.get_goal() if self.input else "")
+        result = self.input.get_goal() if self.input else ""
+        if result:
+            self.flow_context.record_step("optimize_goal", self.input.get_target(), result)
+        return bool(result)

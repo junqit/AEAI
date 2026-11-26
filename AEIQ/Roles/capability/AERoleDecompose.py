@@ -27,7 +27,7 @@ class AERoleDecompose(AERole):
 
     # 据问题与角色能力拆解为最小颗粒度串行任务。
     def requestWorkflow(self) -> None:
-        question = ((self.input.get_goal() or self.input.get_content()) if self.input is not None else "")
+        question = (self.input.get_target() if self.input is not None else "")
         messages = []
         role_brief = self.role_brief()
         if len(role_brief) > 0:
@@ -122,7 +122,6 @@ class AERoleDecompose(AERole):
             if first_child is None:
                 first_child = child
         if first_child is None:
-            self.flow_context.add_error("任务拆解为空或无可派发任务")
             self._orchestrate()
             return
         first_child.on_flow_start()

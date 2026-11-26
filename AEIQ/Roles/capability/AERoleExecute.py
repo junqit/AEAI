@@ -119,7 +119,7 @@ class AERoleExecute(AERole):
         messages = [
             {
                 AE_ROLE: AEConentRole.SYSTEM.value,
-                AE_CONTENT: f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n",
+                AE_CONTENT: f"目标/期望输出:\n{self.input.get_target() or ''}\n",
             },
             {
                 AE_ROLE: AEConentRole.USER.value,
@@ -162,7 +162,7 @@ class AERoleExecute(AERole):
             {
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                    f"目标/期望输出:\n{self.input.get_target() or ''}\n"
                     f"脚本类型: {self.type}\n"
                 ),
             },
@@ -233,8 +233,10 @@ class AERoleExecute(AERole):
 
     # 以执行结果完成本 flow。
     def _complete(self) -> None:
+        results = self._build_results()
+        self.flow_context.record_step("execute_script", self.input.get_target(), results)
         delegate_ident = self.delegate.ident if self.delegate is not None else self.ident
-        self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: self._build_results()})
+        self.flow_complete({AE_IDENT: delegate_ident, AE_CONTENT: results})
 
     # 携带脚本能力与工具包信息；选型前带全部，选型后仅带选定类型。
     def _apply_script_env(self, payload) -> None:
@@ -262,7 +264,7 @@ class AERoleExecute(AERole):
             {
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: (
-                    f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                    f"目标/期望输出:\n{self.input.get_target() or ''}\n"
                     f"程序输出:\n{stdout}\n"
                 ),
             },
@@ -335,7 +337,7 @@ class AERoleExecute(AERole):
             history_lines = [att.to_history_message(i) for i, att in enumerate(self.attempts)]
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                f"目标/期望输出:\n{self.input.get_target() or ''}\n"
                 f"历次执行记录（脚本内容 + 执行结果 + 不达标理由）:\n"
                 + "\n".join(history_lines) + "\n"
                 f"问题说明:\n{problem}\n"
@@ -344,7 +346,7 @@ class AERoleExecute(AERole):
         else:
             assistant_content = (
                 f"脚本类型: {self.type}\n"
-                f"目标/期望输出:\n{self.input.get_goal() or self.input.get_content() or ''}\n"
+                f"目标/期望输出:\n{self.input.get_target() or ''}\n"
                 f"当前脚本内容:\n{self.attempts[-1].script}\n"
                 f"问题说明:\n{problem}\n"
                 "请依据问题说明修正脚本，使其产出目标/期望输出。"
