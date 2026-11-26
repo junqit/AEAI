@@ -103,6 +103,7 @@ class AEFlowInterfaceImpl(AEFlowInterface):
         self.status = AEFlowStatus.complete
         answer = out_schema.get(AE_CONTENT, "") if isinstance(out_schema, dict) else ""
         self.output.outResult = answer
+        self.output.ident = self.ident
         if self.delegate is not None:
             self.delegate.receive_flow_complete(self.output)
         return True

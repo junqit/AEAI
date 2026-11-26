@@ -13,7 +13,6 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from WorkFlows.FlowWork.AEFlowInput import AEFlowStatus
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
@@ -214,14 +213,16 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
     # ==================== 子 flow 完成：记录子 flow 目标与结果 ====================
 
     def receive_flow_complete(self, flowOutput) -> bool:
-        """子 flow 完成回调：记录完成的子 flow 目标与结果到 flow_context（subflow_results）。"""
+        """子 flow 完成回调：通过 flowOutput.ident 直接获取子 flow，记录 subflow_result；其余交 super。"""
         ident = flowOutput.ident if flowOutput is not None else ""
-        if ident == self.ident and not flowOutput.completeIdent:
-            # decompose 子 flow 完成：遍历完成的子 flow，记录目标与结果（去重）
-            for sub in self._flows.values():
-                if sub.status == AEFlowStatus.complete:
-                    self.flow_context.record_subflow_result(sub)
+        sub = self._flows.get(ident) if ident else None
+        if sub is not None:
+            self.flow_context.record_subflow_result(sub)
         return super().receive_flow_complete(flowOutput)
+
+    # 全完成时回 _orchestrate 走收敛链（替代基类 summarize_to_llm 直接 flow_complete）
+    def summarize_to_llm(self) -> None:
+        self._orchestrate()
 
     # ==================== 能力回包 → 判断 super 返回值，正确推进 / 失败 error 终止 ====================
 
@@ -247,19 +248,6 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             self.flow_complete(
                 {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
                  AE_CONTENT: "目标优化失败"},
-                AEFlowCompletEvent.error,
-            )
-        return True
-
-    def contextComplete(self, flowOutput) -> bool:
-        """背景确认子 flow 完成回调：super 写入 background；正确继续决策，失败 error 终止。"""
-        result = super().contextComplete(flowOutput)
-        if result:
-            self._orchestrate()
-        else:
-            self.flow_complete(
-                {AE_IDENT: self.delegate.ident if self.delegate is not None else self.ident,
-                 AE_CONTENT: "背景确认失败"},
                 AEFlowCompletEvent.error,
             )
         return True

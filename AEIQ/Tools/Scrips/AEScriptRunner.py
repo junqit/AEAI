@@ -91,7 +91,7 @@ class AEScriptRunner:
             )
         # 确保 stdout 为字符串
         stdout = result.stdout if isinstance(result.stdout, str) else str(result.stdout or "")
-        logger.info("[%s] 脚本执行结果: 成功", self.interpreter)
+        logger.info("[%s] 脚本执行结果: 成功\n%s", self.interpreter, stdout)
         return stdout
 
 

@@ -76,12 +76,6 @@ class AEFlowDelegateImpl(AEFlowDelegate):
     # 接收 flow 完成通知，按 ident 路由
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
         if flowOutput.ident == self.ident:
-            # 完成回调命中自身：flowOutput 带 completeIdent 时调用其注册方法（funcident）；否则走默认汇总/推进
-            complete_ident = flowOutput.completeIdent or ""
-            if complete_ident:
-                logger.info("[%s][d=%s] 完成回调命中自身，调用 completeIdent=%s 注册方法",
-                            self.title, self.deepth, complete_ident)
-                return self.excutor.exec(complete_ident, flowOutput)
             if not self._flows:
                 return True
             if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
@@ -135,17 +129,6 @@ class AEFlowDelegateImpl(AEFlowDelegate):
         elif goal:
             prefix_msgs.append({AE_ROLE: AEConentRole.SYSTEM.value,
                                 AE_CONTENT: f"第 {self.deepth} 级目标：{goal}。此目标不作为问题，只是对第 {self.deepth + 1} 级目标上下文的约束"})
-        # completeIdent 非空的子 flow 的 goal 与答案作为上下文
-        for sub in self._flows.values():
-            if not sub.output.completeIdent:
-                continue
-            sub_goal = sub.input.get_goal() if sub.input else ""
-            sub_answer = sub.output.outResult or ""
-            if sub_goal or sub_answer:
-                prefix_msgs.append({
-                    AE_ROLE: AEConentRole.SYSTEM.value,
-                    AE_CONTENT: f"目标：{sub_goal}\n答案：{sub_answer}",
-                })
         if prefix_msgs:
             payload.messages = prefix_msgs + payload.messages
         payload.out_schema = {

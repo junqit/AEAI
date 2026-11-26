@@ -12,12 +12,10 @@ AE_LLM_OUT = "llm_out"
 class AEFlowOutput:
     """Flow 输出数据"""
 
-    def __init__(self, ident: str, out_schema: dict = None, outResult: str = "", completeIdent: str = ""):
+    def __init__(self, ident: str, out_schema: dict = None, outResult: str = ""):
         self.ident: str = ident
         self.out_schema: dict = out_schema or {}
         self.outResult: str = outResult
-        # 完成回调标识：子 flow 完成时带此标识，父 flow 收到后调用其注册方法（funcident）
-        self.completeIdent: str = completeIdent
 
     # 向 out_schema 首层添加参数
     def add_param(self, key: str, value: Any) -> None:

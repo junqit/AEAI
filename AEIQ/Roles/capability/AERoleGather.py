@@ -69,31 +69,15 @@ class AERoleGather(AERole):
         if not target:
             self._orchestrate()  # 无 target，不需要背景确认，继续决策
             return True
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
-        # completeIdent 塞进子 flow output：子 flow 完成时带回，父 receive_flow_complete 据此调 contextComplete
-        complete_ident = self.registerFunctional("contextComplete")
+        from Roles.AEOrchestrator import AEOrchestrator
         sub = AEOrchestrator(
-            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}, completeIdent=complete_ident),
+            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
         )
         sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
         sub.born_action = self.born_action
         self.add_flow(sub)
         sub.on_flow_start()
-        logger.info("[%s][d=%s] 已派发背景确认子 flow（completeIdent=contextComplete）", self.title, self.deepth)
+        logger.info("[%s][d=%s] 已派发背景确认子 flow", self.title, self.deepth)
         return True
 
-    # 背景确认子 flow 完成回调（completeIdent）：结果写入 flow_context.background，返回是否有结果
-    def contextComplete(self, flowOutput) -> bool:
-        result = ""
-        if flowOutput is not None:
-            result = flowOutput.outResult or ""
-            if not result:
-                out = flowOutput.out_schema
-                if isinstance(out, dict):
-                    result = out.get(AE_CONTENT, "") or ""
-            if result:
-                logger.info("[%s][d=%s] 背景确认子 flow 完成，结果=%s", self.title, self.deepth, result)
-                self.flow_context.record_action_result("gather_context", self.input.get_target(), result)
-            else:
-                logger.warning("[%s][d=%s] 背景确认子 flow 完成但结果为空", self.title, self.deepth)
-        return bool(result)
+    # 背景确认结果由 receive_flow_complete 统一记录 subflow_result，不再需要 contextComplete 回调
