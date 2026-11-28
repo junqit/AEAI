@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 class AEOrchestratorFunction(AEFunctional):
     """Orchestrator 回包功能性方法名。"""
     receive_orchestrate = "receive_orchestrate"
+    receive_action_catalog = "receive_action_catalog"
 
 
 class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
@@ -57,6 +58,64 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                 AEFlowCompletEvent.error,
             )
             return False
+        self._init_action_catalog()
+        return True
+
+    # ==================== action catalog 初始化（LLM 生成） ====================
+
+    # action 固定功能描述（做什么，不针对问题）
+    ACTION_DESCRIPTIONS = {
+        AEAction.clarify_role: "界定角色身份与能力范围",
+        AEAction.optimize_goal: "优化目标（转化为可执行目标）",
+        AEAction.gather_context: "获取背景信息",
+        AEAction.execute_script: "执行脚本完成可执行工作",
+        AEAction.decompose: "拆解为子任务",
+        AEAction.verify: "验证结果齐备/有效/覆盖目标",
+        AEAction.synthesize: "汇总子结果为候选答案",
+        AEAction.complete: "输出最终结论",
+        AEAction.answer: "直接推理作答",
+    }
+
+    def _init_action_catalog(self) -> None:
+        """LLM 根据当前目标 + action 固定功能，生成每个 action 的规则与范围（针对目标）。"""
+        target = self.input.get_target() if self.input is not None else ""
+        action_list = "\n".join(f"- {a.value}：{self.ACTION_DESCRIPTIONS[a]}" for a in AEAction)
+        messages = [
+            {
+                AE_ROLE: AEConentRole.SYSTEM.value,
+                AE_CONTENT: (
+                    "根据下方目标，为每个动作生成规则与范围描述（针对当前目标的适用条件与规则）。\n"
+                    "每个动作的固定功能如下，你需基于目标生成针对性的规则与范围：\n"
+                    f"{action_list}"
+                ),
+            },
+            {
+                AE_ROLE: AEConentRole.USER.value,
+                AE_CONTENT: f"目标：{target}",
+            },
+        ]
+        flow_out = self.generateFlowOutput(AEOrchestratorFunction.receive_action_catalog)
+        catalog = {a.value: llm_generate(f"{a.value} 针对当前目标的规则与范围") for a in AEAction}
+        flow_out.set_llm_out(catalog)
+        payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=0.3)
+        logger.info("[%s][d=%s] 生成 action catalog", self.title, self.deepth)
+        self.flow_send_llm_request(payload)
+
+    def receive_action_catalog(self, data: dict) -> bool:
+        """LLM 回包：初始化 action catalog，确认收到的个数 → _orchestrate。"""
+        if not isinstance(data, dict):
+            data = {}
+        for action in AEAction:
+            desc = str(data.get(action.value, "") or "").strip()
+            if desc:
+                self.flow_context.set_action(action.value, desc)
+        received = self.flow_context.get_action_count()
+        expected = len(AEAction)
+        if received < expected:
+            logger.warning("[%s][d=%s] action catalog 不完整：收到 %d/%d",
+                           self.title, self.deepth, received, expected)
+        logger.info("[%s][d=%s] action catalog 就绪（%d/%d）",
+                    self.title, self.deepth, received, expected)
         self._orchestrate()
         return True
 
@@ -156,7 +215,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                 "决策规则：\n"
                 "- decompose 的子任务必须是当前目标的细化分解（更小范围的子问题），合起来完整覆盖当前目标，不得发散\n"
                 "- detail 必须是可完成的目标或参数，不得是疑问、提问或要求用户交互，不得对目标或问题提出疑问或质疑\n"
-                "- 涉及用户上下文信息时，用技术手段获取（如 IP 定位），除权限问题外\n"
+                "- 涉及用户上下文信息时，用技术手段获取，除权限问题外\n"
                 "输出 JSON：action（动作名）、detail（参数）。"
             ),
         })
@@ -173,29 +232,16 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         return messages
 
     def _action_catalog(self) -> str:
-        """完整动作清单（按 6 步问题解决顺序组织），含使用条件与步骤。"""
-        all_actions = [
-            (AEAction.clarify_role, "界定问题：缺少角色身份与能力范围时使用", ""),
-            (AEAction.optimize_goal, "界定问题：原始问题模糊或缺少成功标准/约束时，转化为可执行目标", ""),
-            (AEAction.gather_context, "分析结构：缺少外部事实/数据/来源时获取", ""),
-            (AEAction.execute_script, "执行：可通过脚本完成的所有可执行工作（查询/计算/爬取/程序化处理/系统操作等，凡可脚本解决的任务皆可用）", ""),
-            (AEAction.decompose, "拆解：当前目标拆成更小、互不重叠、合起来覆盖目标的子任务", ""),
-            (AEAction.verify, "验证质量：子任务全部完成后，验证结果齐备/有效/覆盖原目标", ""),
-            (AEAction.synthesize, "确定路径：汇总子结果为连贯候选答案", ""),
-            (AEAction.complete, "确定路径：输出最终结论", ""),
-            (AEAction.answer, "旁路：无需拆解与汇总、可直接推理作答时使用", ""),
-        ]
-        # subflow 内禁选出生 action（born_action），防同 action 递归
+        """动作清单（action catalog 由 LLM 在 on_flow_start 时生成，存 flow_context）。"""
         born_action = self.born_action
-        available = [a for a in all_actions if a[0] != born_action]
         lines = ["可用动作："]
         if born_action:
             lines.append(f"（本 flow 由 {born_action.value} 创建，不可再选 {born_action.value}，避免同动作递归）")
-        for action, desc, extra in available:
-            line = f"- {action.value}：{desc}"
-            if extra:
-                line += f"；{extra}"
-            lines.append(line)
+        for action in AEAction:
+            if action == born_action:
+                continue
+            desc = self.flow_context.get_action_description(action.value)
+            lines.append(f"- {action.value}：{desc}")
         return "\n".join(lines)
 
     # ==================== LLM 请求：加父 flow 步骤结论作为背景，确保上下文完整 ====================
