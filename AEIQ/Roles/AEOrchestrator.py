@@ -13,6 +13,8 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_IDENT, AE_CONTENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
+from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
+from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE, AEAction
@@ -137,7 +139,8 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         available_action_names = " / ".join(a.value for a in AEAction if a != self.born_action)
         flow_out.set_llm_out({
             "action": llm_generate(f"动作名：{available_action_names}"),
-            "detail": llm_generate("按所选动作填参数"),
+            "target": llm_generate("选择该动作的原因转变成需要完成的目标"),
+            "reason": llm_generate("选择该动作的原因"),
         })
         payload = AELLMPayload(messages=messages, out_schema=flow_out.out_schema, temperature=decision_temp)
         logger.info("[%s][d=%s] 编排决策第 %d 轮（temperature=%.1f）",
@@ -151,9 +154,11 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         if not isinstance(data, dict):
             data = {}
         action_str = data.get("action", "")
-        detail = str(data.get("detail", "") or "").strip()
+        target = str(data.get("target", "") or "").strip()
+        reason = str(data.get("reason", "") or "").strip()
 
-        logger.info("[%s][d=%s] LLM 决策: action=%s, detail=%s", self.title, self.deepth, action_str, detail[:100])
+        logger.info("[%s][d=%s] LLM 决策: action=%s, target=%s, reason=%s",
+                    self.title, self.deepth, action_str, target[:80], reason[:80])
 
         # 按动作分发；无效 action 直接 error 终止，不重试（防循环）
         try:
@@ -177,8 +182,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         elif action == AEAction.gather_context:
             self.requestContextNeeded()
         elif action == AEAction.decompose:
-            subtasks = [s.strip() for s in detail.split("\n") if s.strip()] if detail else []
-            self.do_decompose(subtasks)
+            self.do_decompose()
         elif action == AEAction.execute_script:
             self.do_execute()
         elif action == AEAction.synthesize:
@@ -188,7 +192,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         elif action == AEAction.answer:
             self.requestLLMAnswer()
         elif action == AEAction.complete:
-            self.requestComplete(detail)
+            self.requestComplete()
         else:
             self._orchestrate()
         return True
@@ -261,6 +265,19 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
                 AE_CONTENT: f"步骤结论：\n{context}",
             })
         super().flow_send_llm_request(payload)
+
+    # ==================== 子 flow 创建（gather_context / decompose 统一调用） ====================
+
+    def _create_subflow(self, target: str):
+        """创建子 flow 处理独立目标（已 add_flow，未 on_flow_start，由调用方决定启动）。"""
+        from Roles.AEOrchestrator import AEOrchestrator
+        sub = AEOrchestrator(
+            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("子任务结论")}),
+        )
+        sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
+        sub.born_action = self.born_action
+        self.add_flow(sub)
+        return sub
 
     # ==================== 子 flow 完成：记录子 flow 目标与结果 ====================
 

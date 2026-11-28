@@ -7,8 +7,6 @@ import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT, AE_IDENT
 from WorkFlows.FlowWork.AEFlowDelegate import AEFlowCompletEvent
-from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -69,7 +67,6 @@ class AERoleDecompose(AERole):
         elif not isinstance(tasks, list):
             tasks = []
         logger.info("[%s][d=%s] 拆解出 %d 个任务：", self.title, self.deepth, len(tasks))
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环（AEOrchestrator → AERoleBase → 本模块）
         first_child = None
         for i, t in enumerate(tasks):
             if isinstance(t, dict):
@@ -81,12 +78,7 @@ class AERoleDecompose(AERole):
             goal = str(goal or "").strip()
             if not goal:
                 continue
-            child = AEOrchestrator(
-                flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
-            )
-            self.add_flow(child)
-            child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
-            child.born_action = self.born_action
+            child = self._create_subflow(goal)
             if first_child is None:
                 first_child = child
         if first_child is None:
@@ -102,23 +94,19 @@ class AERoleDecompose(AERole):
         logger.info("[%s][d=%s] 创建子任务并启动首个（串行），等待完成后汇总", self.title, self.deepth)
         return True
 
-    # decompose 动作：优先用 subtasks 直接派发，未给则请求 LLM 拆解
-    def do_decompose(self, subtasks: list) -> None:
+    # decompose 动作：从 input.get_target() 读取目标拆解，未给则请求 LLM 拆解
+    def do_decompose(self) -> None:
+        target = self.input.get_target() if self.input is not None else ""
+        subtasks = [s.strip() for s in target.split("\n") if s.strip()] if target else []
         if not subtasks:
             self.requestWorkflow()
             return
-        from Roles.AEOrchestrator import AEOrchestrator  # 懒导入避免循环
         first_child = None
         for goal in subtasks:
             goal = str(goal or "").strip()
             if not goal:
                 continue
-            child = AEOrchestrator(
-                flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("任务结论")}),
-            )
-            self.add_flow(child)
-            child.update_flow_input(AEFlowInput(content=goal, ident=child.ident, role=self.role.role if self.role is not None else None))
-            child.born_action = self.born_action
+            child = self._create_subflow(goal)
             if first_child is None:
                 first_child = child
         if first_child is None:

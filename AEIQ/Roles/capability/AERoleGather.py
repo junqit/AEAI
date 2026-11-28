@@ -9,8 +9,6 @@
 import logging
 
 from WorkFlows.FlowWork.AEFlowInfo import AE_CONTENT
-from WorkFlows.FlowWork.AEFlowOutput import AEFlowOutput
-from WorkFlows.FlowWork.AEFlowInput import AEFlowInput
 from Context.Context.AELLMPayload import AELLMPayload, llm_generate
 from Tools.Excutor.AERuntimeExcutor import AEFunctional
 from Roles.RoleBase.AERoleType import AEConentRole, AE_ROLE
@@ -69,13 +67,7 @@ class AERoleGather(AERole):
         if not target:
             self._orchestrate()  # 无 target，不需要背景确认，继续决策
             return True
-        from Roles.AEOrchestrator import AEOrchestrator
-        sub = AEOrchestrator(
-            flowOutput=AEFlowOutput(ident=self.ident, out_schema={AE_CONTENT: llm_generate("背景确认结果")}),
-        )
-        sub.update_flow_input(AEFlowInput(content=target, ident=sub.ident, role=self.role.role if self.role is not None else None))
-        sub.born_action = self.born_action
-        self.add_flow(sub)
+        sub = self._create_subflow(target)
         sub.on_flow_start()
         logger.info("[%s][d=%s] 已派发背景确认子 flow", self.title, self.deepth)
         return True
