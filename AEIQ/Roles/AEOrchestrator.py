@@ -213,7 +213,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
     # ==================== 子 flow 完成：记录子 flow 目标与结果 ====================
 
     def receive_flow_complete(self, flowOutput) -> bool:
-        """子 flow 完成回调：通过 flowOutput.ident 直接获取子 flow，记录 subflow_result；其余交 super。"""
+        """子 flow 完成回调：通过 flowOutput.ident 直接获取对应子 flow，记录 subflow_result；其余交 super。"""
         ident = flowOutput.ident if flowOutput is not None else ""
         sub = self._flows.get(ident) if ident else None
         if sub is not None:

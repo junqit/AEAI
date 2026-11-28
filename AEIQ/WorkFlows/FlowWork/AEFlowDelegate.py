@@ -75,7 +75,8 @@ class AEFlowDelegateImpl(AEFlowDelegate):
 
     # 接收 flow 完成通知，按 ident 路由
     def receive_flow_complete(self, flowOutput: 'AEFlowOutput') -> bool:
-        if flowOutput.ident == self.ident:
+        # ident 命中自身或子 flow：父处理（全完成 summarize / 未全完成 nextFlow）
+        if flowOutput.ident == self.ident or (flowOutput.ident and flowOutput.ident in self._flows):
             if not self._flows:
                 return True
             if all(f.status == AEFlowStatus.complete for f in self._flows.values()):
@@ -90,11 +91,10 @@ class AEFlowDelegateImpl(AEFlowDelegate):
                     next_flow.on_flow_start()
             return True
 
-        sub = self._flows.get(flowOutput.ident) if flowOutput.ident else None
-        if sub is not None:
-            return sub.receive_flow_complete(flowOutput)
-
-        logger.error("[%s][d=%s] receive_flow_complete ident=%s 既非自身也未命中子 flow，忽略",
+        # 非当前 flow：传递给上层 delegate
+        if self.delegate is not None:
+            return self.delegate.receive_flow_complete(flowOutput)
+        logger.error("[%s][d=%s] receive_flow_complete ident=%s 既非自身也未命中子 flow，且无 delegate",
                      self.title, self.deepth, flowOutput.ident)
         return False
 
