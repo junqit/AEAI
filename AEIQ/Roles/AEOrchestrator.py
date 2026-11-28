@@ -65,15 +65,15 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
 
     # action 固定功能描述（做什么，不针对问题）
     ACTION_DESCRIPTIONS = {
-        AEAction.clarify_role: "界定角色身份与能力范围",
-        AEAction.optimize_goal: "优化目标（转化为可执行目标）",
-        AEAction.gather_context: "获取背景信息",
-        AEAction.execute_script: "执行脚本完成可执行工作",
-        AEAction.decompose: "拆解为子任务",
-        AEAction.verify: "验证结果齐备/有效/覆盖目标",
-        AEAction.synthesize: "汇总子结果为候选答案",
-        AEAction.complete: "输出最终结论",
-        AEAction.answer: "直接推理作答",
+        AEAction.clarify_role: "界定问题所需的角色身份（title）、能力范围（responsibility）与角色指令（rolePrompt），明确解决该问题需要扮演什么角色及其职责边界",
+        AEAction.optimize_goal: "将原始问题或模糊目标转化为可执行、可完成的目标，明确成功标准与约束条件，确保目标能够准确、完整地回答输出",
+        AEAction.gather_context: "识别解决当前目标所需但尚未明确的外部事实、数据或来源，生成可自行完成的目标以获取该信息",
+        AEAction.execute_script: "通过脚本完成所有可程序化执行的工作，包括查询、计算、爬取、程序化处理、系统操作等，产出 stdout 结果",
+        AEAction.decompose: "将当前目标拆解为更小、互不重叠、合起来完整覆盖目标的子任务，每个子任务为最小颗粒度的可独立完成的原子任务",
+        AEAction.verify: "验证子任务结果是否齐备、有效、完整覆盖原始目标，产出 PASS 或 FAIL 与具体缺口描述",
+        AEAction.synthesize: "汇总子任务结果与背景信息为连贯、完整的候选答案，直接回答原始目标",
+        AEAction.complete: "输出最终结论，结果优先使用显式结论，无则用目标或问题兜底",
+        AEAction.answer: "无需拆解与汇总，可直接推理作答的简单问题旁路终态",
     }
 
     def _init_action_catalog(self) -> None:
@@ -84,8 +84,12 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
             {
                 AE_ROLE: AEConentRole.SYSTEM.value,
                 AE_CONTENT: (
-                    "根据下方目标，为每个动作生成规则与范围描述（针对当前目标的适用条件与规则）。\n"
-                    "每个动作的固定功能如下，你需基于目标生成针对性的规则与范围：\n"
+                    "根据下方目标，为每个动作生成针对性的规则与范围描述，包含：\n"
+                    "- 可以做什么：该动作在当前目标下能执行的具体操作\n"
+                    "- 不可以做什么：该动作的职责边界与禁止事项\n"
+                    "- 选择规则：什么情况下应该选择该动作\n"
+                    "要求：必须为以下所有动作生成描述，不得遗漏任何一个。\n"
+                    "每个动作的固定功能如下：\n"
                     f"{action_list}"
                 ),
             },
@@ -102,7 +106,7 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         self.flow_send_llm_request(payload)
 
     def receive_action_catalog(self, data: dict) -> bool:
-        """LLM 回包：初始化 action catalog，确认收到的个数 → _orchestrate。"""
+        """LLM 回包：初始化 action catalog，确认收到的个数；不完整则重新生成。"""
         if not isinstance(data, dict):
             data = {}
         for action in AEAction:
@@ -112,8 +116,10 @@ class AEOrchestrator(AERoleClarify, AERoleOptimize, AERoleGather, AERoleExecute,
         received = self.flow_context.get_action_count()
         expected = len(AEAction)
         if received < expected:
-            logger.warning("[%s][d=%s] action catalog 不完整：收到 %d/%d",
+            logger.warning("[%s][d=%s] action catalog 不完整：收到 %d/%d，重新生成",
                            self.title, self.deepth, received, expected)
+            self._init_action_catalog()
+            return True
         logger.info("[%s][d=%s] action catalog 就绪（%d/%d）",
                     self.title, self.deepth, received, expected)
         self._orchestrate()
